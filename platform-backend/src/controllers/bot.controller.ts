@@ -25,9 +25,19 @@ export async function getBotStatus(req: Request, res: Response) {
     Promise.resolve(getSessionInfo(req.user!.id)),
   ]);
 
+  const cacheInfo = cache
+    ? {
+        status: cache.status,
+        lastQr: cache.lastQr,
+        connectedAt: cache.connectedAt?.toISOString() ?? null,
+        paused: cache.paused,
+        clientReady: Boolean(cache.client),
+      }
+    : null;
+
   res.json({
     record,
-    cache,
+    cache: cacheInfo,
   });
 }
 

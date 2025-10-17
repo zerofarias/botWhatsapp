@@ -63,7 +63,41 @@ type FlowExecutionResult = {
 const sessions = new Map<number, SessionCache>();
 
 function normalizeText(value: string) {
-  return value.trim().toLowerCase();
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function extractNumericPrefix(value: string) {
+  const match = value.match(/^\d+/);
+  return match ? match[0] : null;
+}
+
+function matchesTrigger(trigger: string, normalizedBody: string) {
+  const normalizedTrigger = normalizeText(trigger);
+  if (!normalizedTrigger && !normalizedBody) {
+    return true;
+  }
+
+  if (normalizedTrigger === normalizedBody) {
+    return true;
+  }
+
+  const triggerNumber = extractNumericPrefix(normalizedTrigger);
+  if (triggerNumber && normalizedBody === triggerNumber) {
+    return true;
+  }
+
+  const bodyNumber = extractNumericPrefix(normalizedBody);
+  if (triggerNumber && bodyNumber && triggerNumber === bodyNumber) {
+    return true;
+  }
+
+  return false;
 }
 
 function flattenFlowTree(nodes: FlowNode[]): FlowNode[] {
@@ -141,7 +175,7 @@ function evaluateFlowSelection(
   const flat = flattenFlowTree(nodes).filter((node) => node.isActive);
   const match = flat.find((node) => {
     if (!node.trigger) return false;
-    return normalizeText(node.trigger) === normalizedBody;
+    return matchesTrigger(node.trigger, normalizedBody);
   });
 
   if (!match) {
