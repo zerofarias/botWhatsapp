@@ -1,92 +1,109 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 
-export type Role = 'ADMIN' | 'USER';
+export type Role = 'ADMIN' | 'SUPERVISOR' | 'OPERATOR';
+
+export interface AreaMembership {
+  id: number | null;
+  name: string | null;
+}
 
 export interface AuthUser {
   id: number;
   name: string;
-  email: string;
+  username: string;
+  email: string | null;
   role: Role;
+  defaultAreaId: number | null;
+  areas: AreaMembership[];
 }
 
 interface AuthContextValue {
   user: AuthUser | null;
-  token: string | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  login: (identifier: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+async function fetchCurrentUser(): Promise<AuthUser | null> {
+  try {
+    const { data } = await api.get<{ user: AuthUser }>('/auth/me');
+    return data.user;
+  } catch (error) {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(() =>
-    localStorage.getItem('token')
-  );
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+
+  const loadUser = useCallback(async () => {
+    setLoading(true);
+    const currentUser = await fetchCurrentUser();
+    setUser(currentUser);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+    void loadUser();
+  }, [loadUser]);
 
-    (async () => {
+  const login = useCallback(
+    async (identifier: string, password: string) => {
+      setLoading(true);
       try {
-        const response = await api.get('/bot/status');
-        if (response.status === 200) {
-          const storedUser = JSON.parse(
-            localStorage.getItem('user') ?? 'null'
-          ) as AuthUser | null;
-          setUser(storedUser);
+        await api.post('/auth/login', { identifier, password });
+        const currentUser = await fetchCurrentUser();
+        setUser(currentUser);
+        if (currentUser) {
+          const redirectPath =
+            (location.state as { from?: string } | null)?.from ?? '/dashboard';
+          navigate(redirectPath, { replace: true });
         }
-      } catch (error) {
-        console.error('Token validation failed', error);
-        setToken(null);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
       } finally {
         setLoading(false);
       }
-    })();
-  }, [token]);
+    },
+    [location.state, navigate]
+  );
 
-  const login = async (email: string, password: string) => {
-    setLoading(true);
+  const logout = useCallback(async () => {
     try {
-      const response = await api.post('/auth/login', { email, password });
-      const { token: accessToken, user: authUser } = response.data;
-      setToken(accessToken);
-      setUser(authUser);
-      localStorage.setItem('token', accessToken);
-      localStorage.setItem('user', JSON.stringify(authUser));
-      navigate('/dashboard');
+      await api.post('/auth/logout');
     } finally {
-      setLoading(false);
+      setUser(null);
+      navigate('/login', { replace: true });
     }
-  };
+  }, [navigate]);
 
-  const logout = () => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/login');
-  };
+  const refreshUser = useCallback(async () => {
+    const currentUser = await fetchCurrentUser();
+    setUser(currentUser);
+  }, []);
 
   const value = useMemo(
     () => ({
       user,
-      token,
       loading,
       login,
       logout,
+      refreshUser,
     }),
-    [user, token, loading]
+    [loading, login, logout, refreshUser, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

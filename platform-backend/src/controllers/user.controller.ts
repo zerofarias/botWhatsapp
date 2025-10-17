@@ -1,28 +1,94 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../config/prisma.js';
-import { createUser } from '../services/user.service.js';
+import {
+  createUser,
+  emailExists,
+  listUsers,
+  emailInUseByAnother,
+  parseUserRole,
+  updateUser,
+  usernameExists,
+} from '../services/user.service.js';
 
-export async function listUsers(_req: Request, res: Response) {
-  const users = await prisma.user.findMany({
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      createdAt: true,
-    },
-  });
+export async function listUsersHandler(_req: Request, res: Response) {
+  const users = await listUsers();
   return res.json(users);
 }
 
 export async function createUserHandler(req: Request, res: Response) {
-  const { name, email, password, role } = req.body ?? {};
-  if (!name || !email || !password) {
-    return res
-      .status(400)
-      .json({ message: 'Name, email and password are required.' });
+  const {
+    name,
+    username,
+    email,
+    password,
+    role,
+    defaultAreaId,
+    areaIds,
+    isActive,
+  } = req.body ?? {};
+
+  if (!name || !username || !password) {
+    return res.status(400).json({
+      message: 'Name, username and password are required.',
+    });
   }
 
-  const user = await createUser({ name, email, password, role });
+  if (await usernameExists(username)) {
+    return res.status(400).json({ message: 'Username already in use.' });
+  }
+
+  if (email && (await emailExists(email))) {
+    return res.status(400).json({ message: 'Email already in use.' });
+  }
+
+  const parsedRole = parseUserRole(role);
+  if (role && !parsedRole) {
+    return res.status(400).json({ message: 'Invalid role value.' });
+  }
+
+  const user = await createUser({
+    name,
+    username,
+    email,
+    password,
+    role: parsedRole,
+    defaultAreaId: defaultAreaId ?? null,
+    areaIds: Array.isArray(areaIds) ? areaIds : undefined,
+    isActive: typeof isActive === 'boolean' ? isActive : true,
+  });
+
   return res.status(201).json(user);
+}
+
+export async function updateUserHandler(req: Request, res: Response) {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ message: 'Invalid user id.' });
+  }
+
+  const { name, email, password, role, defaultAreaId, areaIds, isActive } =
+    req.body ?? {};
+
+  if (email && (await emailInUseByAnother(email, id))) {
+    return res.status(400).json({ message: 'Email already in use.' });
+  }
+
+  const parsedRole = parseUserRole(role);
+  if (role && !parsedRole) {
+    return res.status(400).json({ message: 'Invalid role value.' });
+  }
+
+  const updated = await updateUser(id, {
+    name,
+    email,
+    password,
+    role: parsedRole,
+    defaultAreaId:
+      defaultAreaId === undefined ? undefined : defaultAreaId ?? null,
+    areaIds: Array.isArray(areaIds)
+      ? areaIds.filter((value) => typeof value === 'number')
+      : undefined,
+    isActive: typeof isActive === 'boolean' ? isActive : undefined,
+  });
+
+  return res.json(updated);
 }

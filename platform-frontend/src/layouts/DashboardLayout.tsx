@@ -1,17 +1,42 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+type NavigationLink = {
+  to: string;
+  label: string;
+  roles?: Array<'ADMIN' | 'SUPERVISOR' | 'OPERATOR'>;
+};
+
+const NAVIGATION_LINKS: NavigationLink[] = [
+  { to: '/dashboard', label: 'Estado' },
+  { to: '/dashboard/chat', label: 'Chat' },
+  { to: '/dashboard/flows', label: 'Flujos', roles: ['ADMIN', 'SUPERVISOR'] },
+  { to: '/dashboard/users', label: 'Usuarios', roles: ['ADMIN'] },
+  { to: '/dashboard/areas', label: 'Áreas', roles: ['ADMIN'] },
+  { to: '/dashboard/settings', label: 'Configuración' },
+];
+
+function formatRole(role?: string) {
+  switch (role) {
+    case 'ADMIN':
+      return 'Administrador';
+    case 'SUPERVISOR':
+      return 'Supervisor';
+    case 'OPERATOR':
+      return 'Operador';
+    default:
+      return 'Invitado';
+  }
+}
+
 export default function DashboardLayout() {
   const { user, logout } = useAuth();
-  const links = [
-    { to: '/dashboard', label: 'Estado' },
-    { to: '/dashboard/flows', label: 'Flujos' },
-    { to: '/dashboard/messages', label: 'Mensajes' },
-    { to: '/dashboard/settings', label: 'Configuración' },
-    ...(user?.role === 'ADMIN'
-      ? [{ to: '/dashboard/admin', label: 'Admin' as const }]
-      : []),
-  ];
+
+  const availableLinks = NAVIGATION_LINKS.filter((link) => {
+    if (!link.roles) return true;
+    if (!user) return false;
+    return link.roles.includes(user.role);
+  });
 
   return (
     <div>
@@ -28,11 +53,11 @@ export default function DashboardLayout() {
         <div>
           <strong>WPPConnect Platform</strong>
           <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>
-            {user?.name} — {user?.role}
+            {user?.name ?? 'Usuario'} · {formatRole(user?.role)}
           </div>
         </div>
-        <nav style={{ display: 'flex', gap: '1rem' }}>
-          {links.map((link) => (
+        <nav style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          {availableLinks.map((link) => (
             <NavLink
               key={link.to}
               to={link.to}

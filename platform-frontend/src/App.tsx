@@ -4,9 +4,10 @@ import ProtectedRoute from './components/ProtectedRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 import DashboardOverview from './pages/DashboardOverview';
 import FlowsPage from './pages/FlowsPage';
-import MessagesPage from './pages/MessagesPage';
 import SettingsPage from './pages/SettingsPage';
-import AdminOverview from './pages/AdminOverview';
+import ChatPage from './pages/ChatPage';
+import UsersPage from './pages/UsersPage';
+import AreasPage from './pages/AreasPage';
 
 export default function App() {
   return (
@@ -17,10 +18,11 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardOverview />} />
+          <Route path="chat" element={<ChatPage />} />
           <Route path="flows" element={<FlowsPage />} />
-          <Route path="messages" element={<MessagesPage />} />
+          <Route path="users" element={<UsersPage />} />
+          <Route path="areas" element={<AreasPage />} />
           <Route path="settings" element={<SettingsPage />} />
-          <Route path="admin" element={<AdminOverview />} />
         </Route>
       </Route>
 

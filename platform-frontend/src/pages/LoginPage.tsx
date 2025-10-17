@@ -3,17 +3,18 @@ import { useAuth } from '../context/AuthContext';
 
 export default function LoginPage() {
   const { login, loading } = useAuth();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    setError(null);
     try {
-      await login(email, password);
+      await login(identifier, password);
     } catch (err) {
       console.error(err);
-      setError('No se pudo iniciar sesión.');
+      setError('No se pudo iniciar sesión. Verificá tus credenciales.');
     }
   };
 
@@ -40,12 +41,13 @@ export default function LoginPage() {
       >
         <h1 style={{ margin: 0 }}>Ingresar</h1>
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>Correo</span>
+          <span>Usuario o correo</span>
           <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            type="text"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
             required
+            autoComplete="username"
             style={{
               padding: '0.75rem 1rem',
               borderRadius: '8px',
@@ -60,6 +62,7 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            autoComplete="current-password"
             style={{
               padding: '0.75rem 1rem',
               borderRadius: '8px',

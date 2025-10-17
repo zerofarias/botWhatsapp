@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
-import type { Role } from '@prisma/client';
+import type { UserRole } from '@prisma/client';
 
-export function authorize(roles: Role[] = []) {
+export function authorize(roles: UserRole[] = []) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ message: 'Unauthorized' });

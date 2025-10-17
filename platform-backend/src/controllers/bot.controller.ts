@@ -1,5 +1,4 @@
 import type { Request, Response } from 'express';
-import type { Server as SocketIOServer } from 'socket.io';
 import {
   getOrCreateBotSessionRecord,
   getSessionInfo,
@@ -8,92 +7,91 @@ import {
   stopSession,
 } from '../services/wpp.service.js';
 import { prisma } from '../config/prisma.js';
+import { getSocketServer } from '../lib/socket.js';
 
-let ioRef: SocketIOServer | undefined;
-
-export function attachBotController(io: SocketIOServer) {
-  ioRef = io;
+function ensureUser(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return false;
+  }
+  return true;
 }
 
 export async function getBotStatus(req: Request, res: Response) {
-  if (!req.user) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (!ensureUser(req, res)) return;
 
   const [record, cache] = await Promise.all([
-    getOrCreateBotSessionRecord(req.user.id),
-    Promise.resolve(getSessionInfo(req.user.id)),
+    getOrCreateBotSessionRecord(req.user!.id),
+    Promise.resolve(getSessionInfo(req.user!.id)),
   ]);
 
-  return res.json({
+  res.json({
     record,
     cache,
   });
 }
 
 export async function startBot(req: Request, res: Response) {
-  if (!req.user) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (!ensureUser(req, res)) return;
 
   try {
-    const session = await startSession(req.user.id, ioRef);
-    return res.json({
+    const session = await startSession(req.user!.id, getSocketServer());
+    res.json({
       status: session?.status ?? 'CONNECTING',
-      lastQr: session?.lastQr,
+      lastQr: session?.lastQr ?? null,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return res.status(500).json({ message });
+    res.status(500).json({ message });
   }
 }
 
 export async function stopBot(req: Request, res: Response) {
-  if (!req.user) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (!ensureUser(req, res)) return;
 
-  await stopSession(req.user.id);
-  return res.json({ status: 'DISCONNECTED' });
+  await stopSession(req.user!.id);
+  res.json({ status: 'DISCONNECTED' });
 }
 
 export async function getBotQr(req: Request, res: Response) {
-  if (!req.user) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (!ensureUser(req, res)) return;
 
   const record = await prisma.botSession.findUnique({
-    where: { userId: req.user.id },
+    where: {
+      ownerUserId_sessionName: {
+        ownerUserId: req.user!.id,
+        sessionName: 'default',
+      },
+    },
     select: { lastQr: true, updatedAt: true },
   });
 
-  return res.json(record ?? { lastQr: null });
+  res.json(record ?? { lastQr: null });
 }
 
 export async function togglePause(req: Request, res: Response) {
-  if (!req.user) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (!ensureUser(req, res)) return;
 
-  const { paused } = req.body ?? {};
-  const value = Boolean(paused);
-  await pauseSession(req.user.id, value);
-  return res.json({ paused: value });
+  const value = Boolean(req.body?.paused);
+  await pauseSession(req.user!.id, value);
+  res.json({ paused: value });
 }
 
 export async function updateMetadata(req: Request, res: Response) {
-  if (!req.user) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (!ensureUser(req, res)) return;
 
-  const { displayName, phoneNumber } = req.body ?? {};
+  const { headless } = req.body ?? {};
   const result = await prisma.botSession.update({
-    where: { userId: req.user.id },
+    where: {
+      ownerUserId_sessionName: {
+        ownerUserId: req.user!.id,
+        sessionName: 'default',
+      },
+    },
     data: {
-      displayName,
-      phoneNumber,
+      headless: typeof headless === 'boolean' ? headless : undefined,
     },
   });
 
-  return res.json(result);
+  res.json(result);
 }

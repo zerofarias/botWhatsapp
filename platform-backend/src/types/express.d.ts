@@ -1,23 +1,26 @@
-import type { Role } from '@prisma/client';
+import type { UserRole } from '@prisma/client';
+
+export type SessionUser = {
+  id: number;
+  name: string;
+  username: string;
+  role: UserRole;
+  defaultAreaId: number | null;
+  areaIds: number[];
+};
+
+declare module 'express-session' {
+  interface SessionData {
+    user?: SessionUser;
+  }
+}
 
 declare global {
   namespace Express {
     interface Request {
-      user?: {
-        id: number;
-        email: string;
-        role: Role;
-        name: string;
-      };
+      user?: SessionUser;
     }
   }
 }
 
-export type JwtPayload = {
-  sub: number;
-  email: string;
-  role: Role;
-  name: string;
-};
-
-export type AuthenticatedUser = JwtPayload;
+export type AuthenticatedUser = SessionUser;

@@ -19,8 +19,8 @@ interface BotStatus {
 
 interface MessagePreview {
   direction: 'in' | 'out';
-  contact: string;
-  body: string;
+  conversationId: string;
+  content: string;
   timestamp: string;
 }
 
@@ -61,10 +61,13 @@ export default function DashboardOverview() {
           ? {
               ...prev,
               cache: {
-                ...(prev.cache ?? {
-                  paused: prev.record?.paused ?? false,
-                }),
                 status: payload,
+                lastQr: prev.cache?.lastQr ?? prev.record.lastQr,
+                connectedAt:
+                  prev.cache?.connectedAt ??
+                  prev.record.connectedAt ??
+                  undefined,
+                paused: prev.cache?.paused ?? prev.record.paused,
               },
             }
           : prev
@@ -77,29 +80,43 @@ export default function DashboardOverview() {
           ? {
               ...prev,
               cache: {
-                ...(prev.cache ?? {
-                  status: prev.record?.status ?? 'CONNECTING',
-                  paused: prev.record?.paused ?? false,
-                }),
+                status:
+                  prev.cache?.status ?? prev.record.status ?? 'CONNECTING',
                 lastQr: ascii,
+                connectedAt:
+                  prev.cache?.connectedAt ??
+                  prev.record.connectedAt ??
+                  undefined,
+                paused: prev.cache?.paused ?? prev.record.paused,
               },
             }
           : prev
       );
     };
 
-    const onMessage = (payload: MessagePreview) => {
-      setMessages((prev) => [payload, ...prev].slice(0, 6));
+    const onMessage = (payload: {
+      conversationId: string;
+      senderType: 'CONTACT' | 'BOT' | 'OPERATOR';
+      content: string;
+      createdAt: string;
+    }) => {
+      const preview: MessagePreview = {
+        conversationId: payload.conversationId,
+        content: payload.content,
+        direction: payload.senderType === 'CONTACT' ? 'in' : 'out',
+        timestamp: payload.createdAt,
+      };
+      setMessages((prev) => [preview, ...prev].slice(0, 6));
     };
 
-    socket.on('session_status', onStatus);
-    socket.on('qr_code', onQr);
-    socket.on('message', onMessage);
+    socket.on('session:status', onStatus);
+    socket.on('session:qr', onQr);
+    socket.on('message:new', onMessage);
 
     return () => {
-      socket.off('session_status', onStatus);
-      socket.off('qr_code', onQr);
-      socket.off('message', onMessage);
+      socket.off('session:status', onStatus);
+      socket.off('session:qr', onQr);
+      socket.off('message:new', onMessage);
     };
   }, [socket]);
 
@@ -242,9 +259,9 @@ export default function DashboardOverview() {
                 }}
               >
                 <div style={{ fontWeight: 600 }}>
-                  {msg.direction === 'in' ? '⬅️' : '➡️'} {msg.contact}
+                  {msg.direction === 'in' ? '⬅️' : '➡️'} {msg.conversationId}
                 </div>
-                <div style={{ color: '#475569' }}>{msg.body}</div>
+                <div style={{ color: '#475569' }}>{msg.content}</div>
                 <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
                   {new Date(msg.timestamp).toLocaleString()}
                 </div>

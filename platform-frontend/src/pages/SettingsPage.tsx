@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+﻿import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../services/api';
 
 interface BotRecord {
@@ -25,7 +25,7 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
-    fetchMetadata();
+    void fetchMetadata();
   }, []);
 
   const handleSubmit = async (event: FormEvent) => {
@@ -55,8 +55,8 @@ export default function SettingsPage() {
           <span>Nombre público</span>
           <input
             value={form.displayName}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, displayName: e.target.value }))
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, displayName: event.target.value }))
             }
             placeholder="Nombre mostrado en el panel"
             style={{
@@ -71,8 +71,8 @@ export default function SettingsPage() {
           <span>Número asociado</span>
           <input
             value={form.phoneNumber}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, phoneNumber: e.target.value }))
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, phoneNumber: event.target.value }))
             }
             placeholder="Ej: 5511999999999"
             style={{
@@ -96,8 +96,8 @@ export default function SettingsPage() {
           <input
             type="checkbox"
             checked={form.paused}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, paused: e.target.checked }))
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, paused: event.target.checked }))
             }
           />
           Pausar bot (no responder automáticamente)

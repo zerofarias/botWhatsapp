@@ -1,66 +1,156 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 
-interface Flow {
+type FlowType = 'MESSAGE' | 'MENU' | 'ACTION' | 'REDIRECT' | 'END';
+
+type FlowNode = {
   id: number;
-  keyword: string;
-  response: string;
-}
+  name: string;
+  trigger: string | null;
+  message: string;
+  type: FlowType;
+  parentId: number | null;
+  areaId: number | null;
+  orderIndex: number;
+  isActive: boolean;
+  children: FlowNode[];
+};
+
+type AreaItem = {
+  id: number;
+  name: string;
+  isActive: boolean;
+};
+
+type FlowFormState = {
+  id: number | null;
+  name: string;
+  type: FlowType;
+  trigger: string;
+  message: string;
+  parentId: number | null;
+  areaId: number | null;
+  orderIndex: number;
+  isActive: boolean;
+};
+
+const initialFormState: FlowFormState = {
+  id: null,
+  name: '',
+  type: 'MESSAGE',
+  trigger: '',
+  message: '',
+  parentId: null,
+  areaId: null,
+  orderIndex: 0,
+  isActive: true,
+};
+
+const FLOW_TYPE_OPTIONS: {
+  value: FlowType;
+  label: string;
+  description: string;
+}[] = [
+  { value: 'MESSAGE', label: 'Mensaje', description: 'Envía un texto simple' },
+  {
+    value: 'MENU',
+    label: 'Menú',
+    description: 'Presenta opciones numéricas al contacto',
+  },
+  {
+    value: 'ACTION',
+    label: 'Acción',
+    description: 'Ejecuta lógica personalizada (placeholder)',
+  },
+  {
+    value: 'REDIRECT',
+    label: 'Derivación',
+    description: 'Asigna la conversación a un área/operador',
+  },
+  { value: 'END', label: 'Finalización', description: 'Cierra el flujo' },
+];
 
 export default function FlowsPage() {
-  const [flows, setFlows] = useState<Flow[]>([]);
-  const [keyword, setKeyword] = useState('');
-  const [response, setResponse] = useState('');
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [flows, setFlows] = useState<FlowNode[]>([]);
+  const [areas, setAreas] = useState<AreaItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [formState, setFormState] = useState<FlowFormState>(initialFormState);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchFlows = async () => {
+  const areaMap = useMemo(() => {
+    const map = new Map<number, AreaItem>();
+    areas.forEach((area) => map.set(area.id, area));
+    return map;
+  }, [areas]);
+
+  const fetchData = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get<Flow[]>('/flows');
-      setFlows(data);
-    } catch (err) {
-      console.error(err);
-      setError('No se pudieron cargar los flujos');
+      const [flowsResponse, areasResponse] = await Promise.all([
+        api.get<FlowNode[]>('/flows'),
+        api.get<AreaItem[]>('/areas', { params: { active: true } }),
+      ]);
+      setFlows(flowsResponse.data);
+      setAreas(areasResponse.data);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchFlows();
+    void fetchData();
   }, []);
 
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    try {
-      await api.post('/flows', {
-        id: editingId ?? undefined,
-        keyword,
-        response,
-      });
+  const handleEdit = (node: FlowNode) => {
+    setFormState({
+      id: node.id,
+      name: node.name,
+      type: node.type,
+      trigger: node.trigger ?? '',
+      message: node.message,
+      parentId: node.parentId,
+      areaId: node.areaId,
+      orderIndex: node.orderIndex,
+      isActive: node.isActive,
+    });
+  };
 
-      setKeyword('');
-      setResponse('');
-      setEditingId(null);
-      fetchFlows();
-    } catch (err) {
-      console.error(err);
-      setError('No se pudo guardar el flujo.');
-    }
+  const handleResetForm = () => {
+    setFormState(initialFormState);
+    setError(null);
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('¿Eliminar esta palabra clave?')) return;
+    if (!confirm('¿Eliminar este paso del flujo?')) return;
     await api.delete(`/flows/${id}`);
-    fetchFlows();
+    void fetchData();
   };
 
-  const startEdit = (flow: Flow) => {
-    setEditingId(flow.id);
-    setKeyword(flow.keyword);
-    setResponse(flow.response);
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.post('/flows', {
+        id: formState.id ?? undefined,
+        name: formState.name,
+        type: formState.type,
+        trigger: formState.trigger.trim() || null,
+        message: formState.message,
+        parentId: formState.parentId,
+        areaId: formState.areaId,
+        orderIndex: formState.orderIndex,
+        isActive: formState.isActive,
+      });
+      handleResetForm();
+      void fetchData();
+    } catch (err) {
+      console.error(err);
+      setError('No se pudo guardar el flujo.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -68,157 +158,365 @@ export default function FlowsPage() {
       <section
         style={{
           background: '#fff',
-          padding: '1.5rem',
           borderRadius: '12px',
+          padding: '1.5rem',
           boxShadow: '0 12px 24px -18px rgba(15, 23, 42, 0.35)',
         }}
       >
-        <h2 style={{ marginTop: 0 }}>
-          {editingId ? 'Editar palabra clave' : 'Nueva palabra clave'}
+        <h2 style={{ margin: 0 }}>
+          {formState.id ? 'Editar paso del flujo' : 'Nuevo paso del flujo'}
         </h2>
+        <p style={{ marginTop: '0.25rem', color: '#64748b' }}>
+          Crea menús, respuestas y derivaciones para automatizar la atención.
+        </p>
         <form
           onSubmit={handleSubmit}
-          style={{ display: 'grid', gap: '1rem', maxWidth: '520px' }}
+          style={{
+            display: 'grid',
+            gap: '1rem',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            marginTop: '1rem',
+          }}
         >
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Palabra clave</span>
+            <span>Nombre interno</span>
             <input
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="Ej: hola"
+              value={formState.name}
+              onChange={(event) =>
+                setFormState((prev) => ({ ...prev, name: event.target.value }))
+              }
               required
-              style={{
-                padding: '0.65rem 1rem',
-                borderRadius: '8px',
-                border: '1px solid #cbd5f5',
-              }}
+              style={inputStyle}
             />
           </label>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Respuesta</span>
-            <textarea
-              value={response}
-              onChange={(e) => setResponse(e.target.value)}
-              placeholder="Respuesta automática"
-              rows={4}
-              required
-              style={{
-                padding: '0.65rem 1rem',
-                borderRadius: '8px',
-                border: '1px solid #cbd5f5',
-              }}
+            <span>Tipo de paso</span>
+            <select
+              value={formState.type}
+              onChange={(event) =>
+                setFormState((prev) => ({
+                  ...prev,
+                  type: event.target.value as FlowType,
+                }))
+              }
+              style={inputStyle}
+            >
+              {FLOW_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: '0.35rem' }}>
+            <span>Orden dentro del menú</span>
+            <input
+              type="number"
+              value={formState.orderIndex}
+              onChange={(event) =>
+                setFormState((prev) => ({
+                  ...prev,
+                  orderIndex: Number(event.target.value),
+                }))
+              }
+              style={inputStyle}
             />
           </label>
-          <div style={{ display: 'flex', gap: '1rem' }}>
+          <label style={{ display: 'grid', gap: '0.35rem' }}>
+            <span>Padre</span>
+            <select
+              value={formState.parentId ?? ''}
+              onChange={(event) => {
+                const value = event.target.value;
+                setFormState((prev) => ({
+                  ...prev,
+                  parentId: value ? Number(value) : null,
+                }));
+              }}
+              style={inputStyle}
+            >
+              <option value="">Sin padre (flujo principal)</option>
+              {flattenFlows(flows).map((node) => (
+                <option key={node.id} value={node.id}>
+                  {renderNodeLabel(node, areaMap)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: '0.35rem' }}>
+            <span>Derivar a área (opcional)</span>
+            <select
+              value={formState.areaId ?? ''}
+              onChange={(event) => {
+                const value = event.target.value;
+                setFormState((prev) => ({
+                  ...prev,
+                  areaId: value ? Number(value) : null,
+                }));
+              }}
+              style={inputStyle}
+              disabled={areas.length === 0}
+            >
+              <option value="">Sin asignar</option>
+              {areas.map((area) => (
+                <option key={area.id} value={area.id}>
+                  {area.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: '0.35rem' }}>
+            <span>Disparador</span>
+            <input
+              value={formState.trigger}
+              onChange={(event) =>
+                setFormState((prev) => ({
+                  ...prev,
+                  trigger: event.target.value,
+                }))
+              }
+              placeholder="Ej: 1, soporte, *default*"
+              style={inputStyle}
+            />
+          </label>
+          <label
+            style={{ display: 'grid', gap: '0.35rem', gridColumn: '1 / -1' }}
+          >
+            <span>Mensaje a enviar</span>
+            <textarea
+              value={formState.message}
+              onChange={(event) =>
+                setFormState((prev) => ({
+                  ...prev,
+                  message: event.target.value,
+                }))
+              }
+              rows={4}
+              style={{ ...inputStyle, resize: 'vertical' }}
+              required
+            />
+          </label>
+          <label
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+          >
+            <input
+              type="checkbox"
+              checked={formState.isActive}
+              onChange={(event) =>
+                setFormState((prev) => ({
+                  ...prev,
+                  isActive: event.target.checked,
+                }))
+              }
+            />
+            Paso activo
+          </label>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <button
               type="submit"
+              disabled={submitting}
               style={{
-                padding: '0.65rem 1.2rem',
+                padding: '0.75rem 1.5rem',
                 borderRadius: '10px',
                 border: 'none',
                 background: '#0f172a',
                 color: '#fff',
-                cursor: 'pointer',
+                cursor: submitting ? 'wait' : 'pointer',
               }}
             >
-              {editingId ? 'Actualizar' : 'Agregar'}
+              {submitting
+                ? 'Guardando...'
+                : formState.id
+                ? 'Actualizar'
+                : 'Crear paso'}
             </button>
-            {editingId && (
+            {formState.id && (
               <button
                 type="button"
-                onClick={() => {
-                  setEditingId(null);
-                  setKeyword('');
-                  setResponse('');
-                }}
-                style={{
-                  padding: '0.65rem 1.2rem',
-                  borderRadius: '10px',
-                  border: '1px solid #cbd5f5',
-                  background: '#fff',
-                  cursor: 'pointer',
-                }}
+                onClick={handleResetForm}
+                style={linkButtonStyle}
               >
-                Cancelar
+                Cancelar edición
               </button>
             )}
+            {error && <span style={{ color: '#ef4444' }}>{error}</span>}
           </div>
-          {error && <span style={{ color: '#ef4444' }}>{error}</span>}
         </form>
       </section>
 
       <section
         style={{
           background: '#fff',
-          padding: '1.5rem',
           borderRadius: '12px',
+          padding: '1.5rem',
           boxShadow: '0 12px 24px -18px rgba(15, 23, 42, 0.35)',
         }}
       >
-        <h2 style={{ marginTop: 0 }}>Palabras registradas</h2>
-        {loading ? (
-          <p>Cargando...</p>
-        ) : flows.length === 0 ? (
-          <p>Todavía no hay flujos configurados.</p>
-        ) : (
-          <table
+        <header
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <div>
+            <h2 style={{ margin: 0 }}>Mapa de flujos</h2>
+            <p style={{ margin: 0, color: '#64748b' }}>
+              Revisa la jerarquía de menús y pasos automáticos.
+            </p>
+          </div>
+          <button
+            onClick={() => void fetchData()}
             style={{
-              width: '100%',
-              borderCollapse: 'collapse',
+              border: '1px solid #0f172a',
+              borderRadius: '8px',
+              padding: '0.5rem 1.25rem',
+              background: '#fff',
+              cursor: 'pointer',
             }}
           >
-            <thead>
-              <tr
-                style={{ textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}
-              >
-                <th style={{ padding: '0.75rem 0.5rem' }}>Palabra</th>
-                <th style={{ padding: '0.75rem 0.5rem' }}>Respuesta</th>
-                <th style={{ padding: '0.75rem 0.5rem' }}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {flows.map((flow) => (
-                <tr key={flow.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                  <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>
-                    {flow.keyword}
-                  </td>
-                  <td style={{ padding: '0.75rem 0.5rem' }}>{flow.response}</td>
-                  <td
-                    style={{
-                      padding: '0.75rem 0.5rem',
-                      display: 'flex',
-                      gap: '0.75rem',
-                    }}
-                  >
-                    <button
-                      onClick={() => startEdit(flow)}
-                      style={{
-                        border: 'none',
-                        background: 'transparent',
-                        color: '#2563eb',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => handleDelete(flow.id)}
-                      style={{
-                        border: 'none',
-                        background: 'transparent',
-                        color: '#ef4444',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            Actualizar
+          </button>
+        </header>
+
+        {loading ? (
+          <p>Cargando flujos...</p>
+        ) : flows.length === 0 ? (
+          <p>Aún no hay flujos configurados.</p>
+        ) : (
+          <div style={{ marginTop: '1rem', display: 'grid', gap: '1rem' }}>
+            {flows.map((node) => (
+              <FlowTreeItem
+                key={node.id}
+                node={node}
+                depth={0}
+                areaMap={areaMap}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
         )}
       </section>
     </div>
   );
 }
+
+function FlowTreeItem({
+  node,
+  depth,
+  areaMap,
+  onEdit,
+  onDelete,
+}: {
+  node: FlowNode;
+  depth: number;
+  areaMap: Map<number, AreaItem>;
+  onEdit: (node: FlowNode) => void;
+  onDelete: (id: number) => void;
+}) {
+  const area = node.areaId ? areaMap.get(node.areaId) : null;
+  return (
+    <div
+      style={{
+        marginLeft: depth * 24,
+        borderLeft: depth ? '2px solid #e2e8f0' : 'none',
+        paddingLeft: depth ? '1rem' : 0,
+        display: 'grid',
+        gap: '0.5rem',
+      }}
+    >
+      <div
+        style={{
+          background: '#f8fafc',
+          borderRadius: '10px',
+          padding: '0.9rem 1rem',
+          display: 'grid',
+          gap: '0.35rem',
+          border: node.isActive ? '1px solid #cbd5f5' : '1px dashed #cbd5f5',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <strong>{node.name}</strong>
+          <span style={{ color: '#64748b', fontSize: '0.85rem' }}>
+            {flowTypeLabel(node.type)}
+          </span>
+        </div>
+        {node.trigger && (
+          <div style={{ fontSize: '0.85rem', color: '#475569' }}>
+            Disparador: <strong>{node.trigger}</strong>
+          </div>
+        )}
+        <div style={{ whiteSpace: 'pre-wrap', color: '#334155' }}>
+          {node.message}
+        </div>
+        <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+          Área destino: {area?.name ?? 'Sin asignar'} · Orden: {node.orderIndex}{' '}
+          · Estado: {node.isActive ? 'Activo' : 'Inactivo'}
+        </div>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <button
+            style={linkButtonStyle}
+            onClick={() => onEdit(node)}
+            type="button"
+          >
+            Editar
+          </button>
+          <button
+            style={{ ...linkButtonStyle, color: '#ef4444' }}
+            onClick={() => onDelete(node.id)}
+            type="button"
+          >
+            Eliminar
+          </button>
+        </div>
+      </div>
+      {node.children.length > 0 && (
+        <div style={{ display: 'grid', gap: '0.5rem' }}>
+          {node.children.map((child) => (
+            <FlowTreeItem
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              areaMap={areaMap}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function flattenFlows(nodes: FlowNode[]): FlowNode[] {
+  return nodes.flatMap((node) => [node, ...flattenFlows(node.children)]);
+}
+
+function renderNodeLabel(node: FlowNode, areaMap: Map<number, AreaItem>) {
+  const area = node.areaId ? areaMap.get(node.areaId) : null;
+  return `${node.name} (${flowTypeLabel(node.type)}${
+    area ? ` · ${area.name}` : ''
+  })`;
+}
+
+function flowTypeLabel(type: FlowType) {
+  return (
+    FLOW_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? type
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  padding: '0.65rem 1rem',
+  borderRadius: '8px',
+  border: '1px solid #cbd5f5',
+};
+
+const linkButtonStyle: React.CSSProperties = {
+  border: 'none',
+  background: 'transparent',
+  color: '#2563eb',
+  cursor: 'pointer',
+  padding: 0,
+  fontSize: '0.9rem',
+};
