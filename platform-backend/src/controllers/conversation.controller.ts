@@ -8,9 +8,12 @@ import {
   touchConversation,
 } from '../services/conversation.service.js';
 import {
+  broadcastConversationEvent,
   broadcastConversationUpdate,
   broadcastMessageRecord,
   sendTextFromSession,
+  extractMessageExternalId,
+  resolveMessageDate,
 } from '../services/wpp.service.js';
 import {
   createConversationMessage,
@@ -59,6 +62,7 @@ export async function listConversationsHandler(req: Request, res: Response) {
             senderType: conversation.messages[0]!.senderType,
             senderId: conversation.messages[0]!.senderId,
             content: conversation.messages[0]!.content,
+            externalId: conversation.messages[0]!.externalId,
             createdAt: conversation.messages[0]!.createdAt,
           }
         : null,
@@ -86,6 +90,11 @@ export async function getConversationMessagesHandler(
   if (!conversation) {
     return res.status(403).json({ message: 'Forbidden' });
   }
+  if (conversation.status === 'CLOSED') {
+    return res
+      .status(409)
+      .json({ message: 'Conversation is closed. Start a new chat.' });
+  }
 
   const limit = Number.parseInt(String(req.query.limit ?? '100'), 10);
   const messages = await listConversationMessages(
@@ -94,19 +103,18 @@ export async function getConversationMessagesHandler(
   );
 
   res.json(
-    messages
-      .map((message) => ({
-        id: message.id.toString(),
-        conversationId: message.conversationId.toString(),
-        senderType: message.senderType,
-        senderId: message.senderId,
-        content: message.content,
-        mediaType: message.mediaType,
-        mediaUrl: message.mediaUrl,
-        isDelivered: message.isDelivered,
-        createdAt: message.createdAt,
-      }))
-      .reverse()
+    messages.map((message) => ({
+      id: message.id.toString(),
+      conversationId: message.conversationId.toString(),
+      senderType: message.senderType,
+      senderId: message.senderId,
+      content: message.content,
+      mediaType: message.mediaType,
+      mediaUrl: message.mediaUrl,
+      isDelivered: message.isDelivered,
+      externalId: message.externalId,
+      createdAt: message.createdAt,
+    }))
   );
 }
 
@@ -125,6 +133,11 @@ export async function sendConversationMessageHandler(
     return res.status(400).json({ message: 'Content is required.' });
   }
 
+  const bodyContent = content.trim();
+  if (!bodyContent.length) {
+    return res.status(400).json({ message: 'Content is required.' });
+  }
+
   let conversationId: bigint;
   try {
     conversationId = BigInt(conversationIdParam);
@@ -137,16 +150,32 @@ export async function sendConversationMessageHandler(
     return res.status(403).json({ message: 'Forbidden' });
   }
 
+  const outbound = await sendTextFromSession(
+    req.user.id,
+    conversation.userPhone,
+    bodyContent
+  );
+  if (!outbound) {
+    await addConversationEvent(conversationId, 'NOTE', {
+      type: 'send_fail',
+      reason: 'whatsapp_session_unavailable',
+      content,
+    });
+  }
+
   const messageRecord = await createConversationMessage({
     conversationId,
     senderType: 'OPERATOR',
     senderId: req.user.id,
-    content,
+    content: bodyContent,
+    isDelivered: Boolean(outbound),
+    externalId: outbound ? extractMessageExternalId(outbound) : null,
+    createdAt: outbound ? resolveMessageDate(outbound) : new Date(),
   });
 
-  const now = new Date();
   await touchConversation(conversationId, {
-    lastActivity: now,
+    lastActivity: messageRecord.createdAt,
+    status: 'ACTIVE',
     botActive: false,
     ...(conversation.assignedToId
       ? undefined
@@ -157,19 +186,6 @@ export async function sendConversationMessageHandler(
         }),
   });
 
-  const sent = await sendTextFromSession(
-    req.user.id,
-    conversation.userPhone,
-    content
-  );
-  if (!sent) {
-    await addConversationEvent(conversationId, 'NOTE', {
-      type: 'send_fail',
-      reason: 'whatsapp_session_unavailable',
-      content,
-    });
-  }
-
   const io = getSocketServer();
   await broadcastMessageRecord(io, conversationId, messageRecord, [
     req.user.id,
@@ -179,7 +195,7 @@ export async function sendConversationMessageHandler(
   res.status(201).json({
     id: messageRecord.id.toString(),
     createdAt: messageRecord.createdAt,
-    isDelivered: sent,
+    isDelivered: messageRecord.isDelivered,
   });
 }
 
@@ -205,7 +221,7 @@ export async function closeConversationHandler(req: Request, res: Response) {
   const closingMessage =
     typeof customMessage === 'string' && customMessage.trim().length
       ? customMessage.trim()
-      : '✅ Chat finalizado. ¡Gracias por tu tiempo!';
+      : '\\u2705 Chat finalizado por el operador';
 
   const updated = await closeConversationRecord(conversationId, {
     closedById: req.user.id,
@@ -223,18 +239,12 @@ export async function closeConversationHandler(req: Request, res: Response) {
     req.user.id
   );
 
-  const sent = await sendTextFromSession(
+  const outbound = await sendTextFromSession(
     req.user.id,
     conversation.userPhone,
     closingMessage
   );
-  const messageRecord = await createConversationMessage({
-    conversationId,
-    senderType: 'BOT',
-    senderId: req.user.id,
-    content: closingMessage,
-  });
-  if (!sent) {
+  if (!outbound) {
     await addConversationEvent(conversationId, 'NOTE', {
       type: 'send_fail',
       reason: 'whatsapp_session_unavailable',
@@ -242,11 +252,22 @@ export async function closeConversationHandler(req: Request, res: Response) {
     });
   }
 
+  const messageRecord = await createConversationMessage({
+    conversationId,
+    senderType: 'BOT',
+    senderId: req.user.id,
+    content: closingMessage,
+    isDelivered: Boolean(outbound),
+    externalId: outbound ? extractMessageExternalId(outbound) : null,
+    createdAt: outbound ? resolveMessageDate(outbound) : new Date(),
+  });
+
   const io = getSocketServer();
   await broadcastMessageRecord(io, conversationId, messageRecord, [
     req.user.id,
   ]);
   await broadcastConversationUpdate(io, conversationId);
+  await broadcastConversationEvent(io, conversationId, 'conversation:closed');
 
   res.json({
     id: updated.id.toString(),

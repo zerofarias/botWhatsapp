@@ -41,8 +41,8 @@ CREATE TABLE IF NOT EXISTS `users` (
   `name` VARCHAR(150) NOT NULL,
   `username` VARCHAR(120) NOT NULL,
   `email` VARCHAR(191) DEFAULT NULL,
-  `password_hash` CHAR(60) NOT NULL,
-  `role` ENUM('admin','supervisor','operator') NOT NULL DEFAULT 'operator',
+  `password_hash` CHAR(64) NOT NULL,
+  `role` ENUM('admin','supervisor','operator','support','sales') NOT NULL DEFAULT 'operator',
   `default_area_id` INT DEFAULT NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
   `last_login_at` DATETIME(3) DEFAULT NULL,
@@ -144,7 +144,7 @@ CREATE TABLE IF NOT EXISTS `conversations` (
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `ux_conversations_user_phone_open` (`user_phone`, `status`),
+  KEY `idx_conversations_user_phone` (`user_phone`),
   KEY `idx_conversations_area` (`area_id`),
   KEY `idx_conversations_assigned_to` (`assigned_to`),
   KEY `idx_conversations_last_activity` (`last_activity`),
@@ -171,10 +171,12 @@ CREATE TABLE IF NOT EXISTS `messages` (
   `media_type` VARCHAR(50) DEFAULT NULL,
   `media_url` VARCHAR(255) DEFAULT NULL,
   `is_delivered` TINYINT(1) NOT NULL DEFAULT 1,
+  `external_id` VARCHAR(191) DEFAULT NULL,
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   KEY `idx_messages_conversation` (`conversation_id`),
   KEY `idx_messages_sender` (`sender_type`, `sender_id`),
+  UNIQUE KEY `ux_messages_external_id` (`external_id`),
   CONSTRAINT `fk_messages_conversation`
     FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`)
     ON DELETE CASCADE ON UPDATE CASCADE,
@@ -246,4 +248,3 @@ VALUES (
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `role` = VALUES(`role`);
-

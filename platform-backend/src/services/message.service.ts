@@ -1,7 +1,7 @@
-import type { MessageSender, Prisma } from '@prisma/client';
+import { Prisma, type MessageSender } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 
-const messageSelect = {
+const messageSelect = Prisma.validator<Prisma.MessageSelect>()({
   id: true,
   conversationId: true,
   senderType: true,
@@ -10,8 +10,9 @@ const messageSelect = {
   mediaType: true,
   mediaUrl: true,
   isDelivered: true,
+  externalId: true,
   createdAt: true,
-} satisfies Prisma.MessageSelect;
+});
 
 export type ConversationMessage = Prisma.MessageGetPayload<{
   select: typeof messageSelect;
@@ -28,8 +29,7 @@ export async function listConversationMessages(
 
   return prisma.message.findMany({
     where: { conversationId: id },
-    orderBy: { createdAt: 'desc' },
-    take: limit,
+    orderBy: { createdAt: 'asc' },
     select: messageSelect,
   });
 }
@@ -42,6 +42,8 @@ type CreateMessageInput = {
   mediaType?: string | null;
   mediaUrl?: string | null;
   isDelivered?: boolean;
+  externalId?: string | null;
+  createdAt?: Date;
 };
 
 export async function createConversationMessage(
@@ -60,19 +62,54 @@ export async function createConversationMessage(
     mediaType: input.mediaType ?? null,
     mediaUrl: input.mediaUrl ?? null,
     isDelivered: input.isDelivered ?? true,
+    externalId: input.externalId ?? null,
   };
 
-  const message = await prisma.message.create({
-    data,
+  if (
+    input.createdAt instanceof Date &&
+    !Number.isNaN(input.createdAt.valueOf())
+  ) {
+    data.createdAt = input.createdAt;
+  }
+
+  try {
+    const message = await prisma.message.create({
+      data,
+      select: messageSelect,
+    });
+
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: {
+        lastActivity: message.createdAt,
+        ...(message.senderType === 'BOT'
+          ? { lastBotMessageAt: message.createdAt }
+          : undefined),
+      },
+    });
+
+    return message;
+  } catch (error) {
+    if (
+      input.externalId &&
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      const existing = await prisma.message.findUnique({
+        where: { externalId: input.externalId },
+        select: messageSelect,
+      });
+      if (existing) {
+        return existing;
+      }
+    }
+    throw error;
+  }
+}
+
+export async function findMessageByExternalId(externalId: string) {
+  return prisma.message.findUnique({
+    where: { externalId },
     select: messageSelect,
   });
-
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: {
-      lastActivity: new Date(),
-    },
-  });
-
-  return message;
 }

@@ -1,5 +1,4 @@
 import type { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
 import { env } from '../config/env.js';
 import {
   createUser,
@@ -10,6 +9,7 @@ import {
   toSessionUser,
   updateLastLogin,
   usernameExists,
+  verifyPassword,
 } from '../services/user.service.js';
 
 type LoginPayload = {
@@ -75,8 +75,7 @@ export async function login(req: Request, res: Response) {
     return res.status(401).json({ message: 'Invalid credentials.' });
   }
 
-  const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) {
+  if (!verifyPassword(password, user.passwordHash)) {
     return res.status(401).json({ message: 'Invalid credentials.' });
   }
 

@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import type { Prisma, UserRole } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import type { SessionUser } from '../types/express.js';
@@ -34,6 +34,14 @@ export const userWithAreasSelect = {
 export type PublicUser = Prisma.UserGetPayload<{
   select: typeof userWithAreasSelect;
 }>;
+
+export function hashPassword(raw: string) {
+  return crypto.createHash('sha256').update(raw, 'utf8').digest('hex');
+}
+
+export function verifyPassword(raw: string, hashed: string) {
+  return hashPassword(raw) === hashed;
+}
 
 type CreateUserInput = {
   name: string;
@@ -164,7 +172,7 @@ export function parseUserRole(
 }
 
 export async function createUser(input: CreateUserInput) {
-  const hashed = await bcrypt.hash(input.password, 10);
+  const hashed = hashPassword(input.password);
 
   const user = await prisma.user.create({
     data: {
@@ -216,7 +224,7 @@ export async function updateUser(id: number, input: UpdateUserInput) {
   };
 
   if (input.password) {
-    data.passwordHash = await bcrypt.hash(input.password, 10);
+    data.passwordHash = hashPassword(input.password);
   }
 
   if (input.areaIds !== undefined) {

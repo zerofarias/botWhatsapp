@@ -4,10 +4,13 @@ import { prisma } from '../config/prisma.js';
 import { addConversationEvent } from '../services/conversation.service.js';
 import { createConversationMessage } from '../services/message.service.js';
 import {
+  broadcastConversationEvent,
   broadcastConversationUpdate,
   broadcastMessageRecord,
   getActiveSessionOwnerIds,
   sendTextFromSession,
+  extractMessageExternalId,
+  resolveMessageDate,
 } from '../services/wpp.service.js';
 
 const AUTO_CLOSE_REASON = 'auto_inactivity';
@@ -74,17 +77,20 @@ async function closeInactiveConversations(io: SocketIOServer) {
 
       let messageRecorded = false;
       for (const ownerId of sessionOwners) {
-        const sent = await sendTextFromSession(
+        const outbound = await sendTextFromSession(
           ownerId,
           conversation.userPhone,
           env.autoCloseMessage
         );
-        if (sent) {
+        if (outbound) {
           const messageRecord = await createConversationMessage({
             conversationId,
             senderType: 'BOT',
-            senderId: ownerId,
+            senderId: null,
             content: env.autoCloseMessage,
+            isDelivered: true,
+            externalId: extractMessageExternalId(outbound),
+            createdAt: resolveMessageDate(outbound),
           });
           await broadcastMessageRecord(io, conversationId, messageRecord, [
             ownerId,
@@ -95,17 +101,22 @@ async function closeInactiveConversations(io: SocketIOServer) {
       }
 
       if (!messageRecorded) {
-        // Record the message locally even if we could not send it through WPP
         const messageRecord = await createConversationMessage({
           conversationId,
           senderType: 'BOT',
           senderId: null,
           content: env.autoCloseMessage,
+          isDelivered: false,
         });
         await broadcastMessageRecord(io, conversationId, messageRecord);
       }
 
       await broadcastConversationUpdate(io, conversationId);
+      await broadcastConversationEvent(
+        io,
+        conversationId,
+        'conversation:closed'
+      );
     } catch (error) {
       console.error(
         '[Scheduler] Failed to close conversation',

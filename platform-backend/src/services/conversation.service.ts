@@ -2,6 +2,7 @@ import {
   ConversationEventType,
   ConversationStatus,
   Prisma,
+  type UserRole,
 } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import type { SessionUser } from '../types/express.js';
@@ -36,15 +37,32 @@ type CreateConversationInput = {
   botActive?: boolean;
 };
 
+const ACTIVE_STATUSES: ConversationStatus[] = ['PENDING', 'ACTIVE', 'PAUSED'];
+
+const ASSIGNABLE_OPERATOR_ROLES: UserRole[] = [
+  'OPERATOR',
+  'SUPERVISOR',
+  'SUPPORT',
+  'SALES',
+];
+
+const AREA_SCOPED_ROLES = new Set<UserRole>(['OPERATOR', 'SUPPORT', 'SALES']);
+
+function activeStatusFilter() {
+  return {
+    status: {
+      in: ACTIVE_STATUSES,
+    },
+  } as Prisma.ConversationWhereInput;
+}
+
 export async function findOpenConversationByPhone(
   userPhone: string
 ): Promise<ConversationRecord | null> {
   const record = await prisma.conversation.findFirst({
     where: {
       userPhone,
-      status: {
-        in: ['PENDING', 'ACTIVE', 'PAUSED'],
-      },
+      ...activeStatusFilter(),
     },
     orderBy: {
       createdAt: 'desc',
@@ -97,6 +115,112 @@ export async function addConversationEvent(
   });
 }
 
+export const ACTIVE_CONVERSATION_STATUSES = [...ACTIVE_STATUSES] as const;
+
+export function isActiveConversationStatus(status: ConversationStatus) {
+  return ACTIVE_STATUSES.includes(status);
+}
+
+async function countActiveConversationsForUser(
+  userId: number,
+  areaId?: number
+) {
+  return prisma.conversation.count({
+    where: {
+      assignedToId: userId,
+      ...(areaId ? { areaId } : undefined),
+      ...activeStatusFilter(),
+    },
+  });
+}
+
+export async function findLeastBusyOperator(areaId: number) {
+  const operators = await prisma.user.findMany({
+    where: {
+      isActive: true,
+      role: { in: ASSIGNABLE_OPERATOR_ROLES },
+      areas: {
+        some: { areaId },
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!operators.length) {
+    return null;
+  }
+
+  const loads = await Promise.all(
+    operators.map(async (operator) => ({
+      id: operator.id,
+      load: await countActiveConversationsForUser(operator.id, areaId),
+    }))
+  );
+
+  loads.sort((a, b) => {
+    if (a.load !== b.load) return a.load - b.load;
+    return a.id - b.id;
+  });
+
+  return loads[0]!.id;
+}
+
+export async function assignConversationToArea(
+  conversationId: bigint,
+  areaId: number | null,
+  options?: {
+    requestedById?: number | null;
+    preferUserId?: number | null;
+  }
+) {
+  const now = new Date();
+  let operatorId: number | null = null;
+
+  if (areaId !== null) {
+    if (options?.preferUserId) {
+      operatorId = options.preferUserId;
+    } else {
+      operatorId = await findLeastBusyOperator(areaId);
+    }
+  }
+
+  const updateData: Prisma.ConversationUpdateInput = {
+    area: areaId !== null ? { connect: { id: areaId } } : { disconnect: true },
+    lastActivity: now,
+    ...(operatorId
+      ? {
+          assignedTo: { connect: { id: operatorId } },
+          status: 'ACTIVE',
+          botActive: false,
+        }
+      : {
+          assignedTo: { disconnect: true },
+          status: 'PENDING',
+          botActive: true,
+        }),
+  };
+
+  const updated = await prisma.conversation.update({
+    where: { id: conversationId },
+    data: updateData,
+    select: conversationSelect,
+  });
+
+  await addConversationEvent(
+    conversationId,
+    'ASSIGNMENT',
+    {
+      areaId,
+      assignedToId: operatorId,
+    },
+    options?.requestedById ?? null
+  );
+
+  return { conversation: updated, operatorId };
+}
+
 const conversationSummarySelect = {
   id: true,
   userPhone: true,
@@ -127,6 +251,8 @@ const conversationSummarySelect = {
       senderType: true,
       senderId: true,
       content: true,
+      externalId: true,
+      isDelivered: true,
       createdAt: true,
     },
   },
@@ -147,29 +273,35 @@ function areaFilterForUser(
     (areaId): areaId is number => typeof areaId === 'number'
   );
 
-  const baseConditions: Prisma.ConversationWhereInput[] = [];
-  baseConditions.push({ assignedToId: user.id });
+  if (AREA_SCOPED_ROLES.has(user.role)) {
+    const conditions: Prisma.ConversationWhereInput[] = [
+      { assignedToId: user.id },
+    ];
 
-  if (areaIds.length) {
-    baseConditions.push({
-      areaId: { in: areaIds },
-    });
+    if (areaIds.length) {
+      conditions.push({
+        AND: [
+          { areaId: { in: areaIds } },
+          {
+            OR: [{ assignedToId: user.id }, { assignedToId: null }],
+          },
+        ],
+      });
+    }
+
+    return conditions.length === 1 ? conditions[0] : { OR: conditions };
   }
 
   if (user.role === 'SUPERVISOR') {
-    // supervisors can also see unassigned conversations in their areas
-    if (areaIds.length) {
-      baseConditions.push({
-        AND: [{ assignedToId: null }, { areaId: { in: areaIds } }],
-      });
+    if (!areaIds.length) {
+      return { assignedToId: user.id };
     }
+    return {
+      OR: [{ assignedToId: user.id }, { areaId: { in: areaIds } }],
+    };
   }
 
-  if (baseConditions.length === 1) {
-    return baseConditions[0];
-  }
-
-  return { OR: baseConditions };
+  return { assignedToId: user.id };
 }
 
 export async function listConversationsForUser(
@@ -193,7 +325,7 @@ export async function listConversationsForUser(
 
   return prisma.conversation.findMany({
     where,
-    orderBy: { updatedAt: 'desc' },
+    orderBy: { lastActivity: 'desc' },
     select: conversationSummarySelect,
   });
 }
@@ -230,12 +362,17 @@ export async function ensureConversationAccess(
     return record;
   }
 
-  if (
-    (user.role === 'SUPERVISOR' || user.role === 'OPERATOR') &&
-    record.areaId &&
-    areaIds.includes(record.areaId)
-  ) {
-    return record;
+  if (AREA_SCOPED_ROLES.has(user.role)) {
+    if (record.areaId && areaIds.includes(record.areaId)) {
+      return record;
+    }
+    return null;
+  }
+
+  if (user.role === 'SUPERVISOR') {
+    if (record.areaId && areaIds.includes(record.areaId)) {
+      return record;
+    }
   }
 
   return null;

@@ -1,8 +1,8 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 import type { AreaMembership } from '../context/AuthContext';
 
-type Role = 'ADMIN' | 'SUPERVISOR' | 'OPERATOR';
+type Role = 'ADMIN' | 'SUPERVISOR' | 'OPERATOR' | 'SUPPORT' | 'SALES';
 
 type UserListItem = {
   id: number;
@@ -26,6 +26,8 @@ const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: 'ADMIN', label: 'Administrador' },
   { value: 'SUPERVISOR', label: 'Supervisor' },
   { value: 'OPERATOR', label: 'Operador' },
+  { value: 'SUPPORT', label: 'Soporte' },
+  { value: 'SALES', label: 'Ventas' },
 ];
 
 type CreateUserPayload = {
@@ -169,7 +171,7 @@ export default function UsersPage() {
       >
         <h2 style={{ margin: 0 }}>Crear usuario</h2>
         <p style={{ marginTop: '0.25rem', color: '#64748b' }}>
-          Define operadores, supervisores o administradores y asigna sus áreas.
+          Define operadores, supervisores o administradores y asigna sus Ã¡reas.
         </p>
         <form
           onSubmit={handleCreateUser}
@@ -209,7 +211,7 @@ export default function UsersPage() {
             />
           </label>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Correo electrónico</span>
+            <span>Correo electrÃ³nico</span>
             <input
               type="email"
               value={createState.email}
@@ -223,7 +225,7 @@ export default function UsersPage() {
             />
           </label>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Contraseña</span>
+            <span>ContraseÃ±a</span>
             <input
               type="password"
               value={createState.password}
@@ -257,7 +259,7 @@ export default function UsersPage() {
             </select>
           </label>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Área principal</span>
+            <span>Ãrea principal</span>
             <select
               value={createState.defaultAreaId ?? ''}
               onChange={(event) => {
@@ -293,11 +295,11 @@ export default function UsersPage() {
                 fontWeight: 600,
               }}
             >
-              Áreas asignadas
+              ÃAreas asignadas
             </legend>
             {activeAreas.length === 0 ? (
               <span style={{ color: '#64748b', fontSize: '0.9rem' }}>
-                No hay áreas activas disponibles.
+                No hay Ã¡reas activas disponibles.
               </span>
             ) : (
               <div
@@ -413,7 +415,7 @@ export default function UsersPage() {
                 >
                   <th style={tableHeaderStyle}>Nombre</th>
                   <th style={tableHeaderStyle}>Rol</th>
-                  <th style={tableHeaderStyle}>Áreas</th>
+                  <th style={tableHeaderStyle}>Ãreas</th>
                   <th style={tableHeaderStyle}>Estado</th>
                   <th style={tableHeaderStyle}>Acciones</th>
                 </tr>
@@ -427,15 +429,15 @@ export default function UsersPage() {
                     <td style={tableCellStyle}>
                       <div style={{ fontWeight: 600 }}>{user.name}</div>
                       <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                        @{user.username} · {user.email ?? 'sin correo'}
+                        @{user.username} Â· {user.email ?? 'sin correo'}
                       </div>
                     </td>
                     <td style={tableCellStyle}>{roleLabel(user.role)}</td>
                     <td style={tableCellStyle}>
                       {user.areas.length === 0
-                        ? 'Sin áreas'
+                        ? 'Sin Ã¡reas'
                         : user.areas
-                            .map((area) => area.name ?? '—')
+                            .map((area) => area.name ?? 'â€”')
                             .filter(Boolean)
                             .join(', ')}
                     </td>
@@ -511,7 +513,7 @@ export default function UsersPage() {
             <div>
               <h3 style={{ margin: 0 }}>Editar usuario</h3>
               <p style={{ margin: 0, color: '#64748b' }}>
-                {selectedUser.name} · @{selectedUser.username}
+                {selectedUser.name} Â· @{selectedUser.username}
               </p>
             </div>
             <button
@@ -595,7 +597,7 @@ export default function UsersPage() {
               </select>
             </label>
             <label style={{ display: 'grid', gap: '0.35rem' }}>
-              <span>Área principal</span>
+              <span>Ãrea principal</span>
               <select
                 value={editState.defaultAreaId ?? ''}
                 onChange={(event) => {
@@ -631,7 +633,7 @@ export default function UsersPage() {
                   fontWeight: 600,
                 }}
               >
-                Áreas asignadas
+                ÃAreas asignadas
               </legend>
               <div
                 style={{

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 import { useSocket } from '../hooks/useSocket';
 
@@ -24,33 +24,98 @@ interface MessagePreview {
   timestamp: string;
 }
 
+interface ConversationSummary {
+  id: string;
+  status: 'PENDING' | 'ACTIVE' | 'PAUSED' | 'CLOSED';
+  area: { id: number; name: string | null } | null;
+}
+
+interface ConversationStats {
+  active: number;
+  closed: number;
+  areaBreakdown: Array<{ areaName: string; active: number }>;
+}
+
 export default function DashboardOverview() {
   const [status, setStatus] = useState<BotStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<MessagePreview[]>([]);
+  const [conversationStats, setConversationStats] = useState<ConversationStats>(
+    {
+      active: 0,
+      closed: 0,
+      areaBreakdown: [],
+    }
+  );
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const socket = useSocket();
 
-  const lastQr = useMemo(() => {
-    return status?.cache?.lastQr ?? status?.record?.lastQr ?? null;
-  }, [status]);
+  const lastQr = useMemo(
+    () => status?.cache?.lastQr ?? status?.record.lastQr ?? null,
+    [status]
+  );
 
-  const currentStatus = useMemo(() => {
-    return status?.cache?.status ?? status?.record?.status ?? 'DESCONOCIDO';
-  }, [status]);
+  const currentStatus = useMemo(
+    () => status?.cache?.status ?? status?.record.status ?? 'DESCONOCIDO',
+    [status]
+  );
 
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const response = await api.get<BotStatus>('/bot/status');
       setStatus(response.data);
+    } catch (error) {
+      console.error('[Dashboard] Failed to load bot status', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const fetchConversationStats = useCallback(async () => {
+    setStatsLoading(true);
+    setStatsError(null);
+    try {
+      const [activeResponse, closedResponse] = await Promise.all([
+        api.get<ConversationSummary[]>('/conversations', {
+          params: { status: 'PENDING,ACTIVE,PAUSED' },
+        }),
+        api.get<ConversationSummary[]>('/conversations', {
+          params: { status: 'CLOSED' },
+        }),
+      ]);
+
+      const areaCounter = new Map<string, number>();
+      activeResponse.data.forEach((conversation) => {
+        const key = conversation.area?.name ?? 'Sin area';
+        areaCounter.set(key, (areaCounter.get(key) ?? 0) + 1);
+      });
+
+      const areaBreakdown = Array.from(areaCounter.entries())
+        .map(([areaName, active]) => ({ areaName, active }))
+        .sort((a, b) => b.active - a.active);
+
+      setConversationStats({
+        active: activeResponse.data.length,
+        closed: closedResponse.data.length,
+        areaBreakdown,
+      });
+    } catch (error) {
+      console.error('[Dashboard] Failed to load conversation stats', error);
+      setStatsError(
+        'No se pudieron obtener las estadisticas de conversaciones.'
+      );
+      setConversationStats({ active: 0, closed: 0, areaBreakdown: [] });
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    fetchStatus();
-  }, []);
+    void fetchStatus();
+    void fetchConversationStats();
+  }, [fetchStatus, fetchConversationStats]);
 
   useEffect(() => {
     if (!socket) return;
@@ -109,38 +174,119 @@ export default function DashboardOverview() {
       setMessages((prev) => [preview, ...prev].slice(0, 6));
     };
 
+    const refreshStats = () => {
+      void fetchConversationStats();
+    };
+
     socket.on('session:status', onStatus);
     socket.on('session:qr', onQr);
     socket.on('message:new', onMessage);
+    socket.on('conversation:update', refreshStats);
+    socket.on('conversation:incoming', refreshStats);
+    socket.on('conversation:closed', refreshStats);
 
     return () => {
       socket.off('session:status', onStatus);
       socket.off('session:qr', onQr);
       socket.off('message:new', onMessage);
+      socket.off('conversation:update', refreshStats);
+      socket.off('conversation:incoming', refreshStats);
+      socket.off('conversation:closed', refreshStats);
     };
-  }, [socket]);
+  }, [socket, fetchConversationStats]);
 
   const handleStart = async () => {
     await api.post('/bot/start');
-    fetchStatus();
+    void fetchStatus();
   };
 
   const handleStop = async () => {
     await api.post('/bot/stop');
-    fetchStatus();
+    void fetchStatus();
   };
 
   const handlePauseToggle = async (paused: boolean) => {
     await api.post('/bot/pause', { paused });
-    fetchStatus();
+    void fetchStatus();
   };
 
-  if (loading) {
+  if (loading && !status) {
     return <div>Cargando...</div>;
   }
 
   return (
     <div style={{ display: 'grid', gap: '1.5rem' }}>
+      <section
+        style={{
+          background: '#fff',
+          padding: '1.5rem',
+          borderRadius: '12px',
+          boxShadow: '0 12px 24px -18px rgba(15, 23, 42, 0.35)',
+          display: 'grid',
+          gap: '1.25rem',
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Resumen de conversaciones</h2>
+        {statsLoading ? (
+          <p>Cargando estadisticas...</p>
+        ) : statsError ? (
+          <p style={{ color: '#ef4444' }}>{statsError}</p>
+        ) : (
+          <>
+            <div
+              style={{
+                display: 'grid',
+                gap: '1rem',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              }}
+            >
+              <StatCard
+                label="Chats activos"
+                value={conversationStats.active}
+              />
+              <StatCard
+                label="Chats cerrados"
+                value={conversationStats.closed}
+              />
+            </div>
+            <div>
+              <h3 style={{ margin: '0 0 0.75rem 0' }}>Distribucion por area</h3>
+              {conversationStats.areaBreakdown.length ? (
+                <ul
+                  style={{
+                    listStyle: 'none',
+                    margin: 0,
+                    padding: 0,
+                    display: 'grid',
+                    gap: '0.5rem',
+                  }}
+                >
+                  {conversationStats.areaBreakdown.map((item) => (
+                    <li key={item.areaName}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          background: '#f8fafc',
+                          borderRadius: '10px',
+                          padding: '0.65rem 1rem',
+                        }}
+                      >
+                        <span>{item.areaName}</span>
+                        <strong>{item.active}</strong>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No hay conversaciones activas en este momento.</p>
+              )}
+            </div>
+          </>
+        )}
+      </section>
+
       <section
         style={{
           background: '#fff',
@@ -155,7 +301,7 @@ export default function DashboardOverview() {
           <div>
             <h2 style={{ margin: 0 }}>Estado del bot</h2>
             <p style={{ margin: 0, color: '#64748b' }}>
-              Controla la conexión con WhatsApp
+              Controla la conexion con WhatsApp
             </p>
           </div>
           <div>
@@ -219,7 +365,7 @@ export default function DashboardOverview() {
           boxShadow: '0 12px 24px -18px rgba(15, 23, 42, 0.35)',
         }}
       >
-        <h2 style={{ marginTop: 0 }}>Código QR</h2>
+        <h2 style={{ marginTop: 0 }}>Codigo QR</h2>
         {lastQr ? (
           <pre
             style={{
@@ -233,7 +379,7 @@ export default function DashboardOverview() {
             {lastQr}
           </pre>
         ) : (
-          <p>Aún no se ha generado un QR. Inicia sesión para obtenerlo.</p>
+          <p>Aun no se ha generado un QR. Inicia sesion para obtenerlo.</p>
         )}
       </section>
 
@@ -259,7 +405,8 @@ export default function DashboardOverview() {
                 }}
               >
                 <div style={{ fontWeight: 600 }}>
-                  {msg.direction === 'in' ? '⬅️' : '➡️'} {msg.conversationId}
+                  {msg.direction === 'in' ? 'Entrante' : 'Saliente'}{' '}
+                  {msg.conversationId}
                 </div>
                 <div style={{ color: '#475569' }}>{msg.content}</div>
                 <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
@@ -270,6 +417,25 @@ export default function DashboardOverview() {
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+function StatCard({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div
+      style={{
+        background: '#0f172a',
+        color: '#fff',
+        borderRadius: '12px',
+        padding: '1rem 1.25rem',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.3rem',
+      }}
+    >
+      <span style={{ fontSize: '0.85rem', opacity: 0.75 }}>{label}</span>
+      <strong style={{ fontSize: '1.75rem' }}>{value}</strong>
     </div>
   );
 }

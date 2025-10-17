@@ -9,7 +9,7 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 
-export type Role = 'ADMIN' | 'SUPERVISOR' | 'OPERATOR';
+export type Role = 'ADMIN' | 'SUPERVISOR' | 'OPERATOR' | 'SUPPORT' | 'SALES';
 
 export interface AreaMembership {
   id: number | null;

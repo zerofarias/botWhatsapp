@@ -1,19 +1,21 @@
 # WhatsApp Customer Care Platform
 
 Full stack workspace for building a multi-operator WhatsApp service desk on top of **WPPConnect**.  
-It contains a Node.js/Express backend (TypeScript) and a Vue 3 + Vite frontend with a WhatsApp-like interface for agents, a visual flow builder and automatic chat closing policies.
+It contains a Node.js/Express backend (TypeScript) and a React 18 + Vite frontend with a WhatsApp-like interface for agents, a visual flow builder and automatic chat closing policies.
 
 ---
 
 ## Key Features
 
 - **Session-based authentication** (no JWT): Express-session persisted in MySQL via Prisma store.
-- **Role-aware access control**: `ADMIN`, `SUPERVISOR`, `OPERATOR` with dynamic area membership.
-- **Areas & automatic routing**: assign flows and conversations to departments; operators only see their own workload.
+- **Role-aware access control**: `ADMIN`, `SUPERVISOR`, `SUPPORT`, `SALES`, `OPERATOR` with dynamic area membership and load-balancing by workload.
+- **Complete conversation history**: all bot, contact and operator messages are persisted with delivery state, timestamps and external identifiers.
+- **Areas & automatic routing**: assign flows and conversations to departments; active chats are routed to the least loaded operator in each area.
 - **Visual flow builder**: hierarchical menus (`message`, `menu`, `redirect`, `end`, etc.) stored in MySQL and served via Prisma.
-- **Real-time chat wall**: WhatsApp Web style UI with manual close button, inactivity auto-close (30 min by default) and WPPConnect delivery.
-- **Socket.io events**: conversations broadcast to rooms by user, role and area (`conversation:update`, `message:new`).
-- **Scheduler**: closes inactive chats, logs events and sends the courtesy message via WPPConnect.
+- **Real-time workspace**: refreshed WhatsApp-style UI with conversation search, unread indicators and in-place close actions.
+- **Socket.io events**: conversations broadcast to rooms by user, role and area (`conversation:update`, `conversation:incoming`, `message:new`, `conversation:closed`).
+- **Scheduler & auto-close**: closes inactive chats, logs events and sends the courtesy message via WPPConnect.
+- **Analytics dashboard**: live stats for active/closed chats and area distribution, plus latest bot activity.
 - **Full Prisma schema & SQL bootstrap**: includes flows, areas, conversations, messages, events, sessions.
 
 ---
@@ -39,20 +41,22 @@ It contains a Node.js/Express backend (TypeScript) and a Vue 3 + Vite frontend w
 
 Copy `.env.example` to `.env` and adjust:
 
-| Variable                   | Description                             |
-| -------------------------- | --------------------------------------- |
-| `PORT`                     | API port (default `4000`)               |
-| `DATABASE_URL`             | Prisma connection string                |
-| `SESSION_SECRET`           | Cookie signature secret                 |
-| `SESSION_COOKIE_NAME`      | Session cookie name                     |
-| `SESSION_MAX_AGE`          | Cookie max age (ms)                     |
-| `SESSION_CLEANUP_INTERVAL` | Cleanup interval for session store (ms) |
-| `CORS_ORIGIN`              | Comma-separated allowed origins         |
-| `WPP_HEADLESS`             | WPPConnect headless flag                |
-| `WPP_AUTO_CLOSE`           | Enable WPP auto-close (ms)              |
-| `AUTO_CLOSE_MINUTES`       | Scheduler inactivity threshold          |
-| `AUTO_CLOSE_MESSAGE`       | Message sent when chats auto-close      |
-| `SCHEDULER_INTERVAL_MS`    | How often the scheduler runs            |
+| Variable                   | Description                                                   |
+| -------------------------- | ------------------------------------------------------------- |
+| `PORT`                     | API port (default `4000`)                                     |
+| `DATABASE_URL`             | Prisma connection string                                      |
+| `SESSION_SECRET`           | Cookie signature secret                                       |
+| `SESSION_COOKIE_NAME`      | Session cookie name                                           |
+| `SESSION_MAX_AGE`          | Cookie max age (ms)                                           |
+| `SESSION_COOKIE_SECURE`    | Force secure cookies (default on in prod)                     |
+| `SESSION_COOKIE_SAMESITE`  | Cookie same-site policy (`lax` by default)                    |
+| `SESSION_CLEANUP_INTERVAL` | Cleanup interval for session store (ms)                       |
+| `CORS_ORIGIN`              | Comma-separated allowed origins                               |
+| `WPP_HEADLESS`             | WPPConnect headless flag (`true`/`false`)                     |
+| `WPP_AUTO_CLOSE`           | Auto-close timeout for the headless client (ms, `0` disables) |
+| `AUTO_CLOSE_MINUTES`       | Scheduler inactivity threshold                                |
+| `AUTO_CLOSE_MESSAGE`       | Message sent when chats auto-close                            |
+| `SCHEDULER_INTERVAL_MS`    | How often the scheduler runs                                  |
 
 ### Database bootstrap
 
@@ -60,8 +64,7 @@ _Option A_ – Prisma sync:
 
 ```bash
 npm install
-npx prisma db push
-npx prisma generate
+npm run sync:db    # prisma db push && prisma generate
 ```
 
 _Option B_ – raw SQL (includes seed admin):
@@ -75,6 +78,7 @@ mysql -u user -p < db/schema_v2.sql
 ```bash
 npm install
 npm run build        # type-check / compile
+npm run sync:db      # push schema + generate Prisma client
 npm run dev          # ts-node-dev hot reload
 npm start            # runs dist/index.js
 ```
@@ -154,3 +158,6 @@ Issues and PRs are welcome! When adding features remember to update the Prisma s
 ## License
 
 Derived from the WPPConnect open source project (LGPL-3.0). See upstream documentation at [wppconnect-team/wppconnect](https://github.com/wppconnect-team/wppconnect).
+
+VIVA EL CODIGO OPEN SOURSE
+USALO LIBREMENTE

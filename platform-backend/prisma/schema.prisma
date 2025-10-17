@@ -126,7 +126,8 @@ model Conversation {
   messages   Message[]
   events     ConversationEvent[]
 
-  @@unique([userPhone, status], map: "ux_conversations_user_phone_open")
+  @@index([userPhone], map: "idx_conversations_user_phone")
+  @@index([status], map: "idx_conversations_status")
   @@index([areaId], map: "idx_conversations_area")
   @@index([assignedToId], map: "idx_conversations_assigned_to")
   @@index([lastActivity], map: "idx_conversations_last_activity")
@@ -142,6 +143,7 @@ model Message {
   mediaType      String?       @map("media_type")
   mediaUrl       String?       @map("media_url")
   isDelivered    Boolean       @default(true) @map("is_delivered")
+  externalId     String?       @unique @map("external_id")
   createdAt      DateTime      @default(now()) @map("created_at")
 
   conversation Conversation @relation(fields: [conversationId], references: [id])
@@ -179,6 +181,8 @@ enum UserRole {
   ADMIN      @map("admin")
   SUPERVISOR @map("supervisor")
   OPERATOR   @map("operator")
+  SUPPORT    @map("support")
+  SALES      @map("sales")
 }
 
 enum BotSessionStatus {

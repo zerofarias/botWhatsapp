@@ -1,10 +1,10 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, type Role } from '../context/AuthContext';
 
 type NavigationLink = {
   to: string;
   label: string;
-  roles?: Array<'ADMIN' | 'SUPERVISOR' | 'OPERATOR'>;
+  roles?: Role[];
 };
 
 const NAVIGATION_LINKS: NavigationLink[] = [
@@ -16,7 +16,7 @@ const NAVIGATION_LINKS: NavigationLink[] = [
   { to: '/dashboard/settings', label: 'Configuración' },
 ];
 
-function formatRole(role?: string) {
+function formatRole(role?: Role) {
   switch (role) {
     case 'ADMIN':
       return 'Administrador';
@@ -24,6 +24,10 @@ function formatRole(role?: string) {
       return 'Supervisor';
     case 'OPERATOR':
       return 'Operador';
+    case 'SUPPORT':
+      return 'Soporte';
+    case 'SALES':
+      return 'Ventas';
     default:
       return 'Invitado';
   }

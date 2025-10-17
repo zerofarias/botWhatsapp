@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+﻿import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../services/api';
 
 type AreaItem = {
@@ -6,6 +6,7 @@ type AreaItem = {
   name: string;
   description: string | null;
   isActive: boolean;
+  activeOperators: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -60,7 +61,7 @@ export default function AreasPage() {
       void fetchAreas();
     } catch (err) {
       console.error(err);
-      setError('No se pudo crear el área.');
+      setError('No se pudo crear el Ã¡rea.');
     } finally {
       setSubmitting(false);
     }
@@ -99,7 +100,7 @@ export default function AreasPage() {
           boxShadow: '0 12px 24px -18px rgba(15, 23, 42, 0.35)',
         }}
       >
-        <h2 style={{ margin: 0 }}>Crear área de atención</h2>
+        <h2 style={{ margin: 0 }}>Crear Ã¡rea de atenciÃ³n</h2>
         <p style={{ marginTop: '0.25rem', color: '#64748b' }}>
           Organiza tus flujos por equipos (Soporte, Ventas, Administración...).
         </p>
@@ -113,7 +114,7 @@ export default function AreasPage() {
           }}
         >
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Nombre del área</span>
+            <span>Nombre del Ã¡rea</span>
             <input
               value={createState.name}
               onChange={(event) =>
@@ -156,7 +157,7 @@ export default function AreasPage() {
                 }))
               }
             />
-            Área activa
+            Ãrea activa
           </label>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <button
@@ -171,7 +172,7 @@ export default function AreasPage() {
                 cursor: submitting ? 'wait' : 'pointer',
               }}
             >
-              {submitting ? 'Creando...' : 'Crear área'}
+              {submitting ? 'Creando...' : 'Crear Ã¡rea'}
             </button>
             {error && <span style={{ color: '#ef4444' }}>{error}</span>}
           </div>
@@ -196,9 +197,9 @@ export default function AreasPage() {
           }}
         >
           <div>
-            <h2 style={{ margin: 0 }}>Áreas configuradas</h2>
+            <h2 style={{ margin: 0 }}>ÃÁreas configuradas</h2>
             <p style={{ margin: 0, color: '#64748b' }}>
-              Gestioná qué equipos reciben conversaciones y flujos.
+              GestionÃ¡ quÃ© equipos reciben conversaciones y flujos.
             </p>
           </div>
           <button
@@ -216,7 +217,7 @@ export default function AreasPage() {
         </header>
 
         {loading ? (
-          <p>Cargando áreas...</p>
+          <p>Cargando Ã¡reas...</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table
@@ -235,6 +236,7 @@ export default function AreasPage() {
                 >
                   <th style={tableHeaderStyle}>Nombre</th>
                   <th style={tableHeaderStyle}>Descripción</th>
+                  <th style={tableHeaderStyle}>Operadores activos</th>
                   <th style={tableHeaderStyle}>Estado</th>
                   <th style={tableHeaderStyle}>Actualizado</th>
                   <th style={tableHeaderStyle}>Acciones</th>
@@ -267,6 +269,7 @@ export default function AreasPage() {
                         }
                       />
                     </td>
+                    <td style={tableCellStyle}>{area.activeOperators}</td>
                     <td style={tableCellStyle}>
                       <span
                         style={{

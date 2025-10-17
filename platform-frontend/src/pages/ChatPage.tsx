@@ -1,4 +1,11 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { api } from '../services/api';
 import { useSocket } from '../hooks/useSocket';
 
@@ -19,6 +26,8 @@ type ConversationSummary = {
     senderType: 'CONTACT' | 'BOT' | 'OPERATOR';
     senderId: number | null;
     content: string;
+    externalId: string | null;
+    isDelivered: boolean;
     createdAt: string;
   } | null;
 };
@@ -31,82 +40,188 @@ type ConversationMessage = {
   content: string;
   mediaType: string | null;
   mediaUrl: string | null;
+  externalId: string | null;
+  isDelivered: boolean;
   createdAt: string;
 };
 
 type FilterOption = 'active' | 'all' | 'closed';
 
-function isActiveStatus(status: ConversationStatus) {
+const FILTER_OPTIONS: Array<{ label: string; value: FilterOption }> = [
+  { label: 'Activos', value: 'active' },
+  { label: 'Todos', value: 'all' },
+  { label: 'Cerrados', value: 'closed' },
+];
+
+const ACTIVE_STATUS_SET: ConversationStatus[] = ['PENDING', 'ACTIVE', 'PAUSED'];
+
+const STATUS_COPY: Record<ConversationStatus, string> = {
+  PENDING: 'Pendiente',
+  ACTIVE: 'Activo',
+  PAUSED: 'En pausa',
+  CLOSED: 'Cerrado',
+};
+
+function matchesActive(status: ConversationStatus) {
   return status === 'PENDING' || status === 'ACTIVE' || status === 'PAUSED';
 }
 
 export default function ChatPage() {
   const socket = useSocket();
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [filter, setFilter] = useState<FilterOption>('active');
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [messageInput, setMessageInput] = useState('');
-  const [loadingConversations, setLoadingConversations] = useState(true);
+  const [loadingConversations, setLoadingConversations] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [closing, setClosing] = useState(false);
-  const [filter, setFilter] = useState<FilterOption>('active');
+  const [unreadConversations, setUnreadConversations] = useState<Set<string>>(
+    () => new Set()
+  );
 
-  const fetchConversations = async () => {
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const matchesFilter = useCallback(
+    (conversation: ConversationSummary) => {
+      if (filter === 'active') {
+        return conversation.status !== 'CLOSED';
+      }
+      if (filter === 'closed') {
+        return conversation.status === 'CLOSED';
+      }
+      return true;
+    },
+    [filter]
+  );
+
+  const fetchConversations = useCallback(async () => {
     setLoadingConversations(true);
     try {
+      const params =
+        filter === 'active'
+          ? { status: ACTIVE_STATUS_SET.join(',') }
+          : filter === 'closed'
+          ? { status: 'CLOSED' }
+          : undefined;
+
       const { data } = await api.get<ConversationSummary[]>('/conversations', {
-        params: { status: 'PENDING,ACTIVE,PAUSED' },
+        params,
       });
-      setConversations(sortConversations(data));
-      if (!selectedId && data.length) {
-        setSelectedId(data[0]!.id);
-      }
+      const sorted = sortConversations(data);
+      setConversations(sorted);
+
+      setSelectedId((current) => {
+        if (current && sorted.some((item) => item.id === current)) {
+          return current;
+        }
+        return sorted[0]?.id ?? null;
+      });
+
+      setUnreadConversations((prev) => {
+        if (!prev.size) {
+          return prev;
+        }
+        const validIds = new Set(sorted.map((item) => item.id));
+        const next = new Set<string>();
+        prev.forEach((id) => {
+          if (validIds.has(id)) {
+            next.add(id);
+          }
+        });
+        return next;
+      });
+    } catch (error) {
+      console.error('[Chat] Failed to load conversations', error);
     } finally {
       setLoadingConversations(false);
     }
-  };
+  }, [filter]);
 
-  const fetchMessages = async (conversationId: string) => {
+  const fetchMessages = useCallback(async (conversationId: string) => {
     setLoadingMessages(true);
     try {
       const { data } = await api.get<ConversationMessage[]>(
         `/conversations/${conversationId}/messages`,
         {
-          params: { limit: 200 },
+          params: { limit: 500 },
         }
       );
       setMessages(data);
+      setUnreadConversations((prev) => {
+        if (!prev.has(conversationId)) {
+          return prev;
+        }
+        const next = new Set(prev);
+        next.delete(conversationId);
+        return next;
+      });
+    } catch (error) {
+      console.error('[Chat] Failed to load messages', error);
+      setMessages([]);
     } finally {
       setLoadingMessages(false);
     }
-  };
-
-  useEffect(() => {
-    void fetchConversations();
   }, []);
 
   useEffect(() => {
-    if (selectedId) {
-      void fetchMessages(selectedId);
-    } else {
+    void fetchConversations();
+  }, [fetchConversations]);
+
+  useEffect(() => {
+    if (!selectedId) {
       setMessages([]);
+      return;
     }
-  }, [selectedId]);
+    void fetchMessages(selectedId);
+    setUnreadConversations((prev) => {
+      if (!prev.has(selectedId)) {
+        return prev;
+      }
+      const next = new Set(prev);
+      next.delete(selectedId);
+      return next;
+    });
+    setMessageInput('');
+  }, [selectedId, fetchMessages]);
 
   useEffect(() => {
     if (!socket) return;
 
     const handleConversationUpdate = (payload: ConversationSummary) => {
+      let removed = false;
       setConversations((prev) => {
-        const updated = prev.filter((item) => item.id !== payload.id);
-        updated.push(payload);
-        return sortConversations(updated);
+        const filtered = prev.filter((item) => item.id !== payload.id);
+        if (!matchesFilter(payload)) {
+          removed = true;
+          return filtered;
+        }
+        filtered.push(payload);
+        return sortConversations(filtered);
       });
+
+      if (removed || !matchesFilter(payload)) {
+        setUnreadConversations((prev) => {
+          if (!prev.has(payload.id)) {
+            return prev;
+          }
+          const next = new Set(prev);
+          next.delete(payload.id);
+          return next;
+        });
+      }
     };
 
     const handleMessage = (payload: ConversationMessage) => {
       setConversations((prev) => {
+        const exists = prev.some(
+          (conversation) => conversation.id === payload.conversationId
+        );
+        if (!exists) {
+          return prev;
+        }
         const updated = prev.map((conversation) =>
           conversation.id === payload.conversationId
             ? {
@@ -116,243 +231,227 @@ export default function ChatPage() {
                   senderType: payload.senderType,
                   senderId: payload.senderId,
                   content: payload.content,
+                  externalId: payload.externalId,
+                  isDelivered: payload.isDelivered,
                   createdAt: payload.createdAt,
                 },
-                updatedAt: payload.createdAt,
                 lastActivity: payload.createdAt,
+                updatedAt: payload.createdAt,
               }
             : conversation
         );
         return sortConversations(updated);
       });
 
-      setMessages((prev) => {
-        if (payload.conversationId !== selectedId) {
-          return prev;
-        }
-        const exists = prev.find((msg) => msg.id === payload.id);
-        if (exists) {
-          return prev;
-        }
-        return [...prev, payload];
-      });
+      if (payload.conversationId === selectedId) {
+        setMessages((prev) => {
+          if (
+            prev.some(
+              (message) =>
+                message.id === payload.id ||
+                (payload.externalId &&
+                  message.externalId &&
+                  message.externalId === payload.externalId)
+            )
+          ) {
+            return prev;
+          }
+          const next = [...prev, payload];
+          next.sort(
+            (a, b) =>
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+          return next;
+        });
+        setUnreadConversations((prev) => {
+          if (!prev.has(payload.conversationId)) {
+            return prev;
+          }
+          const next = new Set(prev);
+          next.delete(payload.conversationId);
+          return next;
+        });
+      } else {
+        setUnreadConversations((prev) => {
+          const next = new Set(prev);
+          next.add(payload.conversationId);
+          return next;
+        });
+      }
     };
 
     socket.on('conversation:update', handleConversationUpdate);
+    socket.on('conversation:incoming', handleConversationUpdate);
+    socket.on('conversation:closed', handleConversationUpdate);
     socket.on('message:new', handleMessage);
 
     return () => {
       socket.off('conversation:update', handleConversationUpdate);
+      socket.off('conversation:incoming', handleConversationUpdate);
+      socket.off('conversation:closed', handleConversationUpdate);
       socket.off('message:new', handleMessage);
     };
-  }, [socket, selectedId]);
+  }, [socket, selectedId, matchesFilter]);
+
+  useEffect(() => {
+    if (!messagesContainerRef.current) return;
+    messagesContainerRef.current.scrollTop =
+      messagesContainerRef.current.scrollHeight;
+  }, [messages]);
+
+  const activeConversation = useMemo(
+    () => conversations.find((item) => item.id === selectedId) ?? null,
+    [conversations, selectedId]
+  );
+
+  useEffect(() => {
+    if (selectedId && !conversations.some((item) => item.id === selectedId)) {
+      setSelectedId(conversations[0]?.id ?? null);
+    }
+  }, [conversations, selectedId]);
 
   const filteredConversations = useMemo(() => {
-    switch (filter) {
-      case 'active':
-        return conversations.filter((conversation) =>
-          isActiveStatus(conversation.status)
-        );
-      case 'closed':
-        return conversations.filter(
-          (conversation) => conversation.status === 'CLOSED'
-        );
-      default:
-        return conversations;
+    if (!searchTerm.trim()) {
+      return conversations;
     }
-  }, [conversations, filter]);
+    const normalized = searchTerm.trim().toLowerCase();
+    return conversations.filter((conversation) => {
+      const name = conversation.contactName ?? '';
+      return (
+        name.toLowerCase().includes(normalized) ||
+        conversation.userPhone.toLowerCase().includes(normalized)
+      );
+    });
+  }, [conversations, searchTerm]);
 
-  const handleSelectConversation = (id: string) => {
-    setSelectedId(id);
-  };
-
-  const handleSendMessage = async (event: FormEvent) => {
+  const handleSubmitMessage = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedId || !messageInput.trim()) {
-      return;
-    }
+    if (!selectedId || !activeConversation) return;
+    const trimmed = messageInput.trim();
+    if (!trimmed.length) return;
 
     setSendingMessage(true);
     try {
       await api.post(`/conversations/${selectedId}/messages`, {
-        content: messageInput.trim(),
+        content: trimmed,
       });
       setMessageInput('');
+    } catch (error) {
+      console.error('[Chat] Failed to send message', error);
     } finally {
       setSendingMessage(false);
     }
   };
 
   const handleCloseConversation = async () => {
-    if (!selectedId) return;
+    if (!selectedId || !activeConversation) return;
+    if (activeConversation.status === 'CLOSED') return;
+
     setClosing(true);
     try {
-      await api.post(`/conversations/${selectedId}/close`);
+      await api.post(`/conversations/${selectedId}/close`, {});
+    } catch (error) {
+      console.error('[Chat] Failed to close conversation', error);
     } finally {
       setClosing(false);
     }
   };
 
-  const activeConversation = conversations.find(
-    (conversation) => conversation.id === selectedId
-  );
+  const composerDisabled =
+    !activeConversation || activeConversation.status === 'CLOSED';
 
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(260px, 340px) 1fr',
-        gap: '1.5rem',
-      }}
-    >
-      <aside
-        style={{
-          background: '#fff',
-          borderRadius: '12px',
-          boxShadow: '0 12px 24px -18px rgba(15, 23, 42, 0.35)',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        <header
-          style={{
-            padding: '1rem 1.25rem',
-            borderBottom: '1px solid #e2e8f0',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <h2 style={{ margin: 0, fontSize: '1.1rem' }}>Conversaciones</h2>
-          <select
-            value={filter}
-            onChange={(event) => setFilter(event.target.value as FilterOption)}
-            style={{
-              borderRadius: '8px',
-              border: '1px solid #cbd5f5',
-              padding: '0.3rem 0.6rem',
-            }}
-          >
-            <option value="active">Activas</option>
-            <option value="all">Todas</option>
-            <option value="closed">Cerradas</option>
-          </select>
-        </header>
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+    <div className="chat-screen">
+      <aside className="chat-sidebar">
+        <div className="chat-sidebar__header">
+          <div className="chat-sidebar__title">
+            <h2>Conversaciones</h2>
+            <span className="chat-sidebar__count">
+              {loadingConversations
+                ? 'Cargando…'
+                : `${filteredConversations.length} chats`}
+            </span>
+          </div>
+          <div className="chat-sidebar__search">
+            <input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Buscar por nombre o teléfono"
+            />
+          </div>
+          <div className="chat-sidebar__filters">
+            {FILTER_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`chat-filter${
+                  filter === option.value ? ' chat-filter--active' : ''
+                }`}
+                onClick={() => setFilter(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="chat-sidebar__list">
           {loadingConversations ? (
-            <p style={{ padding: '1rem' }}>Cargando conversaciones...</p>
-          ) : filteredConversations.length === 0 ? (
-            <p style={{ padding: '1rem' }}>
-              No hay conversaciones para mostrar.
-            </p>
+            <div className="chat-sidebar__empty">Cargando conversaciones…</div>
+          ) : filteredConversations.length ? (
+            filteredConversations.map((conversation) => (
+              <ConversationListItem
+                key={conversation.id}
+                conversation={conversation}
+                isActive={conversation.id === selectedId}
+                isUnread={unreadConversations.has(conversation.id)}
+                onSelect={() => setSelectedId(conversation.id)}
+              />
+            ))
           ) : (
-            filteredConversations.map((conversation) => {
-              const isSelected = conversation.id === selectedId;
-              return (
-                <button
-                  key={conversation.id}
-                  onClick={() => handleSelectConversation(conversation.id)}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    border: 'none',
-                    background: isSelected ? '#e0f2fe' : 'transparent',
-                    padding: '0.9rem 1.25rem',
-                    borderBottom: '1px solid #e2e8f0',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div
-                    style={{ display: 'flex', justifyContent: 'space-between' }}
-                  >
-                    <strong>
-                      {conversation.contactName ?? conversation.userPhone}
-                    </strong>
-                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                      {new Date(conversation.updatedAt).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#475569' }}>
-                    {conversation.lastMessage?.content ?? 'Sin mensajes'}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', marginTop: '0.35rem' }}>
-                    <StatusBadge status={conversation.status} />
-                  </div>
-                </button>
-              );
-            })
+            <div className="chat-sidebar__empty">
+              No hay conversaciones que coincidan con la búsqueda.
+            </div>
           )}
         </div>
       </aside>
-
-      <section
-        style={{
-          background: '#fff',
-          borderRadius: '12px',
-          boxShadow: '0 12px 24px -18px rgba(15, 23, 42, 0.35)',
-          display: 'flex',
-          flexDirection: 'column',
-          minHeight: '520px',
-        }}
-      >
-        {selectedId && activeConversation ? (
+      <section className="chat-main">
+        {activeConversation ? (
           <>
-            <header
-              style={{
-                padding: '1rem 1.5rem',
-                borderBottom: '1px solid #e2e8f0',
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: '1rem',
-              }}
-            >
-              <div>
-                <h2 style={{ margin: 0 }}>
-                  {activeConversation.contactName ??
-                    activeConversation.userPhone}
-                </h2>
-                <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
-                  Área: {activeConversation.area?.name ?? 'Sin asignar'} ·
-                  Operador: {activeConversation.assignedTo?.name ?? '—'}
-                </p>
+            <header className="chat-main__header">
+              <div className="chat-main__info">
+                <h3>{getDisplayName(activeConversation)}</h3>
+                <div className="chat-main__meta">
+                  <span>{formatPhone(activeConversation.userPhone)}</span>
+                  {activeConversation.area?.name && (
+                    <span className="chat-tag">
+                      {activeConversation.area.name}
+                    </span>
+                  )}
+                  <StatusBadge status={activeConversation.status} />
+                  {!activeConversation.botActive && (
+                    <span className="chat-tag chat-tag--warning">
+                      Bot pausado
+                    </span>
+                  )}
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
-                <StatusBadge status={activeConversation.status} />
+              <div className="chat-main__actions">
                 <button
+                  type="button"
+                  className="chat-button chat-button--secondary"
                   onClick={handleCloseConversation}
                   disabled={closing || activeConversation.status === 'CLOSED'}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    borderRadius: '8px',
-                    border: '1px solid #ef4444',
-                    background: '#fff5f5',
-                    color: '#b91c1c',
-                    cursor:
-                      closing || activeConversation.status === 'CLOSED'
-                        ? 'not-allowed'
-                        : 'pointer',
-                  }}
                 >
-                  {closing ? 'Cerrando...' : 'Cerrar chat'}
+                  {closing ? 'Cerrando…' : 'Finalizar chat'}
                 </button>
               </div>
             </header>
-
-            <div
-              style={{
-                flex: 1,
-                padding: '1.5rem',
-                overflowY: 'auto',
-                display: 'grid',
-                gap: '1rem',
-              }}
-            >
+            <div className="chat-main__messages" ref={messagesContainerRef}>
               {loadingMessages ? (
-                <p>Cargando mensajes...</p>
-              ) : messages.length === 0 ? (
-                <p>No hay mensajes todavía.</p>
-              ) : (
+                <div className="chat-main__placeholder">
+                  Cargando historial…
+                </div>
+              ) : messages.length ? (
                 messages.map((message) => (
                   <MessageBubble
                     key={message.id}
@@ -360,55 +459,37 @@ export default function ChatPage() {
                     isOwn={message.senderType === 'OPERATOR'}
                   />
                 ))
+              ) : (
+                <div className="chat-main__placeholder">
+                  Aún no hay mensajes en este chat.
+                </div>
               )}
             </div>
-
-            <form
-              onSubmit={handleSendMessage}
-              style={{
-                borderTop: '1px solid #e2e8f0',
-                padding: '1rem 1.5rem',
-                display: 'flex',
-                gap: '1rem',
-              }}
-            >
+            <form className="chat-composer" onSubmit={handleSubmitMessage}>
               <input
                 value={messageInput}
                 onChange={(event) => setMessageInput(event.target.value)}
-                placeholder="Escribe una respuesta..."
-                style={{
-                  flex: 1,
-                  borderRadius: '999px',
-                  border: '1px solid #cbd5f5',
-                  padding: '0.75rem 1.25rem',
-                }}
+                placeholder={
+                  composerDisabled
+                    ? 'El chat está cerrado'
+                    : 'Escribe un mensaje…'
+                }
+                disabled={composerDisabled || sendingMessage}
               />
               <button
                 type="submit"
-                disabled={sendingMessage || !messageInput.trim()}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  borderRadius: '999px',
-                  border: 'none',
-                  background: '#0f172a',
-                  color: '#fff',
-                  cursor: sendingMessage ? 'wait' : 'pointer',
-                }}
+                className="chat-button chat-button--primary"
+                disabled={
+                  composerDisabled || sendingMessage || !messageInput.trim()
+                }
               >
-                {sendingMessage ? 'Enviando...' : 'Enviar'}
+                {sendingMessage ? 'Enviando…' : 'Enviar'}
               </button>
             </form>
           </>
         ) : (
-          <div
-            style={{
-              flex: 1,
-              display: 'grid',
-              placeItems: 'center',
-              color: '#64748b',
-            }}
-          >
-            Seleccioná una conversación para comenzar.
+          <div className="chat-main__empty">
+            Selecciona una conversación para comenzar.
           </div>
         )}
       </section>
@@ -416,42 +497,53 @@ export default function ChatPage() {
   );
 }
 
-function sortConversations(conversations: ConversationSummary[]) {
-  return [...conversations].sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
-}
+function ConversationListItem({
+  conversation,
+  isActive,
+  isUnread,
+  onSelect,
+}: {
+  conversation: ConversationSummary;
+  isActive: boolean;
+  isUnread: boolean;
+  onSelect: () => void;
+}) {
+  const lastMessageText = conversation.lastMessage
+    ? buildLastMessagePreview(conversation.lastMessage)
+    : 'Sin mensajes';
 
-function StatusBadge({ status }: { status: ConversationStatus }) {
-  const map: Record<ConversationStatus, { label: string; color: string }> = {
-    PENDING: { label: 'Pendiente', color: '#ea580c' },
-    ACTIVE: { label: 'Activo', color: '#16a34a' },
-    PAUSED: { label: 'En pausa', color: '#eab308' },
-    CLOSED: { label: 'Cerrado', color: '#64748b' },
-  };
-  const { label, color } = map[status];
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '0.35rem',
-        fontSize: '0.75rem',
-        fontWeight: 600,
-        color,
-      }}
+    <button
+      type="button"
+      className={`chat-conversation${
+        isActive ? ' chat-conversation--active' : ''
+      }`}
+      onClick={onSelect}
     >
-      <span
-        style={{
-          display: 'inline-block',
-          width: '0.6rem',
-          height: '0.6rem',
-          borderRadius: '999px',
-          background: color,
-        }}
-      />
-      {label}
-    </span>
+      <div className="chat-conversation__row">
+        <span className="chat-conversation__name">
+          {getDisplayName(conversation)}
+        </span>
+        <span className="chat-conversation__time">
+          {formatRelativeTimestamp(conversation.lastActivity)}
+        </span>
+      </div>
+      <div className="chat-conversation__row">
+        <span className="chat-conversation__preview">{lastMessageText}</span>
+        <div className="chat-conversation__markers">
+          {conversation.area?.name && (
+            <span className="chat-tag chat-tag--muted">
+              {conversation.area.name}
+            </span>
+          )}
+          {isUnread && (
+            <span className="chat-conversation__unread" aria-hidden="true">
+              ●
+            </span>
+          )}
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -462,37 +554,84 @@ function MessageBubble({
   message: ConversationMessage;
   isOwn: boolean;
 }) {
+  const variant =
+    message.senderType === 'CONTACT'
+      ? 'contact'
+      : message.senderType === 'BOT'
+      ? 'bot'
+      : 'operator';
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: isOwn ? 'flex-end' : 'flex-start',
-      }}
-    >
-      <div
-        style={{
-          maxWidth: '70%',
-          background: isOwn ? '#0f172a' : '#e2e8f0',
-          color: isOwn ? '#fff' : '#0f172a',
-          padding: '0.8rem 1rem',
-          borderRadius: '16px',
-          borderBottomRightRadius: isOwn ? '4px' : '16px',
-          borderBottomLeftRadius: isOwn ? '16px' : '4px',
-          boxShadow: '0 10px 20px -18px rgba(15, 23, 42, 0.45)',
-        }}
-      >
-        <div style={{ whiteSpace: 'pre-wrap' }}>{message.content}</div>
-        <div
-          style={{
-            fontSize: '0.7rem',
-            marginTop: '0.35rem',
-            textAlign: 'right',
-            opacity: 0.75,
-          }}
-        >
-          {new Date(message.createdAt).toLocaleTimeString()}
-        </div>
+    <div className={`chat-message chat-message--${variant}`}>
+      <div className="chat-message__bubble">
+        <p>{message.content}</p>
+        <span className="chat-message__meta">
+          {new Date(message.createdAt).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+          {message.senderType === 'OPERATOR' && (
+            <span className="chat-message__delivery">
+              {message.isDelivered ? '✓' : '…'}
+            </span>
+          )}
+        </span>
       </div>
     </div>
   );
+}
+
+function StatusBadge({ status }: { status: ConversationStatus }) {
+  return (
+    <span className={`chat-status chat-status--${status.toLowerCase()}`}>
+      {STATUS_COPY[status]}
+    </span>
+  );
+}
+
+function sortConversations(items: ConversationSummary[]) {
+  return [...items].sort(
+    (a, b) =>
+      new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+  );
+}
+
+function getDisplayName(conversation: ConversationSummary) {
+  return conversation.contactName?.trim()?.length
+    ? conversation.contactName
+    : formatPhone(conversation.userPhone);
+}
+
+function formatPhone(phone: string) {
+  if (!phone.includes('@')) {
+    return phone;
+  }
+  return phone.replace(/@.+$/, '');
+}
+
+function buildLastMessagePreview(message: ConversationSummary['lastMessage']) {
+  if (!message) return '';
+  const prefix =
+    message.senderType === 'OPERATOR'
+      ? 'Tú: '
+      : message.senderType === 'BOT'
+      ? 'Bot: '
+      : '';
+  return `${prefix}${message.content}`.slice(0, 80);
+}
+
+function formatRelativeTimestamp(isoDate: string) {
+  const date = new Date(isoDate);
+  const now = new Date();
+
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  if (sameDay) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  return date.toLocaleDateString();
 }

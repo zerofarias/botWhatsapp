@@ -1,33 +1,44 @@
-import bcrypt from 'bcryptjs';
 import { prisma } from '../src/config/prisma.js';
+import { hashPassword } from '../src/services/user.service.js';
 
 async function main() {
   const email = 'test@example.com';
+  const username = 'test';
   const password = 'Test1234!';
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const passwordHash = hashPassword(password);
 
   const user = await prisma.user.upsert({
-    where: { email },
-    update: { password: hashedPassword },
-    create: {
+    where: { username },
+    update: {
       name: 'Test User',
       email,
-      password: hashedPassword,
+      passwordHash,
       role: 'ADMIN',
+      isActive: true,
+    },
+    create: {
+      name: 'Test User',
+      username,
+      email,
+      passwordHash,
+      role: 'ADMIN',
+      isActive: true,
     },
     select: {
       id: true,
       name: true,
+      username: true,
       email: true,
       role: true,
+      isActive: true,
       createdAt: true,
     },
   });
 
-  console.log('Usuario de prueba creado con éxito:');
+  console.log('Usuario de prueba listo:');
   console.log(user);
-  console.log(`Credenciales -> email: ${email} | password: ${password}`);
+  console.log(`Credenciales -> usuario: ${username} | password: ${password}`);
 }
 
 main()
