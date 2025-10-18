@@ -146,18 +146,13 @@ function detectBase64Content(content?: string | null): Base64Detection | null {
     dataUrl: `data:${mime};base64,${sanitized}`,
   });
 
-  if (sanitized.startsWith('/9j/'))
-    return createDetection('image/jpeg', 'image');
-  if (sanitized.startsWith('iVBOR'))
-    return createDetection('image/png', 'image');
-  if (sanitized.startsWith('R0lGO'))
-    return createDetection('image/gif', 'image');
+  if (sanitized.startsWith('/9j/')) return createDetection('image/jpeg', 'image');
+  if (sanitized.startsWith('iVBOR')) return createDetection('image/png', 'image');
+  if (sanitized.startsWith('R0lGO')) return createDetection('image/gif', 'image');
   if (sanitized.startsWith('JVBER'))
     return createDetection('application/pdf', 'document');
-  if (sanitized.startsWith('T2dn'))
-    return createDetection('audio/ogg', 'audio');
-  if (sanitized.startsWith('UklGR'))
-    return createDetection('audio/wav', 'audio');
+  if (sanitized.startsWith('T2dn')) return createDetection('audio/ogg', 'audio');
+  if (sanitized.startsWith('UklGR')) return createDetection('audio/wav', 'audio');
   if (sanitized.startsWith('SUQz') || sanitized.startsWith('AAAAGGZ0'))
     return createDetection('audio/mpeg', 'audio');
 
@@ -438,11 +433,11 @@ export default function ChatPage() {
     };
   }, [socket, selectedId, matchesFilter]);
 
-  // FunciÃ³n para verificar si el usuario estÃ¡ cerca del final
+  // Función para verificar si el usuario está cerca del final
   const checkIfNearBottom = useCallback(() => {
     if (!messagesContainerRef.current) return;
     const container = messagesContainerRef.current;
-    const threshold = 100; // pÃ­xeles desde el final
+    const threshold = 100; // píxeles desde el final
     const isNear =
       container.scrollHeight - container.scrollTop - container.clientHeight <
       threshold;
@@ -612,7 +607,7 @@ export default function ChatPage() {
             <h2>Conversaciones</h2>
             <span className="chat-sidebar__count">
               {loadingConversations
-                ? 'Cargandoâ€¦'
+                ? 'Cargando…'
                 : `${filteredConversations.length} chats`}
             </span>
           </div>
@@ -620,7 +615,7 @@ export default function ChatPage() {
             <input
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Buscar por nombre o telÃ©fono"
+              placeholder="Buscar por nombre o teléfono"
             />
           </div>
           <div className="chat-sidebar__filters">
@@ -640,7 +635,7 @@ export default function ChatPage() {
         </div>
         <div className="chat-sidebar__list">
           {loadingConversations ? (
-            <div className="chat-sidebar__empty">Cargando conversacionesâ€¦</div>
+            <div className="chat-sidebar__empty">Cargando conversaciones…</div>
           ) : filteredConversations.length ? (
             filteredConversations.map((conversation) => (
               <ConversationListItem
@@ -653,7 +648,7 @@ export default function ChatPage() {
             ))
           ) : (
             <div className="chat-sidebar__empty">
-              No hay conversaciones que coincidan con la bÃºsqueda.
+              No hay conversaciones que coincidan con la búsqueda.
             </div>
           )}
         </div>
@@ -704,14 +699,14 @@ export default function ChatPage() {
                   onClick={handleCloseConversation}
                   disabled={closing || activeConversation.status === 'CLOSED'}
                 >
-                  {closing ? 'Cerrandoâ€¦' : 'Finalizar chat'}
+                  {closing ? 'Cerrando…' : 'Finalizar chat'}
                 </button>
               </div>
             </header>
             <div className="chat-main__messages" ref={messagesContainerRef}>
               {loadingMessages ? (
                 <div className="chat-main__placeholder">
-                  Cargando historialâ€¦
+                  Cargando historial…
                 </div>
               ) : messages.length ? (
                 messages.map((message) => (
@@ -724,7 +719,7 @@ export default function ChatPage() {
                 ))
               ) : (
                 <div className="chat-main__placeholder">
-                  AÃºn no hay mensajes en este chat.
+                  Aún no hay mensajes en este chat.
                 </div>
               )}
             </div>
@@ -743,8 +738,8 @@ export default function ChatPage() {
                   onKeyDown={handleKeyDown}
                   placeholder={
                     composerDisabled
-                      ? 'El chat estÃ¡ cerrado'
-                      : 'Escribe un mensajeâ€¦ (usa / para atajos)'
+                      ? 'El chat está cerrado'
+                      : 'Escribe un mensaje… (usa / para atajos)'
                   }
                   disabled={composerDisabled || sendingMessage}
                 />
@@ -755,14 +750,14 @@ export default function ChatPage() {
                     composerDisabled || sendingMessage || !messageInput.trim()
                   }
                 >
-                  {sendingMessage ? 'Enviandoâ€¦' : 'Enviar'}
+                  {sendingMessage ? 'Enviando…' : 'Enviar'}
                 </button>
               </div>
             </form>
           </>
         ) : (
           <div className="chat-main__empty">
-            Selecciona una conversaciÃ³n para comenzar.
+            Selecciona una conversación para comenzar.
           </div>
         )}
       </section>
@@ -822,7 +817,7 @@ function ConversationListItem({
           )}
           {isUnread && (
             <span className="chat-conversation__unread" aria-hidden="true">
-              â—
+              ?
             </span>
           )}
         </div>
@@ -847,7 +842,7 @@ function MessageBubble({
       : 'operator';
 
   const renderMediaContent = () => {
-    // FunciÃ³n para detectar si el contenido es base64
+    // Función para detectar si el contenido es base64
     const isBase64Image = (content: string): boolean => {
       return (
         content.length > 1000 &&
@@ -864,7 +859,7 @@ function MessageBubble({
 
     // Si no hay mediaType pero el contenido parece ser base64, detectar el tipo
     if (!message.mediaType && message.content.length > 500) {
-      // Intentar detectar si es imagen (contenido mÃ¡s largo)
+      // Intentar detectar si es imagen (contenido más largo)
       if (isBase64Image(message.content)) {
         const imageUrl = `data:image/jpeg;base64,${message.content}`;
         return (
@@ -954,7 +949,7 @@ function MessageBubble({
               rel="noopener noreferrer"
               className="chat-document"
             >
-              ğŸ“„ Ver documento
+              ?? Ver documento
             </a>
             {message.content && (
               <p className="chat-media__caption">{message.content}</p>
@@ -964,7 +959,7 @@ function MessageBubble({
 
       case 'location': {
         const locationMatch = message.content.match(
-          /ğŸ“ UbicaciÃ³n: ([-\d.]+), ([-\d.]+)/
+          /?? Ubicación: ([-\d.]+), ([-\d.]+)/
         );
         if (locationMatch) {
           const [, lat, lng] = locationMatch;
@@ -976,10 +971,10 @@ function MessageBubble({
                 rel="noopener noreferrer"
                 className="chat-location"
               >
-                ğŸ“ Ver ubicaciÃ³n en Maps
+                ?? Ver ubicación en Maps
               </a>
               <p className="chat-media__caption">
-                UbicaciÃ³n: {lat}, {lng}
+                Ubicación: {lat}, {lng}
               </p>
             </div>
           );
@@ -1003,7 +998,7 @@ function MessageBubble({
           })}
           {message.senderType === 'OPERATOR' && (
             <span className="chat-message__delivery">
-              {message.isDelivered ? 'âœ“' : 'â€¦'}
+              {message.isDelivered ? '?' : '…'}
             </span>
           )}
         </span>
@@ -1047,7 +1042,7 @@ function buildLastMessagePreview(message: ConversationSummary['lastMessage']) {
   if (!message) return '';
   const prefix =
     message.senderType === 'OPERATOR'
-      ? 'TÃº: '
+      ? 'Tú: '
       : message.senderType === 'BOT'
       ? 'Bot: '
       : '';

@@ -1,411 +1,364 @@
 # WhatsApp Customer Care Platform
 
-Full stack workspace for building a multi-operator WhatsApp service desk on top of **WPPConnect**.  
-It contains a Node.js/Express backend (TypeScript) and a React 18 + Vite frontend with a WhatsApp-like interface for agents, a visual flow builder and automatic chat closing policies.
+Full stack workspace built on top of WPPConnect to run a multi-operator WhatsApp help desk. The monorepo bundles the upstream WPPConnect automation service, an Express/Prisma API, and a React console for human agents. This README captures the complete structure and operating model so any developer or automation can install, configure, and operate the stack without additional context.
 
----
+## System Architecture
 
-## Key Features
+```
+Browsers (agents)
+    |
+    | HTTP + Socket.IO
+    v
+Platform Frontend (React/Vite, port 5173)
+    |
+    | REST + Socket.IO
+    v
+Platform Backend (Express + Prisma, port 4000)
+    |
+    | WhatsApp session control
+    v
+WPPConnect Core (Node, port 3000)
+    |
+    | Puppeteer drives WhatsApp Web
+    v
+WhatsApp Web
+```
 
-- **Session-based authentication** (no JWT): Express-session persisted in MySQL via Prisma store.
-- **Role-aware access control**: `ADMIN`, `SUPERVISOR`, `SUPPORT`, `SALES`, `OPERATOR` with dynamic area membership and load-balancing by workload.
-- **Complete conversation history**: all bot, contact and operator messages are persisted with delivery state, timestamps and external identifiers.
-- **Areas & automatic routing**: assign flows and conversations to departments; active chats are routed to the least loaded operator in each area.
-- **Contact catalog with DNI tracking**: import, create and update contacts (name, phone, DNI, preferred area) and link every conversation automatically.
-- **Working hours guardrails**: per-area schedules prevent out-of-hours escalations and send configurable courtesy replies when no human is available.
-- **Operator context enhancement**: the chat console now surfaces contact name, DNI and tags the list with DNI/area badges for quicker identification.
-- **Visual flow builder**: hierarchical menus (`message`, `menu`, `redirect`, `end`, etc.) stored in MySQL and served via Prisma.
-- **Real-time workspace**: refreshed WhatsApp-style UI with conversation search, unread indicators and in-place close actions.
-- **Socket.io events**: conversations broadcast to rooms by user, role and area (`conversation:update`, `conversation:incoming`, `message:new`, `conversation:closed`).
-- **Scheduler & auto-close**: closes inactive chats, logs events and sends the courtesy message via WPPConnect.
-- **Analytics dashboard**: live stats for active/closed chats and area distribution, plus latest bot activity.
-- **Full Prisma schema & SQL bootstrap**: includes flows, areas, conversations, messages, events, sessions.
-- **Multimedia support**: images, videos, audios, documents, and locations are automatically processed and displayed in chat.
-- **Intelligent scroll**: auto-scroll to latest messages with smooth animations and smart detection of user scroll position.
-- **Contact name resolution**: automatic extraction of contact names from WhatsApp contacts (no more "Desconocido").
-- **Clean phone numbers**: WhatsApp format (@c.us) is automatically cleaned to store only phone numbers.
+Persistent data (users, conversations, quick replies, sessions, media metadata) lives in MySQL or MariaDB.
 
----
+| Component            | Default port | Notes                                                                 |
+| -------------------- | ------------ | --------------------------------------------------------------------- |
+| WPPConnect dashboard | 3000         | Web UI to start/stop the WhatsApp client, view QR codes, inspect logs |
+| Platform backend API | 4000         | REST API, Socket.IO server, static `/uploads` for media               |
+| Platform frontend    | 5173         | Vite dev server for the operator console                              |
+| MySQL / MariaDB      | 3306         | Prisma datasource, stores all platform entities                       |
 
 ## Repository Layout
 
-```
-/platform-backend   -> Express API + Prisma + WPPConnect integration
-/platform-frontend  -> React 18 + Vite client with Tailwind-style utilities
-/docs, /examples    -> Upstream WPPConnect resources (unchanged)
-```
+| Path                                   | Purpose                                                                                |
+| -------------------------------------- | -------------------------------------------------------------------------------------- |
+| `/`                                    | Upstream `@wppconnect-team/wppconnect` package, dashboard assets, base package.json    |
+| `platform-backend/`                    | Express API (TypeScript), Prisma schema, scheduler, WhatsApp session management, seeds |
+| `platform-frontend/`                   | React 18 + Vite operator console with quick reply UI and Socket.IO client              |
+| `platform-backend/db/`                 | SQL schemas and seed scripts for quick replies                                         |
+| `platform-backend/scripts/`            | Utilities such as `create-test-user.ts` and `seed-quick-replies.ts`                    |
+| `docs/`, `examples/`, `platform-docs/` | Vendor documentation retained for reference                                            |
+| `dashboard/`                           | Static assets for the WPPConnect dashboard (served on port 3000)                       |
+| `STARTUP-GUIDE.md`                     | Step-by-step operational playbook (Windows focused)                                    |
+| `QUICK-REPLIES-GUIDE.md`               | Functional deep dive into quick replies and shortcuts                                  |
+| `SHORTCUT-DETECTION-IMPLEMENTATION.md` | Frontend implementation notes for shortcut handling                                    |
 
----
+## Feature Highlights
 
-## Backend (`platform-backend`)
+- Session-based authentication backed by Prisma with role-aware authorization for `ADMIN`, `SUPERVISOR`, `OPERATOR`, `SUPPORT`, and `SALES`.
+- Conversation lifecycle tracking: persistent contact data, area ownership, operator assignment, status transitions, and message history for contacts, bot, and operators.
+- Areas, load-balanced assignment, and working-hour guardrails that block escalations outside office hours and send configurable courtesy messages.
+- Visual flow builder persisted in MySQL covering message, menu, action, redirect, and end nodes.
+- Quick replies with `/shortcut` detection, keyboard navigation, and template variables (for example `[OPERADOR]`, `{operatorName}`) injected client side.
+- Scheduler that closes inactive conversations, logs events, and attempts to send a WhatsApp courtesy message using any active operator session.
+- Media ingestion for images, video, audio, documents, stickers, and locations with storage under `platform-backend/uploads` (auto-created by the service).
+- Socket.IO rooms by user, role, and area broadcasting `conversation:update`, `conversation:incoming`, `message:new`, `conversation:closed`, `session:qr`, `session:status`, and error/loading events.
+- Operator console with WhatsApp-like layout, unread tracking, search, filters (active/all/closed), image modal, and quick reply suggestions.
+- WPPConnect dashboard to manage the WhatsApp session, inspect status history, recent messages, logs, and trigger start/stop/pause actions.
 
-### Requirements
+## Technology Stack
 
-- Node.js 18+
-- MySQL or MariaDB
+| Layer               | Technology                                                                       |
+| ------------------- | -------------------------------------------------------------------------------- |
+| WhatsApp automation | WPPConnect (Node, Puppeteer)                                                     |
+| Backend             | Node.js 18+, Express 4, Prisma 5, Socket.IO 4, express-session with Prisma store |
+| Frontend            | React 18, Vite 5, TypeScript, Axios, React Router                                |
+| Database            | MySQL 8+ or MariaDB 10.6+                                                        |
+| Tooling             | ESLint, TypeScript, ts-node-dev, prisma CLI                                      |
 
-### Environment
+## Prerequisites
 
-Copy `.env.example` to `.env` and adjust:
+- Node.js 18 or newer and npm 9+ on the host machine.
+- MySQL 8.x or MariaDB 10.6+ with credentials that match the Prisma connection string.
+- Chrome/Chromium or the system dependencies required by Puppeteer (WPPConnect downloads Chromium automatically by default).
+- Git (if cloning the repository).
+- On Windows PowerShell allow local scripts once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. Alternatively call `npm.cmd` instead of `npm`.
 
-| Variable                   | Description                                                   |
-| -------------------------- | ------------------------------------------------------------- |
-| `PORT`                     | API port (default `4000`)                                     |
-| `DATABASE_URL`             | Prisma connection string                                      |
-| `SESSION_SECRET`           | Cookie signature secret                                       |
-| `SESSION_COOKIE_NAME`      | Session cookie name                                           |
-| `SESSION_MAX_AGE`          | Cookie max age (ms)                                           |
-| `SESSION_COOKIE_SECURE`    | Force secure cookies (default on in prod)                     |
-| `SESSION_COOKIE_SAMESITE`  | Cookie same-site policy (`lax` by default)                    |
-| `SESSION_CLEANUP_INTERVAL` | Cleanup interval for session store (ms)                       |
-| `CORS_ORIGIN`              | Comma-separated allowed origins                               |
-| `WPP_HEADLESS`             | WPPConnect headless flag (`true`/`false`)                     |
-| `WPP_AUTO_CLOSE`           | Auto-close timeout for the headless client (ms, `0` disables) |
-| `AUTO_CLOSE_MINUTES`       | Scheduler inactivity threshold                                |
-| `AUTO_CLOSE_MESSAGE`       | Message sent when chats auto-close                            |
-| `SCHEDULER_INTERVAL_MS`    | How often the scheduler runs                                  |
+## Initial Installation
 
-### Database bootstrap
+1. Clone or download the repository.
+2. Install dependencies for each workspace:
 
-_Option A_ – Prisma sync:
+   ```powershell
+   # WPPConnect core (root of the repository)
+   npm install
 
-```bash
-npm install
-npm run sync:db    # prisma db push && prisma generate
-```
+   # Platform backend
+   cd platform-backend
+   npm install
 
-_Option B_ – raw SQL (includes seed admin):
+   # Platform frontend
+   cd ../platform-frontend
+   npm install
+   ```
 
-```bash
-mysql -u user -p < db/schema_v2.sql
-```
+3. When preparing a production run of the backend, compile the TypeScript sources once with `npm run build` inside `platform-backend`.
 
-### Development
+## Configuration
 
-```bash
-npm install
-npm run build        # type-check / compile
-npm run sync:db      # push schema + generate Prisma client
-npm run dev          # ts-node-dev hot reload
-npm start            # runs dist/index.js
-```
+### Backend (`platform-backend/.env`)
 
-Admin creation helper (example used during setup):
+Create `.env` from `.env.example`. All values are read in `platform-backend/src/config/env.ts`.
 
-```bash
-node --loader ts-node/esm scripts/create-lautaro-user.ts
-```
+| Variable                   | Required | Default when omitted                            | Description                                                                     |
+| -------------------------- | -------- | ----------------------------------------------- | ------------------------------------------------------------------------------- |
+| `PORT`                     | No       | `4000`                                          | HTTP port for the API and Socket.IO server                                      |
+| `DATABASE_URL`             | Yes      | -                                               | Prisma connection string (`mysql://user:pass@host:port/database`)               |
+| `SESSION_SECRET`           | Yes      | -                                               | Secret used to sign and encrypt session cookies                                 |
+| `SESSION_COOKIE_NAME`      | No       | `wppconnect.sid`                                | Name of the session cookie                                                      |
+| `SESSION_MAX_AGE`          | No       | `43200000` (12h)                                | Session time-to-live in milliseconds                                            |
+| `SESSION_CLEANUP_INTERVAL` | No       | `60000`                                         | Interval (ms) to purge expired sessions                                         |
+| `SESSION_COOKIE_SECURE`    | No       | `true` when `NODE_ENV=production`, else `false` | Force secure cookies when serving over HTTPS                                    |
+| `SESSION_COOKIE_SAMESITE`  | No       | `lax`                                           | SameSite policy (`lax`, `strict`, or `none`)                                    |
+| `SESSION_ROLLING`          | No       | `false`                                         | Set to `true` to refresh the session expiration on every request                |
+| `CORS_ORIGIN`              | No       | All origins allowed                             | Comma-separated list of allowed origins when limiting CORS                      |
+| `WPP_HEADLESS`             | No       | `true`                                          | Run the WhatsApp client without launching a visible browser window              |
+| `WPP_AUTO_CLOSE`           | No       | `0`                                             | Timeout in ms before WPPConnect auto-closes the WhatsApp session (`0` disables) |
+| `AUTO_CLOSE_MINUTES`       | No       | `30`                                            | Minutes of inactivity before the scheduler closes a conversation                |
+| `SCHEDULER_INTERVAL_MS`    | No       | `300000`                                        | Frequency (ms) for the inactivity scheduler                                     |
+| `AUTO_CLOSE_MESSAGE`       | No       | `Chat finalizado por inactividad`               | Message sent when the scheduler closes a conversation                           |
 
-### API Highlights
+Example `.env`:
 
-- `POST /auth/login` / `POST /auth/logout` / `GET /auth/me`
-- `GET /bot/status`, `POST /bot/start`, `POST /bot/stop`, `POST /bot/pause`, `PATCH /bot/metadata`
-- `GET/POST/PUT /areas`
-- `GET/POST/PUT /users`
-- `GET/POST/DELETE /flows`
-- `GET/POST/PATCH/DELETE /contacts`, `POST /contacts/import`
-- `GET/POST/PATCH/DELETE /working-hours`
-- `GET /conversations`, `GET /conversations/:id/messages`, `POST /conversations/:id/messages`, `POST /conversations/:id/close`
-
-Socket rooms automatically join operators to:
-`user:{id}`, `role:{ROLE}`, `area:{AREA_ID}`.
-Events in use: `session:status`, `session:qr`, `conversation:update`, `message:new`.
-
-### Contacts & DNI management
-
-- Every conversation is now linked to a record in the new `Contact` table (name, unique phone, optional DNI and preferred area).
-- Contacts can be created one by one (`POST /contacts`), imported in bulk (`POST /contacts/import`) using CSV or JSON payloads, and updated or removed via `PATCH /contacts/:id` / `DELETE /contacts/:id`.
-- When a new WhatsApp number reaches the bot, the backend creates the contact automatically (defaults to "Desconocido") and logs the event with `logSystem` so the first operator sees the context immediately.
-- The conversation list and chat pane expose the linked contact (name + DNI + phone) to speed up operator verification.
-
-Example CSV payload for the importer:
-
-```text
-name,phone,dni,area
-Juan Perez,+549351555111,34567890,Soporte
-Maria Diaz,+549351555222,,Ventas
-```
-
-### Working hours & automatic after-hours replies
-
-- Each area can define multiple working-hour windows (`WorkingHour` model) with `start_time`, `end_time`, active `days` and an optional custom courtesy message.
-- Before redirecting a flow (`REDIRECT` node) to an area, the bot verifies if the current time is inside any configured window.
-- Outside business hours the conversation remains pending, the bot sends the configured message (default: "Nuestro horario de atención es de 8:00 a 18:00 hs. Te responderemos apenas volvamos a estar disponibles.") and logs the event, keeping the automation active until agents are back online.
-- Manage the schedules from `POST/GET/PATCH/DELETE /working-hours` or through the new admin UI.
-
-### Multimedia Support & Real-time Processing
-
-#### Overview
-
-The platform now includes comprehensive multimedia support for WhatsApp conversations, including:
-
-- **Images** (JPG, PNG, GIF, WebP)
-- **Videos** (MP4, AVI, MOV, WebM)
-- **Audio messages** (MP3, OGG, WAV, M4A) including voice notes (PTT)
-- **Documents** (PDF, DOC, DOCX, TXT)
-- **Locations** (GPS coordinates)
-- **Stickers**
-
-#### How It Works
-
-**Backend Processing (`platform-backend/src/services/wpp.service.ts`)**:
-
-1. **Message Detection**: Automatically detects multimedia message types from WPPConnect
-2. **Media Download**: Uses `client.downloadMedia()` to retrieve base64 content
-3. **File Conversion**: Converts base64 to physical files stored in `/uploads` directory
-4. **Smart Organization**: Files are organized by year-month (`/uploads/2024-10/`)
-5. **Magic Byte Detection**: Identifies file types by analyzing binary headers (FFD8FF for JPG, 89504E47 for PNG, etc.)
-6. **URL Generation**: Creates accessible URLs (`/uploads/2024-10/media-timestamp.jpg`)
-7. **Database Storage**: Saves `mediaUrl` and `mediaType` fields in conversation messages
-
-**Media Processing Utility (`platform-backend/src/utils/media-processor.ts`)**:
-
-- `isBase64String()`: Detects if content is base64 encoded
-- `getFileExtensionFromBase64()`: Identifies file type from magic bytes
-- `getMediaTypeFromExtension()`: Maps extensions to media categories
-- `processBase64Content()`: Complete pipeline for base64 → file conversion
-
-**Static File Serving (`platform-backend/src/app.ts`)**:
-
-```typescript
-app.use('/uploads', express.static(uploadsPath));
+```dotenv
+PORT=4000
+DATABASE_URL="mysql://root:password@localhost:3306/wppconnect_platform"
+SESSION_SECRET="change-me"
+CORS_ORIGIN=http://localhost:5173
+WPP_HEADLESS=true
+AUTO_CLOSE_MINUTES=30
+AUTO_CLOSE_MESSAGE=Chat finalizado por inactividad
 ```
 
-All uploaded files are served via HTTP at `/uploads/*` endpoint.
+### Frontend (`platform-frontend/.env`)
 
-**Frontend Display (`platform-frontend/src/pages/ChatPage.tsx`)**:
+The frontend expects a single value:
 
-- **Images**: Clickable thumbnails that open in fullscreen modal with zoom controls
-- **Videos**: Native HTML5 video player with controls
-- **Audio**: Native audio player with playback controls
-- **Documents**: Download links with file icon
-- **Locations**: Formatted GPS coordinates with map emoji
-- **Base64 Fallback**: Automatic detection and rendering if backend processing fails
+```dotenv
+VITE_API_URL=http://localhost:4000
+```
 
-**Intelligent Scroll Features**:
+If `VITE_API_URL` is omitted the client falls back to `/api`, suitable when the frontend is served behind the backend proxy.
 
-- Auto-scroll to bottom when new messages arrive (only if user is at bottom)
-- Smooth scroll animations for better UX
-- Smart detection of user's scroll position
-- Manual scroll detection to prevent auto-scroll interruption
-- Scroll-to-bottom button appears when scrolled up
+### WPPConnect Core (optional `.env` at repository root)
 
-#### Known Issues & Troubleshooting
+The upstream service honors the following environment variables:
 
-**Multimedia Not Displaying**:
+| Variable                    | Default          | Description                                          |
+| --------------------------- | ---------------- | ---------------------------------------------------- |
+| `DASHBOARD_PORT`            | `3000`           | Port for the WPPConnect dashboard                    |
+| `WPP_SESSION`               | `session`        | Name for the persisted WhatsApp session              |
+| `WPP_AUTO_RUN`              | `true`           | When `false`, the dashboard waits for a manual start |
+| `PUPPETEER_EXECUTABLE_PATH` | Bundled Chromium | Set when using a system-installed Chrome             |
 
-1. Verify `/uploads` directory exists and has write permissions
-2. Check backend logs for media download errors
-3. Ensure `client.downloadMedia()` is working (may fail with some WhatsApp versions)
-4. Verify static file serving is configured correctly
-5. Check browser console for 404 errors on media URLs
+## Database Setup
 
-**Audio Not Playing**:
+1. Create the database schema (replace credentials as needed):
 
-- Verify audio file format is supported by browser (MP3, OGG recommended)
-- Check browser compatibility with HTML5 audio element
-- Some browsers require user interaction before playing audio
-
-**Images Showing as Base64 Text**:
-
-- This indicates backend processing failed
-- Check backend logs for errors in `processBase64Content()`
-- Verify file permissions on `/uploads` directory
-- Frontend has fallback rendering for this scenario
-
-### Contact Name Resolution
-
-The platform now automatically extracts real contact names from WhatsApp:
-
-**How It Works**:
-
-1. **Phone Number Cleaning**: Removes WhatsApp format suffixes (`@c.us`, `@g.us`, `@s.whatsapp.net`)
-2. **Contact Info Retrieval**: Uses `client.getContact()` to fetch contact details from WhatsApp
-3. **Name Priority**: Extracts names in order: `name` → `pushname` → `shortName` → fallback to "Desconocido"
-4. **Database Update**: Stores clean phone number and real name in `Contact` table
-5. **Auto-linking**: Every conversation automatically links to the contact record
-
-**Functions**:
-
-- `extractPhoneNumber()`: Cleans WhatsApp ID format to pure phone number
-- `getContactInfoFromWhatsApp()`: Retrieves contact details from WhatsApp API
-- `ensureConversation()`: Enhanced to fetch and store contact names automatically
-
-**Example**:
-
-- WhatsApp ID: `5493533473732@c.us`
-- Stored Number: `5493533473732`
-- Displayed Name: "Juan Pérez" (from WhatsApp contact)
-
-### Post-upgrade checklist
-
-1. Install dependencies and push the new Prisma schema: `npm install && npm run sync:db`.
-2. Ensure the session payload column can store full JSON blobs (only once per database):
    ```sql
-   ALTER TABLE sessions
-     MODIFY data MEDIUMTEXT
+   CREATE DATABASE IF NOT EXISTS wppconnect_platform
      CHARACTER SET utf8mb4
      COLLATE utf8mb4_unicode_ci;
    ```
-3. Restart the backend after running the migration so the session store picks up the schema changes.
-4. Optional: clear legacy sessions if you still see `[SYSTEM ... Removing invalid session payload ...]` in the logs.
 
----
+2. Sync the Prisma schema:
 
-## Frontend (`platform-frontend`)
+   ```powershell
+   cd platform-backend
+   npm run sync:db   # runs `prisma db push && prisma generate`
+   ```
 
-### Requirements
+   Alternative: import `platform-backend/db/schema_v2.sql` directly via MySQL client if you prefer raw SQL.
 
-- Node.js 18+
+3. Seed an administrator for first login:
 
-### Environment
+   ```powershell
+   npm run seed:test-user
+   ```
 
-Create `.env` (optional) or set CLI vars:
+   The script creates or updates the user `test` (`test@example.com`) with password `Test1234!` and role `ADMIN`.
 
-| Variable          | Description        | Default |
-| ----------------- | ------------------ | ------- |
-| `VITE_API_URL`    | Backend base URL   | `/api`  |
-| `VITE_SOCKET_URL` | Socket.io endpoint | `/`     |
+4. Seed quick replies (idempotent):
 
-### Development
+   ```powershell
+   node --loader ts-node/esm scripts/seed-quick-replies.ts
+   ```
 
-```bash
-npm install
-npm run dev      # http://localhost:5173
-npm run build    # production bundle
-```
+   or execute the SQL variant `db/seed-quick-replies.sql`.
 
-### Screens
+5. Re-run `npm run prisma:generate` anytime you change `prisma/schema.prisma`.
 
-- **Login** - username/email + password (session cookie stored server-side).
-- **Dashboard** - bot status, live QR, recent messages.
-- **Chat** - WhatsApp-like interface with contact card (name, DNI, phone), conversation list, message pane, send and close actions.
-- **Flows** - hierarchical builder with types, triggers, ordering, area routing.
-- **Users** - CRUD for operators, roles, area memberships, activation toggle.
-- **Areas** - manage departments (name, description, active state).
-- **Contacts** - import/search/edit the shared contact catalog and review DNI assignments.
-- **Working Hours** - define schedules, courtesy messages and area availability windows.
-- **Settings** - update bot display name, phone number, pause status.
+## Running the Stack
 
-## Workflow Tips
+Use three terminals during development:
 
-1. Start backend (`npm run dev`) and ensure MySQL is running.
-2. Start frontend (`npm run dev`) pointing to same origin or configure `VITE_*` vars.
-3. Login with an admin user, create areas, then flows and operators.
-4. Scan QR from dashboard to connect WPPConnect.
-5. Test chat flow by sending WhatsApp messages; watch the chat panel and auto-close scheduler actions in the console.
-6. Send multimedia (images, audios, videos) to test real-time processing and display.
-7. Verify contact names are automatically resolved from WhatsApp contacts.
+1. **WPPConnect core** (repository root):
 
----
+   ```powershell
+   npm start
+   ```
 
-## Suggested Future Features
+   This compiles the upstream package and launches the dashboard at `http://localhost:3000`.
 
-### 🎯 High Priority
+2. **Platform backend**:
 
-1. **Message Search**: Full-text search across conversation history
-2. **Quick Replies**: Pre-configured message templates for operators
-3. **Typing Indicators**: Show when contact is typing in real-time
-4. **Read Receipts**: Track message delivery and read status (✓, ✓✓, blue checks)
-5. **Message Reactions**: Support for emoji reactions on messages
-6. **Voice Recording**: Direct voice message recording from operator interface
-7. **File Upload**: Allow operators to send multimedia from computer
+   ```powershell
+   cd platform-backend
+   npm run dev        # hot reload via ts-node-dev
+   # or build once: npm run build && npm start
+   ```
 
-### 📊 Analytics & Reporting
+   Health check: `http://localhost:4000/health`.
 
-8. **Conversation Metrics**: Average response time, resolution time, CSAT scores
-9. **Operator Performance**: Messages sent/received, active time, conversation count
-10. **Export Reports**: PDF/Excel reports for conversations and statistics
-11. **Real-time Dashboard**: Live metrics with charts and graphs
-12. **Sentiment Analysis**: Automatic detection of customer sentiment
+3. **Platform frontend**:
 
-### 🤖 Automation & AI
+   ```powershell
+   cd platform-frontend
+   npm run dev
+   ```
 
-13. **AI-Powered Chatbot**: Integration with OpenAI/Claude for intelligent responses
-14. **Auto-categorization**: ML-based conversation categorization
-15. **Suggested Replies**: AI-generated response suggestions for operators
-16. **Language Detection**: Automatic language detection and translation
-17. **Intent Recognition**: Detect customer intent from message content
+   The console is available at `http://localhost:5173`.
 
-### 💬 Chat Features
+For Windows PowerShell environments that block `npm.ps1`, run `npm.cmd <command>` instead of `npm <command>`.
 
-18. **Group Chat Support**: Handle WhatsApp group messages
-19. **Message Forwarding**: Forward messages between conversations
-20. **Internal Notes**: Private notes visible only to operators
-21. **Message Scheduling**: Schedule messages to be sent at specific times
-22. **Broadcast Messages**: Send bulk messages to multiple contacts
-23. **Chat Tags**: Add custom tags to conversations for organization
-24. **Message Pinning**: Pin important messages in conversation
+## Operational Workflow
 
-### 👥 Collaboration
+### Start the WhatsApp session
 
-25. **Operator Transfer**: Transfer active conversations between operators
-26. **Chat Takeover**: Allow supervisor to take over any conversation
-27. **Internal Chat**: Operators can chat with each other
-28. **Mentions**: @mention operators in internal notes
-29. **Shared Inbox**: Multiple operators can view/reply to same conversation
+1. Navigate to `http://localhost:3000`.
+2. If auto-run is disabled, click **Start session**.
+3. Scan the QR code with WhatsApp (Settings → Linked devices) and wait for the dashboard status to read `CONNECTED`.
+4. Monitor the dashboard logs for errors; the API consumes the same session metadata.
 
-### 🔔 Notifications
+### Log into the operator console
 
-30. **Desktop Notifications**: Browser push notifications for new messages
-31. **Email Notifications**: Email alerts for unattended conversations
-32. **Sound Alerts**: Configurable sound alerts for different events
-33. **Mobile App**: React Native mobile app for operators
+1. Ensure the backend is running and the database seeds are applied.
+2. Visit `http://localhost:5173`.
+3. Sign in with the seeded credentials (`test` / `Test1234!` or the email `test@example.com`).
+4. The session cookie (`wppconnect.sid`) is set by the backend and reused by Socket.IO.
 
-### 📱 Contact Management
+### Use quick replies and shortcuts
 
-34. **Contact Merge**: Merge duplicate contact records
-35. **Contact History**: View full interaction history per contact
-36. **Custom Fields**: Add custom fields to contact records
-37. **Contact Segments**: Create contact segments for targeted messaging
-38. **Import/Export**: CSV/Excel import and export with validation
+- In any conversation input, type `/` to open quick reply suggestions. Navigate with arrow keys and press Enter or Tab to apply; Esc closes the panel.
+- Placeholders like `[OPERADOR]`, `{operatorName}`, or `${OPERADOR}` are replaced with the logged-in operator name.
+- Manage quick replies via the Quick Replies API (`/api/quick-replies`) or the frontend panel. Global replies require `ADMIN`.
 
-### 🔒 Security & Compliance
+### Manage flows, areas, and working hours
 
-39. **Two-Factor Authentication**: 2FA for operator login
-40. **Audit Logs**: Complete audit trail of all actions
-41. **Data Encryption**: End-to-end encryption for sensitive data
-42. **GDPR Compliance**: Data deletion and export tools
-43. **Access Logs**: Track who accessed which conversations
+- `Areas` tab: create departments, set description, and toggle activation.
+- `Flows` tab: maintain flow trees used for automated bot replies. Nodes reference areas to redirect conversations.
+- `Working Hours` tab: define allowed schedules per area; out-of-schedule messages trigger courtesy replies before human takeover.
+- `Users` tab: manage operators, assign default areas, and activate/deactivate accounts.
+- `Contacts` tab: create or update contact profiles with phone, name, and DNI.
 
-### 🛠️ Integration & API
+### Automatic policies
 
-44. **Webhooks**: Outgoing webhooks for external integrations
-45. **REST API**: Complete REST API for third-party integrations
-46. **CRM Integration**: Connect with Salesforce, HubSpot, etc.
-47. **Calendar Integration**: Schedule meetings from chat interface
-48. **Payment Gateway**: Accept payments directly in chat
-49. **Ticket System**: Create support tickets from conversations
+- The scheduler closes conversations after `AUTO_CLOSE_MINUTES` of inactivity, emits `conversation:closed`, and attempts to send `AUTO_CLOSE_MESSAGE` through any active operator session.
+- When assigned operators disconnect, conversations may return to pending status based on routing logic in `conversation.service.ts`.
+- Working hour checks run on inbound messages (see `utils/working-hours.ts`) and can pause the bot or send predefined responses.
 
-### 🎨 UI/UX Improvements
+### Media handling
 
-50. **Dark Mode**: Full dark theme support
-51. **Customizable Themes**: Brand colors and logo customization
-52. **Keyboard Shortcuts**: Quick actions via keyboard
-53. **Drag & Drop**: Drag files directly into chat
-54. **Emoji Picker**: Rich emoji selector
-55. **GIF Support**: Built-in GIF search and insertion
-56. **Message Formatting**: Bold, italic, strikethrough, code blocks
+- Incoming media is stored under `platform-backend/uploads/<year-month>/filename.ext`. The path is generated in `services/media.service.ts`.
+- Files are exposed at `http://localhost:4000/uploads/...` and referenced by `mediaUrl` within message payloads.
 
-### 📈 Scalability
+## API Surface
 
-57. **Redis Caching**: Cache frequently accessed data
-58. **Message Queue**: Process messages asynchronously
-59. **Load Balancing**: Distribute conversations across servers
-60. **Database Sharding**: Horizontal database scaling
-61. **CDN Integration**: Serve media files from CDN
+All API routes live under the `/api` prefix and require a valid session cookie unless noted.
 
----
+| Route prefix     | Methods                                                                                              | Summary                                                     |
+| ---------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `GET /health`    | GET                                                                                                  | Simple status check                                         |
+| `/auth`          | `POST /login`, `POST /logout`, `GET /me`, `POST /register`                                           | Session-based authentication                                |
+| `/bot`           | `GET /status`, `GET /qr`, `POST /start`, `POST /stop`, `POST /pause`, `PATCH /metadata`              | Control and inspect the WhatsApp session                    |
+| `/areas`         | Standard CRUD                                                                                        | Manage support areas and memberships                        |
+| `/users`         | Standard CRUD                                                                                        | Manage platform users and roles                             |
+| `/contacts`      | Standard CRUD                                                                                        | Manage contact directory linked to conversations            |
+| `/conversations` | `GET /` list, `GET /:id/messages`, `POST /:id/messages`, `POST /:id/close`                           | Retrieve, send messages, close conversations                |
+| `/messages`      | `GET /`                                                                                              | Fetch messages across conversations (filtered query params) |
+| `/flows`         | Standard CRUD plus tree retrieval                                                                    | Maintain flow nodes for the bot                             |
+| `/working-hours` | Standard CRUD                                                                                        | Configure schedules per area                                |
+| `/quick-replies` | `GET /`, `GET /:id`, `GET /shortcut/:shortcut`, `POST /`, `PUT /:id`, `DELETE /:id`, `POST /reorder` | Manage quick replies                                        |
 
-## Contributing
+Refer to the respective controllers in `platform-backend/src/controllers` for field-level payloads.
 
-Issues and PRs are welcome! When adding features remember to update the Prisma schema, run `npm run build` on both backend and frontend, and document behaviour in this README.
+## Socket.IO Events
 
----
+Clients automatically join rooms based on the authenticated session:
 
-## License
+- `user:{userId}` for per-user notifications.
+- `role:{role}` for role-wide updates.
+- `area:{areaId}` for area-scoped events.
 
-Derived from the WPPConnect open source project (LGPL-3.0). See upstream documentation at [wppconnect-team/wppconnect](https://github.com/wppconnect-team/wppconnect).
+Emitted events include:
 
-VIVA EL CODIGO OPEN SOURSE
-USALO LIBREMENTE
+- `session:status`, `session:qr`, `session:loading`, `session:error` (WhatsApp session lifecycle).
+- `conversation:incoming`, `conversation:update`, `conversation:closed`, `conversation:pending_assignment`.
+- `message:new` with message payloads.
+
+See `platform-backend/src/services/wpp.service.ts` and `conversation.service.ts` for emission logic and payload structure.
+
+## Data Model Overview
+
+Prisma schema (`platform-backend/prisma/schema.prisma`) defines:
+
+- `User`, `UserArea`, `Area`: operator directory and memberships with default areas.
+- `BotSession`: WhatsApp session metadata per owner user.
+- `Flow`: hierarchical tree representing automation nodes and redirects.
+- `Conversation`, `Message`, `ConversationEvent`: full conversation history, including media URLs and audit events.
+- `Contact`: normalized contact catalog with optional DNI and preferred area.
+- `WorkingHour`: allowed schedules and courtesy messages per area.
+- `QuickReply`: shortcut definitions with global and scoped variants.
+- `Session`: `express-session` store table.
+
+## Tooling & Scripts
+
+### WPPConnect core (repository root)
+
+- `npm start` — build the client bundle and run the dashboard (`app.ts`).
+- `npm run build` — build both the client library and WAPI bundle.
+
+### Platform backend (`platform-backend`)
+
+- `npm run dev` — watch mode via `ts-node-dev`.
+- `npm run build` / `npm start` — compile to `dist/` and run JavaScript output.
+- `npm run sync:db` — run `prisma db push` followed by `prisma generate`.
+- `npm run prisma:migrate` — create a development migration.
+- `npm run prisma:generate` — regenerate Prisma client after schema changes.
+- `npm run seed:test-user` — (re)create admin `test` / `Test1234!`.
+- `node --loader ts-node/esm scripts/seed-quick-replies.ts` — populate canonical quick replies.
+- Additional helpers under `platform-backend/temp-*` inspect or clean active sessions.
+
+### Platform frontend (`platform-frontend`)
+
+- `npm run dev` — Vite dev server with hot module replacement.
+- `npm run build` — production build under `dist/`.
+- `npm run preview` — preview the built assets.
+- `npm run lint` — run ESLint against `src/`.
+
+## Troubleshooting
+
+- **Port already in use (EADDRINUSE)**: stop the process occupying the port or override `PORT`/`DASHBOARD_PORT`. On Windows you can run `Get-Process -Id (Get-NetTCPConnection -LocalPort 4000).OwningProcess`.
+- **PowerShell blocks `npm.ps1`**: run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once or use `npm.cmd` commands.
+- **WhatsApp session stuck at QR**: ensure WPPConnect (port 3000) is running, scan the QR, and check dashboard logs. You can also call `POST /api/bot/start` to trigger a restart.
+- **Database connection errors**: verify `DATABASE_URL`, that the database exists, and that the user has privileges. Re-run `npm run sync:db` after fixing credentials.
+- **Quick replies missing**: re-run the seed script or verify entries with `SELECT * FROM quick_replies`.
+- **Media not visible**: confirm `platform-backend/uploads` exists and the backend process has write permissions. Media URLs should resolve under `/uploads/...`.
+- **Session expires too fast**: adjust `SESSION_MAX_AGE` and optionally set `SESSION_ROLLING=true`.
+
+## Documentation Map
+
+- `STARTUP-GUIDE.md` — verbose, Windows-focused startup procedure.
+- `QUICK-REPLIES-GUIDE.md` — detailed UX expectations and keyboard flows.
+- `SHORTCUT-DETECTION-IMPLEMENTATION.md` — internal notes for the frontend shortcut system.
+- `FEATURES-ROADMAP.md` — backlog of planned improvements.
+- `platform-backend/debug-multimedia.md` — troubleshooting guide for media ingestion.
+
+## License & Credits
+
+The project derives from the open-source [WPPConnect](https://github.com/wppconnect-team/wppconnect) codebase and inherits the LGPL-3.0-or-later license (see `LICENSE.md`). Custom platform code lives under `platform-backend/` and `platform-frontend/`. Contributions are welcome; follow the existing lint, type-check, and Prisma workflows before submitting changes.

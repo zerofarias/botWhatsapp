@@ -74,6 +74,23 @@ type MessageEventPayload = {
   createdAt: string;
 };
 
+type BuilderOptionConfig = {
+  id: string;
+  label: string;
+  trigger: string;
+  targetId: string | null;
+};
+
+type BuilderConfig = {
+  messageType: 'TEXT' | 'BUTTONS' | 'LIST';
+  options: BuilderOptionConfig[];
+  buttonTitle?: string;
+  buttonFooter?: string;
+  listButtonText?: string;
+  listTitle?: string;
+  listDescription?: string;
+};
+
 type FlowExecutionResult = {
   reply: string;
   redirectAreaId?: number | null;
@@ -232,17 +249,16 @@ async function handleLocationMessage(message: Message): Promise<{
   return null;
 }
 
-function matchesTrigger(trigger: string, normalizedBody: string) {
-  const normalizedTrigger = normalizeText(trigger);
-  if (!normalizedTrigger && !normalizedBody) {
+function matchesSingleTrigger(trigger: string, normalizedBody: string) {
+  if (!trigger && !normalizedBody) {
     return true;
   }
 
-  if (normalizedTrigger === normalizedBody) {
+  if (trigger === normalizedBody) {
     return true;
   }
 
-  const triggerNumber = extractNumericPrefix(normalizedTrigger);
+  const triggerNumber = extractNumericPrefix(trigger);
   if (triggerNumber && normalizedBody === triggerNumber) {
     return true;
   }
@@ -253,6 +269,24 @@ function matchesTrigger(trigger: string, normalizedBody: string) {
   }
 
   return false;
+}
+
+function matchesTrigger(trigger: string, normalizedBody: string) {
+  const normalizedTrigger = normalizeText(trigger);
+  if (!normalizedTrigger) {
+    return !normalizedBody;
+  }
+
+  const parts = normalizedTrigger
+    .split(/[,;|]/g)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+
+  if (!parts.length) {
+    return !normalizedBody;
+  }
+
+  return parts.some((part) => matchesSingleTrigger(part, normalizedBody));
 }
 
 function flattenFlowTree(nodes: FlowNode[]): FlowNode[] {
@@ -281,6 +315,117 @@ function findPrimaryMenuNode(nodes: FlowNode[]): FlowNode | null {
 function buildPrimaryMenuMessage(nodes: FlowNode[]): string | null {
   const root = findPrimaryMenuNode(nodes);
   return root?.message ?? null;
+}
+
+function sanitizeBuilderString(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    value = String(value);
+  }
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
+}
+
+function parseBuilderConfig(node: FlowNode): BuilderConfig {
+  const config: BuilderConfig = {
+    messageType: 'TEXT',
+    options: [],
+  };
+
+  const metadata = node.metadata as Prisma.JsonValue | null;
+  if (!metadata || typeof metadata !== 'object') {
+    return config;
+  }
+
+  const root = metadata as Record<string, unknown>;
+  const builderValue =
+    'builder' in root ? (root as Record<string, unknown>).builder : undefined;
+  const builder =
+    builderValue && typeof builderValue === 'object'
+      ? (builderValue as Record<string, unknown>)
+      : null;
+
+  if (!builder) {
+    return config;
+  }
+
+  const messageTypeRaw = sanitizeBuilderString(
+    builder.messageType
+  )?.toUpperCase();
+  if (messageTypeRaw === 'BUTTONS' || messageTypeRaw === 'LIST') {
+    config.messageType = messageTypeRaw;
+  }
+
+  const optionsRaw = Array.isArray(builder.options)
+    ? (builder.options as unknown[])
+    : [];
+
+  optionsRaw.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') return;
+    const option = entry as Record<string, unknown>;
+    const rawId = sanitizeBuilderString(option.id);
+    const id =
+      rawId && rawId.length
+        ? rawId
+        : `opt-${Math.random().toString(36).slice(2, 10)}`;
+    const label = sanitizeBuilderString(option.label) ?? '';
+
+    const buildSlug = (value: string | null): string => {
+      if (!value) return '';
+      const normalized = normalizeText(value).replace(/[^a-z0-9]+/g, '_');
+      const trimmed = normalized.replace(/^_+|_+$/g, '');
+      if (trimmed.length) {
+        return trimmed;
+      }
+      return value.replace(/\s+/g, '_');
+    };
+
+    let trigger = sanitizeBuilderString(option.trigger);
+    if (trigger) {
+      const slug = buildSlug(trigger);
+      trigger = slug.length ? slug : trigger;
+    } else if (label) {
+      const slug = buildSlug(label);
+      trigger = slug.length ? slug : label;
+    } else {
+      trigger = id;
+    }
+
+    const targetId = sanitizeBuilderString(option.targetId) ?? null;
+
+    config.options.push({
+      id,
+      label: label || trigger,
+      trigger,
+      targetId,
+    });
+  });
+
+  const buttonTitle = sanitizeBuilderString(builder.buttonTitle);
+  if (buttonTitle) {
+    config.buttonTitle = buttonTitle;
+  }
+  const buttonFooter = sanitizeBuilderString(builder.buttonFooter);
+  if (buttonFooter) {
+    config.buttonFooter = buttonFooter;
+  }
+
+  const listButtonText = sanitizeBuilderString(builder.listButtonText);
+  if (listButtonText) {
+    config.listButtonText = listButtonText;
+  }
+  const listTitle = sanitizeBuilderString(builder.listTitle);
+  if (listTitle) {
+    config.listTitle = listTitle;
+  }
+  const listDescription = sanitizeBuilderString(builder.listDescription);
+  if (listDescription) {
+    config.listDescription = listDescription;
+  }
+
+  return config;
 }
 
 export function extractMessageExternalId(message: Message): string | null {
@@ -596,20 +741,94 @@ async function sendReply(
   client: Whatsapp,
   conversationId: bigint,
   message: Message,
-  reply: string,
+  replyOrEvaluation: string | FlowExecutionResult,
   io?: SocketIOServer
 ) {
-  const rawMessage = await client.sendText(message.from, reply);
-  const outbound =
-    rawMessage && typeof rawMessage === 'object'
-      ? (rawMessage as Message)
-      : null;
+  const evaluation =
+    typeof replyOrEvaluation === 'string' ? null : replyOrEvaluation;
+  const replyText =
+    typeof replyOrEvaluation === 'string'
+      ? replyOrEvaluation
+      : replyOrEvaluation.reply;
+
+  let outbound: Message | null = null;
+
+  if (evaluation) {
+    const builderConfig = parseBuilderConfig(evaluation.matchedNode);
+    try {
+      if (builderConfig.messageType === 'BUTTONS') {
+        const buttons = builderConfig.options
+          .filter((option) => option.label || option.trigger)
+          .slice(0, 3)
+          .map((option) => ({
+            buttonId: option.trigger || option.id,
+            buttonText: option.label || option.trigger || option.id,
+          }));
+
+        if (buttons.length) {
+          const title = builderConfig.buttonTitle ?? '';
+          const footer = builderConfig.buttonFooter ?? '';
+          const raw = await (client as any).sendButtons(
+            message.from,
+            replyText,
+            buttons,
+            title,
+            footer
+          );
+          outbound = raw && typeof raw === 'object' ? (raw as Message) : null;
+        }
+      } else if (builderConfig.messageType === 'LIST') {
+        const rows = builderConfig.options
+          .filter((option) => option.label || option.trigger)
+          .map((option) => ({
+            rowId: option.trigger || option.id,
+            title: option.label || option.trigger || option.id,
+            description: '',
+          }));
+
+        if (rows.length) {
+          const sectionTitle =
+            builderConfig.listTitle || builderConfig.buttonTitle || 'Opciones';
+          const buttonText = builderConfig.listButtonText ?? 'Ver opciones';
+          const listDescription = builderConfig.listDescription ?? '';
+
+          const sections = [
+            {
+              title: sectionTitle,
+              rows,
+            },
+          ];
+
+          const raw = await (client as any).sendListMessage(
+            message.from,
+            replyText,
+            buttonText,
+            sections,
+            sectionTitle,
+            listDescription
+          );
+          outbound = raw && typeof raw === 'object' ? (raw as Message) : null;
+        }
+      }
+    } catch (error) {
+      console.error('[WPP] Failed to send interactive message', error);
+      outbound = null;
+    }
+  }
+
+  if (!outbound) {
+    const rawMessage = await client.sendText(message.from, replyText);
+    outbound =
+      rawMessage && typeof rawMessage === 'object'
+        ? (rawMessage as Message)
+        : null;
+  }
 
   const record = await createConversationMessage({
     conversationId,
     senderType: 'BOT',
     senderId: ownerUserId,
-    content: reply,
+    content: replyText,
     isDelivered: Boolean(outbound),
     externalId: outbound ? extractMessageExternalId(outbound) : null,
     createdAt: outbound ? resolveMessageDate(outbound) : new Date(),
@@ -625,7 +844,43 @@ async function handleIncomingMessage(
   client: Whatsapp,
   io?: SocketIOServer
 ) {
-  const body = message.body ?? message.caption ?? '';
+  const messageAny = message as any;
+  let bodyValue: unknown = message.body ?? message.caption ?? '';
+  let body =
+    typeof bodyValue === 'string' ? bodyValue : String(bodyValue ?? '');
+
+  if (messageAny) {
+    if (
+      typeof messageAny.selectedButtonId === 'string' &&
+      messageAny.selectedButtonId.length
+    ) {
+      body = messageAny.selectedButtonId;
+    } else if (
+      typeof messageAny.selectedButtonText === 'string' &&
+      messageAny.selectedButtonText.length
+    ) {
+      body = messageAny.selectedButtonText;
+    }
+
+    if (
+      typeof messageAny.selectedRowId === 'string' &&
+      messageAny.selectedRowId.length
+    ) {
+      body = messageAny.selectedRowId;
+    }
+
+    const singleSelectReply =
+      messageAny?.listResponse?.singleSelectReply ??
+      messageAny?.selectedRow?.singleSelectReply;
+    if (
+      singleSelectReply &&
+      typeof singleSelectReply.selectedRowId === 'string' &&
+      singleSelectReply.selectedRowId.length
+    ) {
+      body = singleSelectReply.selectedRowId;
+    }
+  }
+
   const normalizedBody = normalizeText(body);
 
   const ensureResult = await ensureConversation(message.from, io, client);
@@ -654,7 +909,6 @@ async function handleIncomingMessage(
   let mediaType: string | null = null;
 
   try {
-    const messageAny = message as any;
     const messageType = messageAny.type;
 
     console.log(
@@ -808,14 +1062,7 @@ async function handleIncomingMessage(
     return;
   }
 
-  await sendReply(
-    ownerUserId,
-    client,
-    conversationId,
-    message,
-    evaluation.reply,
-    io
-  );
+  await sendReply(ownerUserId, client, conversationId, message, evaluation, io);
 
   if (evaluation.redirectAreaId !== undefined) {
     const areaId = evaluation.redirectAreaId;

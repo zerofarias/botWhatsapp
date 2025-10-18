@@ -101,11 +101,26 @@ model Flow {
   children Flow[] @relation("FlowHierarchy")
   area     Area?  @relation(fields: [areaId], references: [id])
   creator  User   @relation("FlowCreator", fields: [createdBy], references: [id])
+  outgoingConnections FlowConnection[] @relation("FromFlow")
+  incomingConnections FlowConnection[] @relation("ToFlow")
 
   @@index([parentId], map: "idx_flows_parent")
   @@index([areaId], map: "idx_flows_area")
   @@index([trigger], map: "idx_flows_trigger")
   @@map("flows")
+}
+
+model FlowConnection {
+  id      Int   @id @default(autoincrement())
+  fromId  Int   @map("from_id")
+  toId    Int   @map("to_id")
+  trigger String
+
+  from Flow @relation("FromFlow", fields: [fromId], references: [id])
+  to   Flow @relation("ToFlow", fields: [toId], references: [id])
+
+  @@unique([fromId, toId], map: "ux_flow_connections_pair")
+  @@map("flow_connections")
 }
 
 model Conversation {

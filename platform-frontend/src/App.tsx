@@ -10,6 +10,7 @@ import UsersPage from './pages/UsersPage';
 import AreasPage from './pages/AreasPage';
 import ContactsPage from './pages/ContactsPage';
 import WorkingHoursPage from './pages/WorkingHoursPage';
+import FlowBuilder from './views/FlowBuilder/FlowBuilder';
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
           <Route index element={<DashboardOverview />} />
           <Route path="chat" element={<ChatPage />} />
           <Route path="flows" element={<FlowsPage />} />
+          <Route path="flow-builder" element={<FlowBuilder />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="areas" element={<AreasPage />} />
           <Route path="contacts" element={<ContactsPage />} />
