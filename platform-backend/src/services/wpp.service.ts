@@ -29,6 +29,11 @@ import {
   formatAfterHoursMessage,
 } from '../utils/working-hours.js';
 import { logSystem } from '../utils/log-system.js';
+import {
+  saveMediaBuffer,
+  getMediaTypeFromMimetype,
+  type MediaFile,
+} from './media.service.js';
 
 type SessionCache = {
   client: Whatsapp;
@@ -92,6 +97,116 @@ function normalizeText(value: string) {
 function extractNumericPrefix(value: string) {
   const match = value.match(/^\d+/);
   return match ? match[0] : null;
+}
+
+async function handleMediaMessage(
+  client: Whatsapp,
+  message: Message
+): Promise<{ mediaUrl: string; mediaType: string } | null> {
+  try {
+    // Detectar el tipo de mensaje multimedia
+    const messageType = (message as any).type;
+    const mimetype = (message as any).mimetype || '';
+
+    if (
+      !['image', 'video', 'audio', 'ptt', 'document', 'sticker'].includes(
+        messageType
+      )
+    ) {
+      return null;
+    }
+
+    // Descargar el contenido multimedia
+    const base64Data = await client.downloadMedia(message);
+    if (!base64Data) {
+      return null;
+    }
+
+    // Convertir base64 a buffer
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    // Generar nombre original basado en el tipo
+    const originalName = `media-${Date.now()}${getExtensionFromMessageType(
+      messageType,
+      mimetype
+    )}`;
+
+    // Guardar el archivo
+    const mediaFile = await saveMediaBuffer(
+      buffer,
+      originalName,
+      mimetype || getDefaultMimetype(messageType)
+    );
+
+    return {
+      mediaUrl: mediaFile.url,
+      mediaType: getMediaTypeFromMimetype(mediaFile.mimetype),
+    };
+  } catch (error) {
+    console.error('[WPP] Error handling media message:', error);
+    return null;
+  }
+}
+
+function getExtensionFromMessageType(
+  messageType: string,
+  mimetype: string
+): string {
+  if (mimetype) {
+    const extensions: Record<string, string> = {
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/gif': '.gif',
+      'image/webp': '.webp',
+      'video/mp4': '.mp4',
+      'video/webm': '.webm',
+      'audio/mpeg': '.mp3',
+      'audio/ogg': '.ogg',
+      'audio/wav': '.wav',
+      'application/pdf': '.pdf',
+    };
+    return extensions[mimetype] || '.bin';
+  }
+
+  const typeExtensions: Record<string, string> = {
+    image: '.jpg',
+    video: '.mp4',
+    audio: '.mp3',
+    ptt: '.ogg',
+    document: '.pdf',
+    sticker: '.webp',
+  };
+  return typeExtensions[messageType] || '.bin';
+}
+
+function getDefaultMimetype(messageType: string): string {
+  const defaultMimetypes: Record<string, string> = {
+    image: 'image/jpeg',
+    video: 'video/mp4',
+    audio: 'audio/mpeg',
+    ptt: 'audio/ogg',
+    document: 'application/pdf',
+    sticker: 'image/webp',
+  };
+  return defaultMimetypes[messageType] || 'application/octet-stream';
+}
+
+async function handleLocationMessage(
+  message: Message
+): Promise<{
+  mediaType: string;
+  latitude?: number;
+  longitude?: number;
+} | null> {
+  const messageData = message as any;
+  if (messageData.type === 'location' && messageData.lat && messageData.lng) {
+    return {
+      mediaType: 'location',
+      latitude: parseFloat(messageData.lat),
+      longitude: parseFloat(messageData.lng),
+    };
+  }
+  return null;
 }
 
 function matchesTrigger(trigger: string, normalizedBody: string) {
@@ -467,13 +582,44 @@ async function handleIncomingMessage(
   });
   const primaryMenu = buildPrimaryMenuMessage(flows);
 
-  const record = await createConversationMessage({
+  // Manejar contenido multimedia
+  let mediaInfo: { mediaUrl: string; mediaType: string } | null = null;
+  let locationInfo: {
+    mediaType: string;
+    latitude?: number;
+    longitude?: number;
+  } | null = null;
+
+  try {
+    mediaInfo = await handleMediaMessage(client, message);
+    if (!mediaInfo) {
+      locationInfo = await handleLocationMessage(message);
+    }
+  } catch (error) {
+    console.error('[WPP] Error processing multimedia:', error);
+  }
+
+  const messageData: any = {
     conversationId,
     senderType: 'CONTACT',
     content: body,
     externalId,
     createdAt: receivedAt,
-  });
+  };
+
+  // Agregar información multimedia si existe
+  if (mediaInfo) {
+    messageData.mediaUrl = mediaInfo.mediaUrl;
+    messageData.mediaType = mediaInfo.mediaType;
+  } else if (locationInfo) {
+    messageData.mediaType = locationInfo.mediaType;
+    if (locationInfo.latitude && locationInfo.longitude) {
+      messageData.content = `📍 Ubicación: ${locationInfo.latitude}, ${locationInfo.longitude}`;
+      // Para ubicaciones, podríamos guardar las coordenadas en metadata o en campos específicos
+    }
+  }
+
+  const record = await createConversationMessage(messageData);
 
   const touchData: Prisma.ConversationUpdateInput = {
     lastActivity: record.createdAt,

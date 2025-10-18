@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { api } from '../services/api';
 import { useSocket } from '../hooks/useSocket';
+import ImageModal from '../components/ImageModal';
 
 type ConversationStatus = 'PENDING' | 'ACTIVE' | 'PAUSED' | 'CLOSED';
 
@@ -70,10 +71,6 @@ const STATUS_COPY: Record<ConversationStatus, string> = {
   CLOSED: 'Cerrado',
 };
 
-function matchesActive(status: ConversationStatus) {
-  return status === 'PENDING' || status === 'ACTIVE' || status === 'PAUSED';
-}
-
 export default function ChatPage() {
   const socket = useSocket();
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -91,6 +88,10 @@ export default function ChatPage() {
   );
 
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string>('');
 
   const matchesFilter = useCallback(
     (conversation: ConversationSummary) => {
@@ -301,11 +302,45 @@ export default function ChatPage() {
     };
   }, [socket, selectedId, matchesFilter]);
 
-  useEffect(() => {
+  // Función para verificar si el usuario está cerca del final
+  const checkIfNearBottom = useCallback(() => {
     if (!messagesContainerRef.current) return;
-    messagesContainerRef.current.scrollTop =
-      messagesContainerRef.current.scrollHeight;
-  }, [messages]);
+    const container = messagesContainerRef.current;
+    const threshold = 100; // píxeles desde el final
+    const isNear =
+      container.scrollHeight - container.scrollTop - container.clientHeight <
+      threshold;
+    setShouldAutoScroll(isNear);
+  }, []);
+
+  // Manejar el scroll del contenedor de mensajes
+  const handleScroll = useCallback(() => {
+    checkIfNearBottom();
+  }, [checkIfNearBottom]);
+
+  // Auto-scroll inteligente
+  useEffect(() => {
+    if (!messagesContainerRef.current || !shouldAutoScroll) return;
+
+    const container = messagesContainerRef.current;
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: 'smooth',
+    });
+  }, [messages, shouldAutoScroll]);
+
+  // Configurar el listener de scroll
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    checkIfNearBottom(); // Verificar estado inicial
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+    };
+  }, [handleScroll, checkIfNearBottom]);
 
   const activeConversation = useMemo(
     () => conversations.find((item) => item.id === selectedId) ?? null,
@@ -366,6 +401,16 @@ export default function ChatPage() {
     } finally {
       setClosing(false);
     }
+  };
+
+  const handleImageClick = (imageUrl: string) => {
+    setSelectedImageUrl(imageUrl);
+    setImageModalOpen(true);
+  };
+
+  const closeImageModal = () => {
+    setImageModalOpen(false);
+    setSelectedImageUrl('');
   };
 
   const composerDisabled =
@@ -486,6 +531,7 @@ export default function ChatPage() {
                     key={message.id}
                     message={message}
                     isOwn={message.senderType === 'OPERATOR'}
+                    onImageClick={handleImageClick}
                   />
                 ))
               ) : (
@@ -522,6 +568,12 @@ export default function ChatPage() {
           </div>
         )}
       </section>
+      <ImageModal
+        imageUrl={selectedImageUrl}
+        isOpen={imageModalOpen}
+        onClose={closeImageModal}
+        alt="Imagen del chat"
+      />
     </div>
   );
 }
@@ -583,10 +635,11 @@ function ConversationListItem({
 
 function MessageBubble({
   message,
-  isOwn,
+  onImageClick,
 }: {
   message: ConversationMessage;
   isOwn: boolean;
+  onImageClick: (imageUrl: string) => void;
 }) {
   const variant =
     message.senderType === 'CONTACT'
@@ -595,10 +648,104 @@ function MessageBubble({
       ? 'bot'
       : 'operator';
 
+  const renderMediaContent = () => {
+    if (!message.mediaType || !message.mediaUrl) {
+      return <p>{message.content}</p>;
+    }
+
+    switch (message.mediaType) {
+      case 'image':
+        return (
+          <div className="chat-media">
+            <img
+              src={message.mediaUrl}
+              alt="Imagen compartida"
+              className="chat-image"
+              onClick={() => message.mediaUrl && onImageClick(message.mediaUrl)}
+            />
+            {message.content && (
+              <p className="chat-media__caption">{message.content}</p>
+            )}
+          </div>
+        );
+
+      case 'video':
+        return (
+          <div className="chat-media">
+            <video controls className="chat-video" preload="metadata">
+              <source src={message.mediaUrl} />
+              Tu navegador no soporta videos.
+            </video>
+            {message.content && (
+              <p className="chat-media__caption">{message.content}</p>
+            )}
+          </div>
+        );
+
+      case 'audio':
+        return (
+          <div className="chat-media">
+            <audio controls className="chat-audio">
+              <source src={message.mediaUrl} />
+              Tu navegador no soporta audio.
+            </audio>
+            {message.content && (
+              <p className="chat-media__caption">{message.content}</p>
+            )}
+          </div>
+        );
+
+      case 'document':
+        return (
+          <div className="chat-media">
+            <a
+              href={message.mediaUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="chat-document"
+            >
+              📄 Ver documento
+            </a>
+            {message.content && (
+              <p className="chat-media__caption">{message.content}</p>
+            )}
+          </div>
+        );
+
+      case 'location': {
+        const locationMatch = message.content.match(
+          /📍 Ubicación: ([-\d.]+), ([-\d.]+)/
+        );
+        if (locationMatch) {
+          const [, lat, lng] = locationMatch;
+          return (
+            <div className="chat-media">
+              <a
+                href={`https://www.google.com/maps?q=${lat},${lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="chat-location"
+              >
+                📍 Ver ubicación en Maps
+              </a>
+              <p className="chat-media__caption">
+                Ubicación: {lat}, {lng}
+              </p>
+            </div>
+          );
+        }
+        return <p>{message.content}</p>;
+      }
+
+      default:
+        return <p>{message.content}</p>;
+    }
+  };
+
   return (
     <div className={`chat-message chat-message--${variant}`}>
       <div className="chat-message__bubble">
-        <p>{message.content}</p>
+        {renderMediaContent()}
         <span className="chat-message__meta">
           {new Date(message.createdAt).toLocaleTimeString([], {
             hour: '2-digit',
