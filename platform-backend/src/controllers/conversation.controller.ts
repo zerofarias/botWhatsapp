@@ -46,6 +46,19 @@ export async function listConversationsHandler(req: Request, res: Response) {
       id: conversation.id.toString(),
       userPhone: conversation.userPhone,
       contactName: conversation.contactName,
+      contact: conversation.contact
+        ? {
+            id: conversation.contact.id,
+            name: conversation.contact.name,
+            phone: conversation.contact.phone,
+            dni: conversation.contact.dni,
+          }
+        : {
+            id: conversation.contactId ?? null,
+            name: conversation.contactName,
+            phone: conversation.userPhone,
+            dni: null,
+          },
       area: conversation.area
         ? { id: conversation.area.id, name: conversation.area.name }
         : null,

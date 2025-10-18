@@ -1,15 +1,13 @@
 -- -----------------------------------------------------------------------------
 -- WPPConnect Platform - Extended Schema (v2)
 -- -----------------------------------------------------------------------------
--- Este script crea/actualiza la estructura necesaria para:
---   * Flujos jerárquicos configurables
---   * Roles y áreas de atención con asignaciones múltiples
---   * Conversaciones con operadores y estado del bot
---   * Registro de mensajes por conversación
---   * Autenticación basada en sesiones (tabla `sessions`)
---   * Integración con WPPConnect (tabla `bot_sessions`)
+-- This script bootstraps the core schema used by the platform, including:
+--   * Areas, users, role assignments and working hours
+--   * Session based authentication storage
+--   * Conversations, messages, events and contact catalog
+--   * WPPConnect bridge tables (bot_sessions)
 -- -----------------------------------------------------------------------------
--- Ejecuta este archivo con tu cliente MySQL/MariaDB preferido, por ejemplo:
+-- Execute with your MySQL/MariaDB client, for example:
 --   mysql -u user -p < db/schema_v2.sql
 -- -----------------------------------------------------------------------------
 
@@ -20,7 +18,7 @@ CREATE DATABASE IF NOT EXISTS `wppconnect_platform`
 USE `wppconnect_platform`;
 
 -- --------------------------------------------------------------------------
--- Tabla: areas
+-- Table: areas
 -- --------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `areas` (
   `id` INT NOT NULL AUTO_INCREMENT,
@@ -34,7 +32,7 @@ CREATE TABLE IF NOT EXISTS `areas` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------------------------
--- Tabla: users
+-- Table: users
 -- --------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `users` (
   `id` INT NOT NULL AUTO_INCREMENT,
@@ -57,7 +55,7 @@ CREATE TABLE IF NOT EXISTS `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------------------------
--- Tabla pivote: user_areas (usuarios asignados a múltiples áreas)
+-- Table: user_areas (many-to-many area membership)
 -- --------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `user_areas` (
   `user_id` INT NOT NULL,
@@ -73,7 +71,26 @@ CREATE TABLE IF NOT EXISTS `user_areas` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------------------------
--- Tabla: bot_sessions (estado de la conexión WPPConnect)
+-- Table: working_hours (area schedule configuration)
+-- --------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `working_hours` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `area_id` INT NOT NULL,
+  `start_time` VARCHAR(5) NOT NULL,
+  `end_time` VARCHAR(5) NOT NULL,
+  `days` VARCHAR(32) NOT NULL,
+  `message` VARCHAR(255) DEFAULT NULL,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_working_hours_area` (`area_id`),
+  CONSTRAINT `fk_working_hours_area`
+    FOREIGN KEY (`area_id`) REFERENCES `areas` (`id`)
+    ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------------------------
+-- Table: bot_sessions (WPPConnect session status)
 -- --------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `bot_sessions` (
   `id` INT NOT NULL AUTO_INCREMENT,
@@ -94,7 +111,7 @@ CREATE TABLE IF NOT EXISTS `bot_sessions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------------------------
--- Tabla: flows (constructor visual de menús)
+-- Table: flows (visual menu tree)
 -- --------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `flows` (
   `id` INT NOT NULL AUTO_INCREMENT,
@@ -126,12 +143,32 @@ CREATE TABLE IF NOT EXISTS `flows` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------------------------
--- Tabla: conversations
+-- Table: contacts (customer catalog)
+-- --------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `contacts` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(150) NOT NULL,
+  `phone` VARCHAR(64) NOT NULL,
+  `dni` VARCHAR(20) DEFAULT NULL,
+  `area_id` INT DEFAULT NULL,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ux_contacts_phone` (`phone`),
+  KEY `idx_contacts_area` (`area_id`),
+  CONSTRAINT `fk_contacts_area`
+    FOREIGN KEY (`area_id`) REFERENCES `areas` (`id`)
+    ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------------------------
+-- Table: conversations
 -- --------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `conversations` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
   `user_phone` VARCHAR(32) NOT NULL,
   `contact_name` VARCHAR(191) DEFAULT NULL,
+  `contact_id` INT DEFAULT NULL,
   `area_id` INT DEFAULT NULL,
   `assigned_to` INT DEFAULT NULL,
   `status` ENUM('pending','active','paused','closed') NOT NULL DEFAULT 'pending',
@@ -145,6 +182,7 @@ CREATE TABLE IF NOT EXISTS `conversations` (
   `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   KEY `idx_conversations_user_phone` (`user_phone`),
+  KEY `idx_conversations_contact` (`contact_id`),
   KEY `idx_conversations_area` (`area_id`),
   KEY `idx_conversations_assigned_to` (`assigned_to`),
   KEY `idx_conversations_last_activity` (`last_activity`),
@@ -156,11 +194,14 @@ CREATE TABLE IF NOT EXISTS `conversations` (
     ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_conversations_closed_by`
     FOREIGN KEY (`closed_by`) REFERENCES `users` (`id`)
+    ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_conversations_contact`
+    FOREIGN KEY (`contact_id`) REFERENCES `contacts` (`id`)
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------------------------
--- Tabla: messages (registro de mensajes por conversación)
+-- Table: messages (conversation records)
 -- --------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `messages` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -174,9 +215,9 @@ CREATE TABLE IF NOT EXISTS `messages` (
   `external_id` VARCHAR(191) DEFAULT NULL,
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
+  UNIQUE KEY `ux_messages_external_id` (`external_id`),
   KEY `idx_messages_conversation` (`conversation_id`),
   KEY `idx_messages_sender` (`sender_type`, `sender_id`),
-  UNIQUE KEY `ux_messages_external_id` (`external_id`),
   CONSTRAINT `fk_messages_conversation`
     FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`)
     ON DELETE CASCADE ON UPDATE CASCADE,
@@ -186,7 +227,7 @@ CREATE TABLE IF NOT EXISTS `messages` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------------------------
--- Tabla: conversation_events (historial de cambios de estado)
+-- Table: conversation_events (status history)
 -- --------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `conversation_events` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -206,7 +247,7 @@ CREATE TABLE IF NOT EXISTS `conversation_events` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------------------------
--- Tabla: sessions (almacenamiento para express-session)
+-- Table: sessions (express-session storage)
 -- --------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `sessions` (
   `sid` VARCHAR(255) NOT NULL,
@@ -216,7 +257,7 @@ CREATE TABLE IF NOT EXISTS `sessions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------------------------
--- Vistas auxiliares opcionales
+-- Helper view: active conversations (optional)
 -- --------------------------------------------------------------------------
 CREATE OR REPLACE VIEW `vw_active_conversations` AS
   SELECT
@@ -235,7 +276,7 @@ CREATE OR REPLACE VIEW `vw_active_conversations` AS
   WHERE c.`status` IN ('pending', 'active', 'paused');
 
 -- --------------------------------------------------------------------------
--- Usuario administrador por defecto (contraseña: Admin123!)
+-- Seed admin user (password: Admin123!)
 -- --------------------------------------------------------------------------
 INSERT INTO `users` (`name`, `username`, `email`, `password_hash`, `role`)
 VALUES (

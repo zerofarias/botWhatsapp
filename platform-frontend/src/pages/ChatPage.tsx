@@ -11,10 +11,18 @@ import { useSocket } from '../hooks/useSocket';
 
 type ConversationStatus = 'PENDING' | 'ACTIVE' | 'PAUSED' | 'CLOSED';
 
+type ContactSummary = {
+  id: number | null;
+  name: string | null;
+  phone: string;
+  dni: string | null;
+};
+
 type ConversationSummary = {
   id: string;
   userPhone: string;
   contactName: string | null;
+  contact: ContactSummary | null;
   area: { id: number; name: string | null } | null;
   assignedTo: { id: number; name: string | null } | null;
   status: ConversationStatus;
@@ -316,10 +324,13 @@ export default function ChatPage() {
     }
     const normalized = searchTerm.trim().toLowerCase();
     return conversations.filter((conversation) => {
-      const name = conversation.contactName ?? '';
+      const name = conversation.contact?.name ?? conversation.contactName ?? '';
+      const dni = conversation.contact?.dni ?? '';
+      const phone = conversation.contact?.phone ?? conversation.userPhone;
       return (
         name.toLowerCase().includes(normalized) ||
-        conversation.userPhone.toLowerCase().includes(normalized)
+        phone.toLowerCase().includes(normalized) ||
+        dni.toLowerCase().includes(normalized)
       );
     });
   }, [conversations, searchTerm]);
@@ -419,9 +430,27 @@ export default function ChatPage() {
           <>
             <header className="chat-main__header">
               <div className="chat-main__info">
-                <h3>{getDisplayName(activeConversation)}</h3>
+                <h3>
+                  <span>{getDisplayName(activeConversation)}</span>
+                  {activeConversation.contact?.dni && (
+                    <span
+                      style={{
+                        marginLeft: '0.5rem',
+                        fontSize: '0.85rem',
+                        color: '#94a3b8',
+                      }}
+                    >
+                      (DNI: {activeConversation.contact.dni})
+                    </span>
+                  )}
+                </h3>
                 <div className="chat-main__meta">
-                  <span>{formatPhone(activeConversation.userPhone)}</span>
+                  <span>
+                    {formatPhone(
+                      activeConversation.contact?.phone ??
+                        activeConversation.userPhone
+                    )}
+                  </span>
                   {activeConversation.area?.name && (
                     <span className="chat-tag">
                       {activeConversation.area.name}
@@ -531,6 +560,11 @@ function ConversationListItem({
       <div className="chat-conversation__row">
         <span className="chat-conversation__preview">{lastMessageText}</span>
         <div className="chat-conversation__markers">
+          {conversation.contact?.dni && (
+            <span className="chat-tag chat-tag--muted">
+              DNI: {conversation.contact.dni}
+            </span>
+          )}
           {conversation.area?.name && (
             <span className="chat-tag chat-tag--muted">
               {conversation.area.name}
@@ -597,12 +631,15 @@ function sortConversations(items: ConversationSummary[]) {
 }
 
 function getDisplayName(conversation: ConversationSummary) {
-  return conversation.contactName?.trim()?.length
-    ? conversation.contactName
-    : formatPhone(conversation.userPhone);
+  const name = conversation.contact?.name ?? conversation.contactName ?? '';
+  if (name.trim().length) {
+    return name.trim();
+  }
+  return formatPhone(conversation.contact?.phone ?? conversation.userPhone);
 }
 
 function formatPhone(phone: string) {
+  if (!phone) return '';
   if (!phone.includes('@')) {
     return phone;
   }

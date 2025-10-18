@@ -8,7 +8,9 @@ import { BotSessionStatus, MessageSender, Prisma } from '@prisma/client';
 import type { Server as SocketIOServer } from 'socket.io';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
+import dayjs from 'dayjs';
 import {
+  addConversationEvent,
   assignConversationToArea,
   createConversation,
   findOpenConversationByPhone,
@@ -20,7 +22,13 @@ import {
   findMessageByExternalId,
   type ConversationMessage,
 } from './message.service.js';
+import { findOrCreateContactByPhone } from './contact.service.js';
 import { listFlowTree, type FlowNode } from './flow.service.js';
+import {
+  checkIfWithinWorkingHours,
+  formatAfterHoursMessage,
+} from '../utils/working-hours.js';
+import { logSystem } from '../utils/log-system.js';
 
 type SessionCache = {
   client: Whatsapp;
@@ -34,6 +42,13 @@ type ConversationSnapshot = {
   id: string;
   userPhone: string;
   contactName: string | null;
+  contactId: number | null;
+  contact: {
+    id: number;
+    name: string;
+    phone: string;
+    dni: string | null;
+  } | null;
   areaId: number | null;
   assignedToId: number | null;
   status: string;
@@ -61,6 +76,8 @@ type FlowExecutionResult = {
 };
 
 const sessions = new Map<number, SessionCache>();
+const AFTER_HOURS_MESSAGE =
+  '🕓 Nuestro horario de atención es de 8:00 a 18:00 hs. Te responderemos apenas volvamos a estar disponibles.';
 
 function normalizeText(value: string) {
   return value
@@ -229,12 +246,21 @@ async function fetchConversationSnapshot(
       id: true,
       userPhone: true,
       contactName: true,
+      contactId: true,
       areaId: true,
       assignedToId: true,
       status: true,
       botActive: true,
       lastActivity: true,
       updatedAt: true,
+      contact: {
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          dni: true,
+        },
+      },
     },
   });
 
@@ -246,6 +272,15 @@ async function fetchConversationSnapshot(
     id: record.id.toString(),
     userPhone: record.userPhone,
     contactName: record.contactName,
+    contactId: record.contactId ?? null,
+    contact: record.contact
+      ? {
+          id: record.contact.id,
+          name: record.contact.name,
+          phone: record.contact.phone,
+          dni: record.contact.dni,
+        }
+      : null,
     areaId: record.areaId,
     assignedToId: record.assignedToId,
     status: record.status,
@@ -321,20 +356,58 @@ async function ensureConversation(
   contactNumber: string,
   io: SocketIOServer | undefined
 ) {
+  const { contact, created: contactCreated } = await findOrCreateContactByPhone(
+    contactNumber
+  );
+
   const existing = await findOpenConversationByPhone(contactNumber);
   if (existing) {
-    return { conversation: existing, created: false };
+    let conversation = existing;
+    const updates: Prisma.ConversationUpdateInput = {};
+
+    if (!existing.contactId || existing.contactId !== contact.id) {
+      updates.contact = { connect: { id: contact.id } };
+    }
+    if (existing.contactName !== contact.name) {
+      updates.contactName = contact.name;
+    }
+
+    if (Object.keys(updates).length) {
+      await touchConversation(existing.id, updates);
+      conversation = {
+        ...existing,
+        contactId: contact.id,
+        contactName: contact.name,
+        contact,
+      };
+    } else if (!conversation.contact) {
+      conversation = { ...conversation, contact };
+    }
+
+    return {
+      conversation,
+      created: false,
+      contact,
+      contactCreated,
+    };
   }
 
   const created = await createConversation({
     userPhone: contactNumber,
+    contactName: contact.name,
+    contactId: contact.id,
     status: 'PENDING',
     botActive: true,
   });
 
   await broadcastConversationUpdate(io, created.id);
   await broadcastConversationEvent(io, created.id, 'conversation:incoming');
-  return { conversation: created, created: true };
+  return {
+    conversation: created,
+    created: true,
+    contact,
+    contactCreated: true,
+  };
 }
 
 async function sendReply(
@@ -376,6 +449,7 @@ async function handleIncomingMessage(
 
   const ensureResult = await ensureConversation(message.from, io);
   let conversation = ensureResult.conversation;
+  const contact = ensureResult.contact;
   const conversationId = BigInt(conversation.id);
 
   const externalId = extractMessageExternalId(message);
@@ -411,6 +485,13 @@ async function handleIncomingMessage(
   }
 
   await touchConversation(conversationId, touchData);
+  conversation = {
+    ...conversation,
+    lastActivity: record.createdAt,
+    contact: contact ?? conversation.contact,
+    contactName:
+      conversation.contactName ?? contact?.name ?? conversation.contactName,
+  };
 
   await broadcastMessageRecord(io, conversationId, record, [ownerUserId]);
   await broadcastConversationUpdate(io, conversationId);
@@ -459,9 +540,62 @@ async function handleIncomingMessage(
   );
 
   if (evaluation.redirectAreaId !== undefined) {
+    const areaId = evaluation.redirectAreaId;
+
+    if (areaId !== null) {
+      const area = await prisma.area.findUnique({
+        where: { id: areaId },
+        include: { workingHours: true },
+      });
+
+      if (area) {
+        let withinSchedule = true;
+        if (area.workingHours.length) {
+          withinSchedule = checkIfWithinWorkingHours(
+            dayjs(),
+            area.workingHours
+          );
+        }
+
+        if (!withinSchedule) {
+          const messageText = formatAfterHoursMessage(
+            area.workingHours[0],
+            AFTER_HOURS_MESSAGE
+          );
+          await sendReply(
+            ownerUserId,
+            client,
+            conversationId,
+            message,
+            messageText,
+            io
+          );
+          await touchConversation(conversationId, {
+            area: { connect: { id: areaId } },
+            lastActivity: record.createdAt,
+            status: 'PENDING',
+            botActive: true,
+          });
+          await broadcastConversationUpdate(io, conversationId);
+          await addConversationEvent(
+            conversationId,
+            'NOTE',
+            {
+              type: 'after_hours',
+              areaId,
+              message: messageText,
+            },
+            ownerUserId
+          );
+          logSystem('Mensaje de ausencia enviado');
+          return;
+        }
+      }
+    }
+
     const { operatorId } = await assignConversationToArea(
       conversationId,
-      evaluation.redirectAreaId,
+      areaId,
       { requestedById: ownerUserId }
     );
     await broadcastConversationUpdate(io, conversationId);

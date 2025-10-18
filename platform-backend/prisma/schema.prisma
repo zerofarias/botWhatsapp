@@ -15,10 +15,12 @@ model Area {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  defaultUsers  User[]         @relation("AreaDefaultUsers")
+  defaultUsers  User[]          @relation("AreaDefaultUsers")
   userAreas     UserArea[]
   flows         Flow[]
   conversations Conversation[]
+  contacts      Contact[]
+  workingHours  WorkingHour[]
 
   @@map("areas")
 }
@@ -108,6 +110,7 @@ model Conversation {
   id               BigInt             @id @default(autoincrement())
   userPhone        String             @map("user_phone")
   contactName      String?            @map("contact_name")
+  contactId        Int?               @map("contact_id")
   areaId           Int?               @map("area_id")
   assignedToId     Int?               @map("assigned_to")
   status           ConversationStatus @default(PENDING)
@@ -123,6 +126,7 @@ model Conversation {
   area       Area?               @relation(fields: [areaId], references: [id])
   assignedTo User?               @relation("ConversationAssignedTo", fields: [assignedToId], references: [id])
   closedBy   User?               @relation("ConversationClosedBy", fields: [closedById], references: [id])
+  contact    Contact?            @relation(fields: [contactId], references: [id])
   messages   Message[]
   events     ConversationEvent[]
 
@@ -131,6 +135,7 @@ model Conversation {
   @@index([areaId], map: "idx_conversations_area")
   @@index([assignedToId], map: "idx_conversations_assigned_to")
   @@index([lastActivity], map: "idx_conversations_last_activity")
+  @@index([contactId], map: "idx_conversations_contact")
   @@map("conversations")
 }
 
@@ -175,6 +180,36 @@ model Session {
   data    String?
 
   @@map("sessions")
+}
+
+model Contact {
+  id          Int         @id @default(autoincrement())
+  name        String
+  phone       String      @unique
+  dni         String?     @db.VarChar(20)
+  areaId      Int?        @map("area_id")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  area         Area?        @relation(fields: [areaId], references: [id])
+  conversations Conversation[]
+
+  @@map("contacts")
+}
+
+model WorkingHour {
+  id         Int      @id @default(autoincrement())
+  areaId     Int      @map("area_id")
+  startTime  String   @map("start_time")
+  endTime    String   @map("end_time")
+  days       String
+  message    String?  @map("message")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  area Area @relation(fields: [areaId], references: [id])
+
+  @@map("working_hours")
 }
 
 enum UserRole {

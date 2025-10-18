@@ -6,6 +6,8 @@ import { messageRouter } from './messages.js';
 import { userRouter } from './users.js';
 import { areaRouter } from './areas.js';
 import { conversationRouter } from './conversations.js';
+import { contactRouter } from './contacts.js';
+import { workingHourRouter } from './working-hours.js';
 
 export const apiRouter = Router();
 
@@ -16,3 +18,5 @@ apiRouter.use('/messages', messageRouter);
 apiRouter.use('/users', userRouter);
 apiRouter.use('/areas', areaRouter);
 apiRouter.use('/conversations', conversationRouter);
+apiRouter.use('/contacts', contactRouter);
+apiRouter.use('/working-hours', workingHourRouter);

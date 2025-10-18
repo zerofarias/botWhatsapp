@@ -11,6 +11,7 @@ const conversationSelect = {
   id: true,
   userPhone: true,
   contactName: true,
+  contactId: true,
   areaId: true,
   assignedToId: true,
   status: true,
@@ -22,6 +23,14 @@ const conversationSelect = {
   closedById: true,
   createdAt: true,
   updatedAt: true,
+  contact: {
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      dni: true,
+    },
+  },
 } satisfies Prisma.ConversationSelect;
 
 export type ConversationRecord = Prisma.ConversationGetPayload<{
@@ -31,6 +40,7 @@ export type ConversationRecord = Prisma.ConversationGetPayload<{
 type CreateConversationInput = {
   userPhone: string;
   contactName?: string | null;
+  contactId?: number | null;
   areaId?: number | null;
   assignedToId?: number | null;
   status?: ConversationStatus;
@@ -80,6 +90,7 @@ export async function createConversation(
     data: {
       userPhone: input.userPhone,
       contactName: input.contactName ?? null,
+      contactId: input.contactId ?? null,
       areaId: input.areaId ?? null,
       assignedToId: input.assignedToId ?? null,
       status: input.status ?? 'PENDING',
@@ -225,6 +236,7 @@ const conversationSummarySelect = {
   id: true,
   userPhone: true,
   contactName: true,
+  contactId: true,
   areaId: true,
   assignedToId: true,
   status: true,
@@ -241,6 +253,14 @@ const conversationSummarySelect = {
     select: {
       id: true,
       name: true,
+    },
+  },
+  contact: {
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      dni: true,
     },
   },
   messages: {

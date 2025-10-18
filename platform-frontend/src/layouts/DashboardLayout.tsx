@@ -12,8 +12,14 @@ const NAVIGATION_LINKS: NavigationLink[] = [
   { to: '/dashboard/chat', label: 'Chat' },
   { to: '/dashboard/flows', label: 'Flujos', roles: ['ADMIN', 'SUPERVISOR'] },
   { to: '/dashboard/users', label: 'Usuarios', roles: ['ADMIN'] },
-  { to: '/dashboard/areas', label: 'Áreas', roles: ['ADMIN'] },
-  { to: '/dashboard/settings', label: 'Configuración' },
+  { to: '/dashboard/areas', label: 'Areas', roles: ['ADMIN'] },
+  {
+    to: '/dashboard/contacts',
+    label: 'Contactos',
+    roles: ['ADMIN', 'SUPERVISOR'],
+  },
+  { to: '/dashboard/working-hours', label: 'Horarios', roles: ['ADMIN'] },
+  { to: '/dashboard/settings', label: 'Configuracion' },
 ];
 
 function formatRole(role?: Role) {

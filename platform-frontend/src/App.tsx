@@ -8,6 +8,8 @@ import SettingsPage from './pages/SettingsPage';
 import ChatPage from './pages/ChatPage';
 import UsersPage from './pages/UsersPage';
 import AreasPage from './pages/AreasPage';
+import ContactsPage from './pages/ContactsPage';
+import WorkingHoursPage from './pages/WorkingHoursPage';
 
 export default function App() {
   return (
@@ -22,6 +24,8 @@ export default function App() {
           <Route path="flows" element={<FlowsPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="areas" element={<AreasPage />} />
+          <Route path="contacts" element={<ContactsPage />} />
+          <Route path="working-hours" element={<WorkingHoursPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Route>
