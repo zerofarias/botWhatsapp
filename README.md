@@ -20,6 +20,10 @@ It contains a Node.js/Express backend (TypeScript) and a React 18 + Vite fronten
 - **Scheduler & auto-close**: closes inactive chats, logs events and sends the courtesy message via WPPConnect.
 - **Analytics dashboard**: live stats for active/closed chats and area distribution, plus latest bot activity.
 - **Full Prisma schema & SQL bootstrap**: includes flows, areas, conversations, messages, events, sessions.
+- **Multimedia support**: images, videos, audios, documents, and locations are automatically processed and displayed in chat.
+- **Intelligent scroll**: auto-scroll to latest messages with smooth animations and smart detection of user scroll position.
+- **Contact name resolution**: automatic extraction of contact names from WhatsApp contacts (no more "Desconocido").
+- **Clean phone numbers**: WhatsApp format (@c.us) is automatically cleaned to store only phone numbers.
 
 ---
 
@@ -129,6 +133,110 @@ Maria Diaz,+549351555222,,Ventas
 - Outside business hours the conversation remains pending, the bot sends the configured message (default: "Nuestro horario de atención es de 8:00 a 18:00 hs. Te responderemos apenas volvamos a estar disponibles.") and logs the event, keeping the automation active until agents are back online.
 - Manage the schedules from `POST/GET/PATCH/DELETE /working-hours` or through the new admin UI.
 
+### Multimedia Support & Real-time Processing
+
+#### Overview
+
+The platform now includes comprehensive multimedia support for WhatsApp conversations, including:
+
+- **Images** (JPG, PNG, GIF, WebP)
+- **Videos** (MP4, AVI, MOV, WebM)
+- **Audio messages** (MP3, OGG, WAV, M4A) including voice notes (PTT)
+- **Documents** (PDF, DOC, DOCX, TXT)
+- **Locations** (GPS coordinates)
+- **Stickers**
+
+#### How It Works
+
+**Backend Processing (`platform-backend/src/services/wpp.service.ts`)**:
+
+1. **Message Detection**: Automatically detects multimedia message types from WPPConnect
+2. **Media Download**: Uses `client.downloadMedia()` to retrieve base64 content
+3. **File Conversion**: Converts base64 to physical files stored in `/uploads` directory
+4. **Smart Organization**: Files are organized by year-month (`/uploads/2024-10/`)
+5. **Magic Byte Detection**: Identifies file types by analyzing binary headers (FFD8FF for JPG, 89504E47 for PNG, etc.)
+6. **URL Generation**: Creates accessible URLs (`/uploads/2024-10/media-timestamp.jpg`)
+7. **Database Storage**: Saves `mediaUrl` and `mediaType` fields in conversation messages
+
+**Media Processing Utility (`platform-backend/src/utils/media-processor.ts`)**:
+
+- `isBase64String()`: Detects if content is base64 encoded
+- `getFileExtensionFromBase64()`: Identifies file type from magic bytes
+- `getMediaTypeFromExtension()`: Maps extensions to media categories
+- `processBase64Content()`: Complete pipeline for base64 → file conversion
+
+**Static File Serving (`platform-backend/src/app.ts`)**:
+
+```typescript
+app.use('/uploads', express.static(uploadsPath));
+```
+
+All uploaded files are served via HTTP at `/uploads/*` endpoint.
+
+**Frontend Display (`platform-frontend/src/pages/ChatPage.tsx`)**:
+
+- **Images**: Clickable thumbnails that open in fullscreen modal with zoom controls
+- **Videos**: Native HTML5 video player with controls
+- **Audio**: Native audio player with playback controls
+- **Documents**: Download links with file icon
+- **Locations**: Formatted GPS coordinates with map emoji
+- **Base64 Fallback**: Automatic detection and rendering if backend processing fails
+
+**Intelligent Scroll Features**:
+
+- Auto-scroll to bottom when new messages arrive (only if user is at bottom)
+- Smooth scroll animations for better UX
+- Smart detection of user's scroll position
+- Manual scroll detection to prevent auto-scroll interruption
+- Scroll-to-bottom button appears when scrolled up
+
+#### Known Issues & Troubleshooting
+
+**Multimedia Not Displaying**:
+
+1. Verify `/uploads` directory exists and has write permissions
+2. Check backend logs for media download errors
+3. Ensure `client.downloadMedia()` is working (may fail with some WhatsApp versions)
+4. Verify static file serving is configured correctly
+5. Check browser console for 404 errors on media URLs
+
+**Audio Not Playing**:
+
+- Verify audio file format is supported by browser (MP3, OGG recommended)
+- Check browser compatibility with HTML5 audio element
+- Some browsers require user interaction before playing audio
+
+**Images Showing as Base64 Text**:
+
+- This indicates backend processing failed
+- Check backend logs for errors in `processBase64Content()`
+- Verify file permissions on `/uploads` directory
+- Frontend has fallback rendering for this scenario
+
+### Contact Name Resolution
+
+The platform now automatically extracts real contact names from WhatsApp:
+
+**How It Works**:
+
+1. **Phone Number Cleaning**: Removes WhatsApp format suffixes (`@c.us`, `@g.us`, `@s.whatsapp.net`)
+2. **Contact Info Retrieval**: Uses `client.getContact()` to fetch contact details from WhatsApp
+3. **Name Priority**: Extracts names in order: `name` → `pushname` → `shortName` → fallback to "Desconocido"
+4. **Database Update**: Stores clean phone number and real name in `Contact` table
+5. **Auto-linking**: Every conversation automatically links to the contact record
+
+**Functions**:
+
+- `extractPhoneNumber()`: Cleans WhatsApp ID format to pure phone number
+- `getContactInfoFromWhatsApp()`: Retrieves contact details from WhatsApp API
+- `ensureConversation()`: Enhanced to fetch and store contact names automatically
+
+**Example**:
+
+- WhatsApp ID: `5493533473732@c.us`
+- Stored Number: `5493533473732`
+- Displayed Name: "Juan Pérez" (from WhatsApp contact)
+
 ### Post-upgrade checklist
 
 1. Install dependencies and push the new Prisma schema: `npm install && npm run sync:db`.
@@ -186,6 +294,106 @@ npm run build    # production bundle
 3. Login with an admin user, create areas, then flows and operators.
 4. Scan QR from dashboard to connect WPPConnect.
 5. Test chat flow by sending WhatsApp messages; watch the chat panel and auto-close scheduler actions in the console.
+6. Send multimedia (images, audios, videos) to test real-time processing and display.
+7. Verify contact names are automatically resolved from WhatsApp contacts.
+
+---
+
+## Suggested Future Features
+
+### 🎯 High Priority
+
+1. **Message Search**: Full-text search across conversation history
+2. **Quick Replies**: Pre-configured message templates for operators
+3. **Typing Indicators**: Show when contact is typing in real-time
+4. **Read Receipts**: Track message delivery and read status (✓, ✓✓, blue checks)
+5. **Message Reactions**: Support for emoji reactions on messages
+6. **Voice Recording**: Direct voice message recording from operator interface
+7. **File Upload**: Allow operators to send multimedia from computer
+
+### 📊 Analytics & Reporting
+
+8. **Conversation Metrics**: Average response time, resolution time, CSAT scores
+9. **Operator Performance**: Messages sent/received, active time, conversation count
+10. **Export Reports**: PDF/Excel reports for conversations and statistics
+11. **Real-time Dashboard**: Live metrics with charts and graphs
+12. **Sentiment Analysis**: Automatic detection of customer sentiment
+
+### 🤖 Automation & AI
+
+13. **AI-Powered Chatbot**: Integration with OpenAI/Claude for intelligent responses
+14. **Auto-categorization**: ML-based conversation categorization
+15. **Suggested Replies**: AI-generated response suggestions for operators
+16. **Language Detection**: Automatic language detection and translation
+17. **Intent Recognition**: Detect customer intent from message content
+
+### 💬 Chat Features
+
+18. **Group Chat Support**: Handle WhatsApp group messages
+19. **Message Forwarding**: Forward messages between conversations
+20. **Internal Notes**: Private notes visible only to operators
+21. **Message Scheduling**: Schedule messages to be sent at specific times
+22. **Broadcast Messages**: Send bulk messages to multiple contacts
+23. **Chat Tags**: Add custom tags to conversations for organization
+24. **Message Pinning**: Pin important messages in conversation
+
+### 👥 Collaboration
+
+25. **Operator Transfer**: Transfer active conversations between operators
+26. **Chat Takeover**: Allow supervisor to take over any conversation
+27. **Internal Chat**: Operators can chat with each other
+28. **Mentions**: @mention operators in internal notes
+29. **Shared Inbox**: Multiple operators can view/reply to same conversation
+
+### 🔔 Notifications
+
+30. **Desktop Notifications**: Browser push notifications for new messages
+31. **Email Notifications**: Email alerts for unattended conversations
+32. **Sound Alerts**: Configurable sound alerts for different events
+33. **Mobile App**: React Native mobile app for operators
+
+### 📱 Contact Management
+
+34. **Contact Merge**: Merge duplicate contact records
+35. **Contact History**: View full interaction history per contact
+36. **Custom Fields**: Add custom fields to contact records
+37. **Contact Segments**: Create contact segments for targeted messaging
+38. **Import/Export**: CSV/Excel import and export with validation
+
+### 🔒 Security & Compliance
+
+39. **Two-Factor Authentication**: 2FA for operator login
+40. **Audit Logs**: Complete audit trail of all actions
+41. **Data Encryption**: End-to-end encryption for sensitive data
+42. **GDPR Compliance**: Data deletion and export tools
+43. **Access Logs**: Track who accessed which conversations
+
+### 🛠️ Integration & API
+
+44. **Webhooks**: Outgoing webhooks for external integrations
+45. **REST API**: Complete REST API for third-party integrations
+46. **CRM Integration**: Connect with Salesforce, HubSpot, etc.
+47. **Calendar Integration**: Schedule meetings from chat interface
+48. **Payment Gateway**: Accept payments directly in chat
+49. **Ticket System**: Create support tickets from conversations
+
+### 🎨 UI/UX Improvements
+
+50. **Dark Mode**: Full dark theme support
+51. **Customizable Themes**: Brand colors and logo customization
+52. **Keyboard Shortcuts**: Quick actions via keyboard
+53. **Drag & Drop**: Drag files directly into chat
+54. **Emoji Picker**: Rich emoji selector
+55. **GIF Support**: Built-in GIF search and insertion
+56. **Message Formatting**: Bold, italic, strikethrough, code blocks
+
+### 📈 Scalability
+
+57. **Redis Caching**: Cache frequently accessed data
+58. **Message Queue**: Process messages asynchronously
+59. **Load Balancing**: Distribute conversations across servers
+60. **Database Sharding**: Horizontal database scaling
+61. **CDN Integration**: Serve media files from CDN
 
 ---
 

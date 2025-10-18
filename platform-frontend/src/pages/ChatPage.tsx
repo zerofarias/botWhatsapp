@@ -1,5 +1,6 @@
 import {
   FormEvent,
+  KeyboardEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -8,7 +9,11 @@ import {
 } from 'react';
 import { api } from '../services/api';
 import { useSocket } from '../hooks/useSocket';
+import { useQuickReplies } from '../hooks/useQuickReplies';
 import ImageModal from '../components/ImageModal';
+import ShortcutSuggestions from '../components/ShortcutSuggestions';
+import type { QuickReply } from '../services/quickReply.service';
+import { useAuth } from '../context/AuthContext';
 
 type ConversationStatus = 'PENDING' | 'ACTIVE' | 'PAUSED' | 'CLOSED';
 
@@ -73,12 +78,29 @@ const STATUS_COPY: Record<ConversationStatus, string> = {
 
 export default function ChatPage() {
   const socket = useSocket();
+  const { user } = useAuth();
+
+  const quickReplyVariables = useMemo(
+    () => ({
+      OPERADOR: user?.name ?? 'Operador',
+      OPERADORA: user?.name ?? 'Operador',
+      OPERATOR: user?.name ?? 'Operador',
+      operatorName: user?.name ?? 'Operador',
+    }),
+    [user?.name]
+  );
+
+  const { getSuggestions, formatQuickReplyContent } = useQuickReplies({
+    templateVariables: quickReplyVariables,
+  });
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [filter, setFilter] = useState<FilterOption>('active');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [messageInput, setMessageInput] = useState('');
+  const [suggestions, setSuggestions] = useState<QuickReply[]>([]);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
@@ -382,11 +404,63 @@ export default function ChatPage() {
         content: trimmed,
       });
       setMessageInput('');
+      setSuggestions([]);
     } catch (error) {
       console.error('[Chat] Failed to send message', error);
     } finally {
       setSendingMessage(false);
     }
+  };
+
+  const handleInputChange = (value: string) => {
+    setMessageInput(value);
+
+    // Detectar si empieza con "/"
+    if (value.startsWith('/')) {
+      const matchingSuggestions = getSuggestions(value);
+      setSuggestions(matchingSuggestions);
+      setSelectedSuggestionIndex(0);
+    } else {
+      setSuggestions([]);
+    }
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    // Si hay sugerencias abiertas
+    if (suggestions.length > 0) {
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          setSelectedSuggestionIndex((prev) =>
+            prev < suggestions.length - 1 ? prev + 1 : prev
+          );
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          setSelectedSuggestionIndex((prev) => (prev > 0 ? prev - 1 : prev));
+          break;
+        case 'Enter':
+        case 'Tab':
+          event.preventDefault();
+          expandShortcut(suggestions[selectedSuggestionIndex]);
+          break;
+        case 'Escape':
+          event.preventDefault();
+          setSuggestions([]);
+          break;
+      }
+    }
+  };
+
+  const expandShortcut = (suggestion: QuickReply) => {
+    const formattedContent = formatQuickReplyContent(suggestion.content);
+    setMessageInput(formattedContent);
+    setSuggestions([]);
+    setSelectedSuggestionIndex(0);
+  };
+
+  const handleSuggestionSelect = (suggestion: QuickReply) => {
+    expandShortcut(suggestion);
   };
 
   const handleCloseConversation = async () => {
@@ -541,25 +615,35 @@ export default function ChatPage() {
               )}
             </div>
             <form className="chat-composer" onSubmit={handleSubmitMessage}>
-              <input
-                value={messageInput}
-                onChange={(event) => setMessageInput(event.target.value)}
-                placeholder={
-                  composerDisabled
-                    ? 'El chat está cerrado'
-                    : 'Escribe un mensaje…'
-                }
-                disabled={composerDisabled || sendingMessage}
-              />
-              <button
-                type="submit"
-                className="chat-button chat-button--primary"
-                disabled={
-                  composerDisabled || sendingMessage || !messageInput.trim()
-                }
-              >
-                {sendingMessage ? 'Enviando…' : 'Enviar'}
-              </button>
+              {suggestions.length > 0 && (
+                <ShortcutSuggestions
+                  suggestions={suggestions}
+                  selectedIndex={selectedSuggestionIndex}
+                  onSelect={handleSuggestionSelect}
+                />
+              )}
+              <div className="chat-composer__input-row">
+                <input
+                  value={messageInput}
+                  onChange={(event) => handleInputChange(event.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={
+                    composerDisabled
+                      ? 'El chat está cerrado'
+                      : 'Escribe un mensaje… (usa / para atajos)'
+                  }
+                  disabled={composerDisabled || sendingMessage}
+                />
+                <button
+                  type="submit"
+                  className="chat-button chat-button--primary"
+                  disabled={
+                    composerDisabled || sendingMessage || !messageInput.trim()
+                  }
+                >
+                  {sendingMessage ? 'Enviando…' : 'Enviar'}
+                </button>
+              </div>
             </form>
           </>
         ) : (
@@ -649,6 +733,58 @@ function MessageBubble({
       : 'operator';
 
   const renderMediaContent = () => {
+    // Función para detectar si el contenido es base64
+    const isBase64Image = (content: string): boolean => {
+      return (
+        content.length > 1000 &&
+        /^[A-Za-z0-9+/]+={0,2}$/.test(content.substring(0, 100))
+      );
+    };
+
+    const isBase64Audio = (content: string): boolean => {
+      return (
+        content.length > 500 &&
+        /^[A-Za-z0-9+/]+={0,2}$/.test(content.substring(0, 100))
+      );
+    };
+
+    // Si no hay mediaType pero el contenido parece ser base64, detectar el tipo
+    if (!message.mediaType && message.content.length > 500) {
+      // Intentar detectar si es imagen (contenido más largo)
+      if (isBase64Image(message.content)) {
+        const imageUrl = `data:image/jpeg;base64,${message.content}`;
+        return (
+          <div className="chat-media">
+            <img
+              src={imageUrl}
+              alt="Imagen compartida"
+              className="chat-image"
+              onClick={() => onImageClick(imageUrl)}
+            />
+            <p className="chat-media__caption">Imagen recibida</p>
+          </div>
+        );
+      }
+
+      // Intentar detectar si es audio (contenido medio)
+      if (isBase64Audio(message.content)) {
+        const audioUrl = `data:audio/ogg;base64,${message.content}`;
+        return (
+          <div className="chat-media">
+            <audio controls className="chat-audio">
+              <source src={audioUrl} type="audio/ogg" />
+              <source
+                src={`data:audio/mpeg;base64,${message.content}`}
+                type="audio/mpeg"
+              />
+              Tu navegador no soporta audio.
+            </audio>
+            <p className="chat-media__caption">Audio recibido</p>
+          </div>
+        );
+      }
+    }
+
     if (!message.mediaType || !message.mediaUrl) {
       return <p>{message.content}</p>;
     }

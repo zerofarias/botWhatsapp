@@ -21,6 +21,7 @@ model Area {
   conversations Conversation[]
   contacts      Contact[]
   workingHours  WorkingHour[]
+  quickReplies  QuickReply[]
 
   @@map("areas")
 }
@@ -46,6 +47,7 @@ model User {
   closedChats        Conversation[]      @relation("ConversationClosedBy")
   conversationEvents ConversationEvent[]
   messages           Message[]
+  quickReplies       QuickReply[]
 
   @@map("users")
 }
@@ -177,7 +179,7 @@ model ConversationEvent {
 model Session {
   sid     String    @id @map("sid")
   expires DateTime?
-  data    String?
+  data    String?   @db.Text
 
   @@map("sessions")
 }
@@ -253,4 +255,24 @@ enum ConversationEventType {
   STATUS_CHANGE @map("status_change")
   BOT_TOGGLE    @map("bot_toggle")
   NOTE          @map("note")
+}
+
+model QuickReply {
+  id        Int      @id @default(autoincrement())
+  title     String   // "Saludo Inicial", "Info Horarios", etc.
+  content   String   @db.Text // El mensaje completo
+  shortcut  String?  @unique // "/saludo", "/horarios", etc.
+  areaId    Int?     @map("area_id") // Si es específico de un área
+  userId    Int?     @map("user_id") // Si es personal del operador
+  isGlobal  Boolean  @default(false) @map("is_global") // Disponible para todos
+  order     Int      @default(0) // Orden de visualización
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  area Area? @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([areaId])
+  @@index([userId])
+  @@map("quick_replies")
 }

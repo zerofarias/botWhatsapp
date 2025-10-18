@@ -103,8 +103,31 @@ export async function login(req: Request, res: Response) {
   req.session.user = sessionUser;
   req.user = sessionUser;
 
+  // Asegurarse de que la sesión se guarde antes de responder
+  await new Promise<void>((resolve, reject) => {
+    req.session.save((err) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+
   return res.json({
-    user: publicUser,
+    user: {
+      id: publicUser.id,
+      name: publicUser.name,
+      username: publicUser.username,
+      email: publicUser.email,
+      role: publicUser.role,
+      defaultAreaId: publicUser.defaultAreaId,
+      isActive: publicUser.isActive,
+      lastLoginAt: publicUser.lastLoginAt,
+      createdAt: publicUser.createdAt,
+      updatedAt: publicUser.updatedAt,
+      areas: publicUser.areas,
+    },
   });
 }
 
@@ -138,7 +161,21 @@ export async function currentUser(req: Request, res: Response) {
   req.session.user = sessionUser;
   req.user = sessionUser;
 
-  return res.json({ user });
+  return res.json({
+    user: {
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      defaultAreaId: user.defaultAreaId,
+      isActive: user.isActive,
+      lastLoginAt: user.lastLoginAt,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      areas: user.areas,
+    },
+  });
 }
 
 export async function register(req: Request, res: Response) {

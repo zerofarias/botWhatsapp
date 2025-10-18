@@ -8,6 +8,7 @@ import { areaRouter } from './areas.js';
 import { conversationRouter } from './conversations.js';
 import { contactRouter } from './contacts.js';
 import { workingHourRouter } from './working-hours.js';
+import { quickRepliesRouter } from './quick-replies.js';
 
 export const apiRouter = Router();
 
@@ -20,3 +21,4 @@ apiRouter.use('/areas', areaRouter);
 apiRouter.use('/conversations', conversationRouter);
 apiRouter.use('/contacts', contactRouter);
 apiRouter.use('/working-hours', workingHourRouter);
+apiRouter.use('/quick-replies', quickRepliesRouter);

@@ -29,6 +29,7 @@ import {
   formatAfterHoursMessage,
 } from '../utils/working-hours.js';
 import { logSystem } from '../utils/log-system.js';
+import { processBase64Content } from '../utils/media-processor.js';
 import {
   saveMediaBuffer,
   getMediaTypeFromMimetype,
@@ -97,6 +98,30 @@ function normalizeText(value: string) {
 function extractNumericPrefix(value: string) {
   const match = value.match(/^\d+/);
   return match ? match[0] : null;
+}
+
+function getExtensionForType(messageType: string): string {
+  const extensions: Record<string, string> = {
+    image: '.jpg',
+    video: '.mp4',
+    audio: '.mp3',
+    ptt: '.ogg',
+    document: '.pdf',
+    sticker: '.webp',
+  };
+  return extensions[messageType] || '.bin';
+}
+
+function getMediaTypeForMessage(messageType: string): string {
+  const types: Record<string, string> = {
+    image: 'image',
+    video: 'video',
+    audio: 'audio',
+    ptt: 'audio',
+    document: 'document',
+    sticker: 'image',
+  };
+  return types[messageType] || 'document';
 }
 
 async function handleMediaMessage(
@@ -191,9 +216,7 @@ function getDefaultMimetype(messageType: string): string {
   return defaultMimetypes[messageType] || 'application/octet-stream';
 }
 
-async function handleLocationMessage(
-  message: Message
-): Promise<{
+async function handleLocationMessage(message: Message): Promise<{
   mediaType: string;
   latitude?: number;
   longitude?: number;
@@ -467,15 +490,58 @@ export async function broadcastMessageRecord(
   rooms.forEach((room) => emitToRoom(io, room, 'message:new', payload));
 }
 
+function extractPhoneNumber(whatsappId: string): string {
+  // Remover el sufijo @c.us y otros formatos de WhatsApp
+  return whatsappId.replace(/@c\.us$|@g\.us$|@s\.whatsapp\.net$/g, '');
+}
+
+async function getContactInfoFromWhatsApp(
+  client: Whatsapp,
+  phoneNumber: string
+): Promise<{ name: string | null; number: string }> {
+  const cleanNumber = extractPhoneNumber(phoneNumber);
+
+  try {
+    // Intentar obtener información del contacto desde WhatsApp
+    const contactInfo = await client.getContact(phoneNumber);
+    if (contactInfo) {
+      const contactName =
+        contactInfo.name ||
+        contactInfo.pushname ||
+        contactInfo.shortName ||
+        null;
+      console.log(
+        `[WPP] Contact info for ${cleanNumber}: name="${contactName}"`
+      );
+      return { name: contactName, number: cleanNumber };
+    }
+  } catch (error) {
+    console.warn(`[WPP] Could not get contact info for ${cleanNumber}:`, error);
+  }
+
+  return { name: null, number: cleanNumber };
+}
+
 async function ensureConversation(
   contactNumber: string,
-  io: SocketIOServer | undefined
+  io: SocketIOServer | undefined,
+  client?: Whatsapp
 ) {
+  // Extraer número limpio y obtener información del contacto desde WhatsApp
+  const cleanNumber = extractPhoneNumber(contactNumber);
+  let contactName: string | null = null;
+
+  if (client) {
+    const contactInfo = await getContactInfoFromWhatsApp(client, contactNumber);
+    contactName = contactInfo.name;
+  }
+
   const { contact, created: contactCreated } = await findOrCreateContactByPhone(
-    contactNumber
+    cleanNumber,
+    { name: contactName }
   );
 
-  const existing = await findOpenConversationByPhone(contactNumber);
+  const existing = await findOpenConversationByPhone(cleanNumber);
   if (existing) {
     let conversation = existing;
     const updates: Prisma.ConversationUpdateInput = {};
@@ -508,7 +574,7 @@ async function ensureConversation(
   }
 
   const created = await createConversation({
-    userPhone: contactNumber,
+    userPhone: cleanNumber,
     contactName: contact.name,
     contactId: contact.id,
     status: 'PENDING',
@@ -562,7 +628,7 @@ async function handleIncomingMessage(
   const body = message.body ?? message.caption ?? '';
   const normalizedBody = normalizeText(body);
 
-  const ensureResult = await ensureConversation(message.from, io);
+  const ensureResult = await ensureConversation(message.from, io, client);
   let conversation = ensureResult.conversation;
   const contact = ensureResult.contact;
   const conversationId = BigInt(conversation.id);
@@ -582,44 +648,110 @@ async function handleIncomingMessage(
   });
   const primaryMenu = buildPrimaryMenuMessage(flows);
 
-  // Manejar contenido multimedia
-  let mediaInfo: { mediaUrl: string; mediaType: string } | null = null;
-  let locationInfo: {
-    mediaType: string;
-    latitude?: number;
-    longitude?: number;
-  } | null = null;
+  // Procesar contenido multimedia
+  let finalContent = body;
+  let mediaUrl: string | null = null;
+  let mediaType: string | null = null;
 
   try {
-    mediaInfo = await handleMediaMessage(client, message);
-    if (!mediaInfo) {
-      locationInfo = await handleLocationMessage(message);
+    const messageAny = message as any;
+    const messageType = messageAny.type;
+
+    console.log(
+      `[WPP] Message type: ${messageType}, hasMedia: ${messageAny.hasMedia}`
+    );
+
+    // Procesar multimedia directo de WhatsApp
+    if (
+      ['image', 'video', 'audio', 'ptt', 'document', 'sticker'].includes(
+        messageType
+      )
+    ) {
+      console.log(`[WPP] Processing ${messageType} multimedia message`);
+
+      try {
+        // Intentar descargar el media
+        const mediaData = await client.downloadMedia(message);
+        console.log(
+          `[WPP] Downloaded media, length: ${mediaData ? mediaData.length : 0}`
+        );
+
+        if (mediaData && mediaData.length > 100) {
+          const processed = await processBase64Content(mediaData);
+          if (processed) {
+            mediaUrl = processed.mediaUrl;
+            mediaType = processed.mediaType;
+            finalContent =
+              body ||
+              `${messageType === 'ptt' ? 'audio' : messageType} compartido`;
+            console.log(
+              `[WPP] Successfully processed ${messageType} as ${mediaType}: ${mediaUrl}`
+            );
+          } else {
+            console.warn(`[WPP] Failed to process base64 for ${messageType}`);
+          }
+        } else {
+          console.warn(`[WPP] No media data or too small for ${messageType}`);
+        }
+      } catch (downloadError) {
+        console.error(
+          `[WPP] Error downloading media for ${messageType}:`,
+          downloadError
+        );
+
+        // Fallback: intentar procesar el body como base64
+        if (body && body.length > 100) {
+          console.log(
+            `[WPP] Trying fallback base64 processing for ${messageType}`
+          );
+          const processed = await processBase64Content(body);
+          if (processed) {
+            mediaUrl = processed.mediaUrl;
+            mediaType = processed.mediaType;
+            finalContent = `${
+              messageType === 'ptt' ? 'audio' : messageType
+            } compartido`;
+            console.log(
+              `[WPP] Fallback successful for ${messageType}: ${mediaUrl}`
+            );
+          }
+        }
+      }
+    }
+
+    // Detectar ubicación
+    else if (messageType === 'location' && messageAny.lat && messageAny.lng) {
+      mediaType = 'location';
+      finalContent = `📍 Ubicación: ${messageAny.lat}, ${messageAny.lng}`;
+      console.log(`[WPP] Location message processed`);
+    }
+
+    // Fallback: detectar si el contenido del body es base64
+    else if (!mediaType && body && body.length > 1000) {
+      console.log(`[WPP] Checking if body content is base64...`);
+      const mediaInfo = await processBase64Content(body);
+      if (mediaInfo) {
+        mediaUrl = mediaInfo.mediaUrl;
+        mediaType = mediaInfo.mediaType;
+        finalContent = `${mediaType} compartido`;
+        console.log(
+          `[WPP] Body content processed as base64 ${mediaType}: ${mediaUrl}`
+        );
+      }
     }
   } catch (error) {
-    console.error('[WPP] Error processing multimedia:', error);
+    console.error('[WPP] Error in multimedia processing:', error);
   }
 
-  const messageData: any = {
+  const record = await createConversationMessage({
     conversationId,
     senderType: 'CONTACT',
-    content: body,
+    content: finalContent,
+    mediaUrl,
+    mediaType,
     externalId,
     createdAt: receivedAt,
-  };
-
-  // Agregar información multimedia si existe
-  if (mediaInfo) {
-    messageData.mediaUrl = mediaInfo.mediaUrl;
-    messageData.mediaType = mediaInfo.mediaType;
-  } else if (locationInfo) {
-    messageData.mediaType = locationInfo.mediaType;
-    if (locationInfo.latitude && locationInfo.longitude) {
-      messageData.content = `📍 Ubicación: ${locationInfo.latitude}, ${locationInfo.longitude}`;
-      // Para ubicaciones, podríamos guardar las coordenadas en metadata o en campos específicos
-    }
-  }
-
-  const record = await createConversationMessage(messageData);
+  });
 
   const touchData: Prisma.ConversationUpdateInput = {
     lastActivity: record.createdAt,
