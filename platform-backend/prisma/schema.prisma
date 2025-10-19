@@ -139,6 +139,7 @@ model Conversation {
   closedById       Int?               @map("closed_by")
   createdAt        DateTime           @default(now()) @map("created_at")
   updatedAt        DateTime           @updatedAt @map("updated_at")
+  currentFlowNodeId Int?              @map("current_flow_node_id")
 
   area       Area?               @relation(fields: [areaId], references: [id])
   assignedTo User?               @relation("ConversationAssignedTo", fields: [assignedToId], references: [id])

@@ -2,6 +2,31 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 
 type FlowType = 'MESSAGE' | 'MENU' | 'ACTION' | 'REDIRECT' | 'END';
+type FlowMessageKind = 'TEXT' | 'BUTTONS' | 'LIST';
+
+interface FlowOption {
+  id: string;
+  label: string;
+  trigger: string;
+}
+
+interface ButtonSettings {
+  title?: string;
+  footer?: string;
+}
+
+interface ListSettings {
+  buttonText?: string;
+  title?: string;
+  description?: string;
+}
+
+interface FlowMetadata {
+  messageKind: FlowMessageKind;
+  options: FlowOption[];
+  buttonSettings?: ButtonSettings;
+  listSettings?: ListSettings;
+}
 
 type FlowNode = {
   id: number;
@@ -14,6 +39,7 @@ type FlowNode = {
   orderIndex: number;
   isActive: boolean;
   children: FlowNode[];
+  metadata: any | null;
 };
 
 type AreaItem = {
@@ -32,6 +58,7 @@ type FlowFormState = {
   areaId: number | null;
   orderIndex: number;
   isActive: boolean;
+  metadata: FlowMetadata;
 };
 
 const initialFormState: FlowFormState = {
@@ -44,6 +71,12 @@ const initialFormState: FlowFormState = {
   areaId: null,
   orderIndex: 0,
   isActive: true,
+  metadata: {
+    messageKind: 'TEXT',
+    options: [],
+    buttonSettings: { title: '', footer: '' },
+    listSettings: { buttonText: '', title: '', description: '' },
+  },
 };
 
 const FLOW_TYPE_OPTIONS: {
@@ -51,24 +84,37 @@ const FLOW_TYPE_OPTIONS: {
   label: string;
   description: string;
 }[] = [
-  { value: 'MESSAGE', label: 'Mensaje', description: 'Envía un texto simple' },
+  { value: 'MESSAGE', label: 'Mensaje', description: 'Envia un texto simple' },
   {
     value: 'MENU',
-    label: 'Menú',
-    description: 'Presenta opciones numéricas al contacto',
+    label: 'Menu',
+    description: 'Presenta opciones numericas al contacto',
   },
   {
     value: 'ACTION',
-    label: 'Acción',
-    description: 'Ejecuta lógica personalizada (placeholder)',
+    label: 'Accion',
+    description: 'Ejecuta logica personalizada (placeholder)',
   },
   {
     value: 'REDIRECT',
-    label: 'Derivación',
-    description: 'Asigna la conversación a un área/operador',
+    label: 'Agente',
+    description: 'Deriva la conversacion a un area u operador',
   },
-  { value: 'END', label: 'Finalización', description: 'Cierra el flujo' },
+  { value: 'END', label: 'Fin', description: 'Finaliza el flujo' },
 ];
+
+function extractBuilderMetadata(metadata: any): Partial<FlowMetadata> {
+  if (!metadata?.builder) {
+    return {};
+  }
+  const builder = metadata.builder;
+  return {
+    messageKind: builder.messageType || 'TEXT',
+    options: builder.options || [],
+    buttonSettings: builder.buttonSettings || {},
+    listSettings: builder.listSettings || {},
+  };
+}
 
 export default function FlowsPage() {
   const [flows, setFlows] = useState<FlowNode[]>([]);
@@ -103,6 +149,7 @@ export default function FlowsPage() {
   }, []);
 
   const handleEdit = (node: FlowNode) => {
+    const builderMeta = extractBuilderMetadata(node.metadata);
     setFormState({
       id: node.id,
       name: node.name,
@@ -113,6 +160,16 @@ export default function FlowsPage() {
       areaId: node.areaId,
       orderIndex: node.orderIndex,
       isActive: node.isActive,
+      metadata: {
+        messageKind: builderMeta.messageKind ?? 'TEXT',
+        options: builderMeta.options ?? [],
+        buttonSettings: builderMeta.buttonSettings ?? { title: '', footer: '' },
+        listSettings: builderMeta.listSettings ?? {
+          buttonText: '',
+          title: '',
+          description: '',
+        },
+      },
     });
   };
 
@@ -132,7 +189,7 @@ export default function FlowsPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await api.post('/flows', {
+      const payload = {
         id: formState.id ?? undefined,
         name: formState.name,
         type: formState.type,
@@ -142,7 +199,16 @@ export default function FlowsPage() {
         areaId: formState.areaId,
         orderIndex: formState.orderIndex,
         isActive: formState.isActive,
-      });
+        metadata: {
+          builder: {
+            messageType: formState.metadata.messageKind,
+            options: formState.metadata.options,
+            buttonSettings: formState.metadata.buttonSettings,
+            listSettings: formState.metadata.listSettings,
+          },
+        },
+      };
+      await api.post('/flows', payload);
       handleResetForm();
       void fetchData();
     } catch (err) {
@@ -416,6 +482,8 @@ function FlowTreeItem({
   onDelete: (id: number) => void;
 }) {
   const area = node.areaId ? areaMap.get(node.areaId) : null;
+  const builderMeta = extractBuilderMetadata(node.metadata);
+
   return (
     <div
       style={{
@@ -438,9 +506,25 @@ function FlowTreeItem({
       >
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <strong>{node.name}</strong>
-          <span style={{ color: '#64748b', fontSize: '0.85rem' }}>
-            {flowTypeLabel(node.type)}
-          </span>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {builderMeta.messageKind && builderMeta.messageKind !== 'TEXT' && (
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  fontWeight: 500,
+                  background: '#e0f2fe',
+                  color: '#0ea5e9',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                }}
+              >
+                {builderMeta.messageKind}
+              </span>
+            )}
+            <span style={{ color: '#64748b', fontSize: '0.85rem' }}>
+              {flowTypeLabel(node.type)}
+            </span>
+          </div>
         </div>
         {node.trigger && (
           <div style={{ fontSize: '0.85rem', color: '#475569' }}>

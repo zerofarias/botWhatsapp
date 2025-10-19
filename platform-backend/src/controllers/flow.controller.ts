@@ -146,10 +146,27 @@ type BuilderOption = {
   targetId?: string | null;
 };
 
+type GraphCondition = {
+  id: string;
+  label: string;
+  match: string;
+  matchMode: 'EXACT' | 'CONTAINS' | 'REGEX';
+  targetId: string | null;
+};
+
+type BuilderCondition = {
+  id?: string;
+  label?: string;
+  match?: string;
+  matchMode?: string;
+  targetId?: string | null;
+};
+
 type BuilderMetadata = {
   reactId?: string;
   position?: Record<string, unknown> | null;
   options?: BuilderOption[];
+  conditions?: BuilderCondition[];
   messageType?: string;
   buttonTitle?: string | null;
   buttonFooter?: string | null;
@@ -207,6 +224,39 @@ function extractBuilderMetadata(value: unknown): BuilderMetadata | null {
     });
   });
 
+  const conditionsRaw = Array.isArray(builder.conditions)
+    ? (builder.conditions as unknown[])
+    : [];
+
+  const conditions: BuilderCondition[] = [];
+  conditionsRaw.forEach((entry) => {
+    const condition = asRecord(entry);
+    if (!condition) return;
+    conditions.push({
+      id:
+        typeof condition.id === 'string' && condition.id.length > 0
+          ? condition.id
+          : undefined,
+      label:
+        typeof condition.label === 'string' && condition.label.length > 0
+          ? condition.label
+          : undefined,
+      match:
+        typeof condition.match === 'string' && condition.match.length > 0
+          ? condition.match
+          : undefined,
+      matchMode:
+        typeof condition.matchMode === 'string' &&
+        condition.matchMode.length > 0
+          ? condition.matchMode
+          : undefined,
+      targetId:
+        typeof condition.targetId === 'string' && condition.targetId.length > 0
+          ? condition.targetId
+          : undefined,
+    });
+  });
+
   const messageType =
     typeof builder.messageType === 'string' ? builder.messageType : undefined;
   const buttonTitle = sanitizeStringValue(builder.buttonTitle);
@@ -222,6 +272,7 @@ function extractBuilderMetadata(value: unknown): BuilderMetadata | null {
         : undefined,
     position,
     options,
+    conditions,
     messageType,
     buttonTitle,
     buttonFooter,
@@ -275,6 +326,27 @@ function buildGraphOptionFromBuilder(option: BuilderOption): GraphOption {
   };
 }
 
+function buildGraphConditionFromBuilder(
+  condition: BuilderCondition
+): GraphCondition {
+  const label = sanitizeStringValue(condition.label) ?? '';
+  const match = sanitizeStringValue(condition.match) ?? '';
+  const matchModeRaw = sanitizeStringValue(condition.matchMode) ?? 'EXACT';
+  const matchMode =
+    matchModeRaw &&
+    ['EXACT', 'CONTAINS', 'REGEX'].includes(matchModeRaw.toUpperCase())
+      ? (matchModeRaw.toUpperCase() as 'EXACT' | 'CONTAINS' | 'REGEX')
+      : 'EXACT';
+
+  return {
+    id: condition.id ?? crypto.randomUUID(),
+    label: label || match,
+    match,
+    matchMode,
+    targetId: condition.targetId ?? null,
+  };
+}
+
 function normalizeTriggerValue(value: string | null | undefined): string {
   return (value ?? '').trim().toLowerCase();
 }
@@ -286,7 +358,9 @@ type GraphNodePayload = {
     message?: unknown;
     type?: unknown;
     options?: unknown;
+    conditions?: unknown;
     flowId?: unknown;
+    areaId?: unknown;
     isActive?: unknown;
     messageKind?: unknown;
     buttonSettings?: unknown;
@@ -326,6 +400,42 @@ function sanitizeOption(raw: unknown): GraphOption | null {
       typeof option.targetId === 'string'
         ? option.targetId
         : option.targetId === null
+        ? null
+        : null,
+  };
+}
+
+function sanitizeCondition(raw: unknown): GraphCondition | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const condition = raw as Record<string, unknown>;
+  const id =
+    typeof condition.id === 'string'
+      ? condition.id
+      : condition.id !== undefined
+      ? String(condition.id)
+      : null;
+  if (!id) return null;
+
+  const match =
+    typeof condition.match === 'string' ? condition.match.trim() : '';
+  const matchModeRaw =
+    typeof condition.matchMode === 'string'
+      ? condition.matchMode.trim().toUpperCase()
+      : '';
+  const matchMode: 'EXACT' | 'CONTAINS' | 'REGEX' =
+    matchModeRaw === 'CONTAINS' || matchModeRaw === 'REGEX'
+      ? (matchModeRaw as 'CONTAINS' | 'REGEX')
+      : 'EXACT';
+
+  return {
+    id,
+    label: typeof condition.label === 'string' ? condition.label.trim() : '',
+    match,
+    matchMode,
+    targetId:
+      typeof condition.targetId === 'string'
+        ? condition.targetId
+        : condition.targetId === null
         ? null
         : null,
   };
@@ -374,6 +484,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
     const transactionResult = await prisma.$transaction(async (tx) => {
       const nodeIdToFlowId = new Map<string, number>();
       const sanitizedOptionsByNode = new Map<string, GraphOption[]>();
+      const sanitizedConditionsByNode = new Map<string, GraphCondition[]>();
       const touchedFlowIds = new Set<number>();
       const responseNodes: Array<{ reactId: string; flowId: number }> = [];
       const incomingTriggerMap = new Map<string, Set<string>>();
@@ -390,6 +501,23 @@ export async function saveFlowGraph(req: Request, res: Response) {
               .map(sanitizeOption)
               .filter((value): value is GraphOption => Boolean(value))
           : [];
+
+        const conditions = Array.isArray(data.conditions)
+          ? (data.conditions as unknown[])
+              .map(sanitizeCondition)
+              .filter((value): value is GraphCondition => Boolean(value))
+          : [];
+
+        const areaIdRaw =
+          typeof (data as Record<string, unknown>).areaId === 'number'
+            ? (data as Record<string, unknown>).areaId
+            : typeof (data as Record<string, unknown>).areaId === 'string'
+            ? Number((data as Record<string, unknown>).areaId)
+            : null;
+        const areaId =
+          typeof areaIdRaw === 'number' && Number.isFinite(areaIdRaw)
+            ? areaIdRaw
+            : null;
 
         const triggerValue = null;
 
@@ -442,6 +570,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
             width: normalized.width ?? null,
             height: normalized.height ?? null,
             options,
+            conditions,
             messageType,
             buttonTitle: buttonTitle ?? null,
             buttonFooter: buttonFooter ?? null,
@@ -481,6 +610,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
               type: flowType,
               orderIndex: 0,
               isActive,
+              areaId: areaId ?? null,
               metadata: metadataPayload,
             },
             select: { id: true },
@@ -496,6 +626,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
               type: flowType,
               orderIndex: 0,
               metadata: metadataPayload,
+              areaId: areaId ?? null,
               isActive,
               createdBy: req.user!.id,
             },
@@ -506,6 +637,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
 
         nodeIdToFlowId.set(nodeId, recordId);
         sanitizedOptionsByNode.set(nodeId, options);
+        sanitizedConditionsByNode.set(nodeId, conditions);
         touchedFlowIds.add(recordId);
         responseNodes.push({ reactId: nodeId, flowId: recordId });
         if (!incomingTriggerMap.has(nodeId)) {
@@ -523,13 +655,18 @@ export async function saveFlowGraph(req: Request, res: Response) {
         });
       }
 
-      const optionLookup = new Map<
+      const connectionLookup = new Map<
         string,
-        { option: GraphOption; nodeId: string }
+        { nodeId: string; option?: GraphOption; condition?: GraphCondition }
       >();
       sanitizedOptionsByNode.forEach((options, nodeId) => {
         options.forEach((option) => {
-          optionLookup.set(option.id, { option, nodeId });
+          connectionLookup.set(option.id, { option, nodeId });
+        });
+      });
+      sanitizedConditionsByNode.forEach((conditions, nodeId) => {
+        conditions.forEach((condition) => {
+          connectionLookup.set(condition.id, { condition, nodeId });
         });
       });
 
@@ -548,20 +685,25 @@ export async function saveFlowGraph(req: Request, res: Response) {
 
         let trigger = '';
 
-        if (
-          normalized.data &&
-          typeof normalized.data === 'object' &&
-          'optionId' in normalized.data &&
-          typeof (normalized.data as Record<string, unknown>).optionId ===
-            'string'
-        ) {
-          const lookup = optionLookup.get(
-            (normalized.data as Record<string, string>).optionId
-          );
-          if (lookup?.option?.trigger) {
-            trigger = lookup.option.trigger.trim();
-          } else if (lookup?.option?.label) {
-            trigger = lookup.option.label.trim();
+        if (normalized.data && typeof normalized.data === 'object') {
+          const dataRecord = normalized.data as Record<string, unknown>;
+          const connectionId =
+            typeof dataRecord.optionId === 'string'
+              ? dataRecord.optionId
+              : typeof dataRecord.conditionId === 'string'
+              ? dataRecord.conditionId
+              : null;
+          if (connectionId) {
+            const lookup = connectionLookup.get(connectionId);
+            if (lookup?.option?.trigger) {
+              trigger = lookup.option.trigger.trim();
+            } else if (lookup?.option?.label) {
+              trigger = lookup.option.label.trim();
+            } else if (lookup?.condition?.match) {
+              trigger = lookup.condition.match.trim();
+            } else if (lookup?.condition?.label) {
+              trigger = lookup.condition.label.trim();
+            }
           }
         }
 
@@ -694,6 +836,8 @@ export async function getFlowGraph(req: Request, res: Response) {
         message: string;
         type: FlowType;
         options: GraphOption[];
+        conditions: GraphCondition[];
+        areaId: number | null;
         flowId: number;
         messageKind: 'TEXT' | 'BUTTONS' | 'LIST';
         buttonSettings?: { title?: string; footer?: string };
@@ -709,7 +853,7 @@ export async function getFlowGraph(req: Request, res: Response) {
       source: string;
       target: string;
       label: string;
-      data?: { optionId?: string };
+      data?: { optionId?: string; conditionId?: string };
     }> = [];
 
     const flowIdToReactId = new Map<number, string>();
@@ -740,6 +884,11 @@ export async function getFlowGraph(req: Request, res: Response) {
       const options =
         builderMeta?.options?.map((option) =>
           buildGraphOptionFromBuilder(option)
+        ) ?? [];
+
+      const conditions =
+        builderMeta?.conditions?.map((condition) =>
+          buildGraphConditionFromBuilder(condition)
         ) ?? [];
 
       const messageTypeRaw =
@@ -782,6 +931,8 @@ export async function getFlowGraph(req: Request, res: Response) {
             message: flow.message,
             type: flow.type,
             options,
+            conditions,
+            areaId: flow.areaId ?? null,
             flowId: flow.id,
             messageKind,
             ...(buttonSettings ? { buttonSettings } : {}),
@@ -806,6 +957,12 @@ export async function getFlowGraph(req: Request, res: Response) {
           option,
         ])
       );
+      const conditionMap = new Map(
+        nodes[nodeIndex].data.conditions.map((condition) => [
+          normalizeTriggerValue(condition.match),
+          condition,
+        ])
+      );
 
       flow.outgoingConnections.forEach((connection) => {
         const targetReactId = flowIdToReactId.get(connection.toId);
@@ -813,17 +970,9 @@ export async function getFlowGraph(req: Request, res: Response) {
 
         const normalizedTrigger = normalizeTriggerValue(connection.trigger);
         let option = optionMap.get(normalizedTrigger);
+        let condition = conditionMap.get(normalizedTrigger);
 
-        if (!option) {
-          option = {
-            id: crypto.randomUUID(),
-            label: connection.trigger ?? '',
-            trigger: connection.trigger ?? '',
-            targetId: targetReactId,
-          };
-          nodes[nodeIndex].data.options.push(option);
-          optionMap.set(normalizedTrigger, option);
-        } else {
+        if (option) {
           option.targetId = targetReactId;
           if (!option.label) {
             option.label = connection.trigger ?? '';
@@ -831,14 +980,39 @@ export async function getFlowGraph(req: Request, res: Response) {
           if (!option.trigger) {
             option.trigger = connection.trigger ?? '';
           }
+        } else if (condition) {
+          condition.targetId = targetReactId;
+          if (!condition.label) {
+            condition.label = connection.trigger ?? '';
+          }
+          if (!condition.match) {
+            condition.match = connection.trigger ?? '';
+          }
+        } else {
+          condition = {
+            id: crypto.randomUUID(),
+            label: connection.trigger ?? '',
+            match: connection.trigger ?? '',
+            matchMode: 'EXACT',
+            targetId: targetReactId,
+          };
+          nodes[nodeIndex].data.conditions.push(condition);
+          conditionMap.set(normalizedTrigger, condition);
         }
+
+        const edgeData =
+          option && option.id
+            ? { optionId: option.id }
+            : condition && condition.id
+            ? { conditionId: condition.id }
+            : undefined;
 
         edges.push({
           id: `edge-${flow.id}-${connection.toId}-${connection.id}`,
           source: sourceReactId,
           target: targetReactId,
           label: connection.trigger ?? '',
-          data: option.id ? { optionId: option.id } : undefined,
+          data: edgeData,
         });
       });
     });

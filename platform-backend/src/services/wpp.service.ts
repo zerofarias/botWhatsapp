@@ -29,9 +29,10 @@ import {
   formatAfterHoursMessage,
 } from '../utils/working-hours.js';
 import { logSystem } from '../utils/log-system.js';
-import { processBase64Content } from '../utils/media-processor.js';
+import { isBase64String } from '../utils/media-processor.js';
 import {
   saveMediaBuffer,
+  saveBase64File,
   getMediaTypeFromMimetype,
   type MediaFile,
 } from './media.service.js';
@@ -40,6 +41,7 @@ type SessionCache = {
   client: Whatsapp;
   status: BotSessionStatus;
   lastQr: string | null;
+  lastQrAscii: string | null;
   connectedAt: Date | null;
   paused: boolean;
 };
@@ -139,6 +141,90 @@ function getMediaTypeForMessage(messageType: string): string {
     sticker: 'image',
   };
   return types[messageType] || 'document';
+}
+
+function normalizeMediaCategory(messageType: unknown): string {
+  if (typeof messageType !== 'string') {
+    return 'document';
+  }
+  const normalized = messageType.toLowerCase();
+  if (normalized === 'ptt' || normalized === 'voice') return 'audio';
+  if (normalized === 'sticker') return 'image';
+  if (
+    ['image', 'video', 'audio', 'document', 'location'].includes(normalized)
+  ) {
+    return normalized;
+  }
+  return 'document';
+}
+
+function buildMediaDescription(
+  messageType: unknown,
+  filename?: string | null,
+  caption?: string | null
+): string {
+  if (caption && caption.trim()) {
+    return caption.trim();
+  }
+
+  const type = normalizeMediaCategory(messageType);
+  const labels: Record<string, string> = {
+    image: 'Imagen recibida',
+    video: 'Video recibido',
+    audio: 'Audio recibido',
+    document: 'Documento recibido',
+    location: 'Ubicacion recibida',
+  };
+  const base = labels[type] ?? 'Archivo recibido';
+
+  if (filename && filename.trim()) {
+    return `${base}: ${filename.trim()}`;
+  }
+
+  return base;
+}
+
+function buildLocationDescription(lat: number, lng: number): string {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return 'Ubicacion recibida';
+  }
+  return `Ubicacion: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+}
+
+function resolveMapsUrl(lat: number, lng: number): string | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+  return `https://www.google.com/maps?q=${lat},${lng}`;
+}
+
+async function persistBase64Media(
+  base64: string,
+  messageType: unknown,
+  options: { mimetype?: string | null; filename?: string | null } = {}
+): Promise<{ url: string; mediaType: string; mimetype: string } | null> {
+  if (!base64 || base64.length < 40) {
+    return null;
+  }
+
+  try {
+    const category = normalizeMediaCategory(messageType);
+    const stored = await saveBase64File({
+      base64,
+      mimetype: options.mimetype ?? undefined,
+      originalName: options.filename ?? undefined,
+      subdirectory: category,
+    });
+
+    return {
+      url: stored.url,
+      mediaType: getMediaTypeFromMimetype(stored.mimetype),
+      mimetype: stored.mimetype,
+    };
+  } catch (error) {
+    console.error('[WPP] Failed to persist base64 media:', error);
+    return null;
+  }
 }
 
 async function handleMediaMessage(
@@ -903,98 +989,135 @@ async function handleIncomingMessage(
   });
   const primaryMenu = buildPrimaryMenuMessage(flows);
 
-  // Procesar contenido multimedia
-  let finalContent = body;
+  const caption =
+    typeof messageAny?.caption === 'string' && messageAny.caption.trim().length
+      ? messageAny.caption.trim()
+      : null;
+  const bodyIsBase64 = isBase64String(body);
+  const messageTypeRaw =
+    typeof messageAny.type === 'string' ? messageAny.type : '';
+  const messageFilename =
+    typeof messageAny.filename === 'string' && messageAny.filename.trim().length
+      ? messageAny.filename.trim()
+      : null;
+  const messageMimetype =
+    typeof messageAny.mimetype === 'string' && messageAny.mimetype.trim().length
+      ? messageAny.mimetype.trim()
+      : null;
+
+  let finalContent = caption ?? (bodyIsBase64 ? '' : body);
   let mediaUrl: string | null = null;
   let mediaType: string | null = null;
 
   try {
-    const messageType = messageAny.type;
-
     console.log(
-      `[WPP] Message type: ${messageType}, hasMedia: ${messageAny.hasMedia}`
+      `[WPP] Message type: ${messageTypeRaw}, hasMedia: ${messageAny.hasMedia}`
     );
 
-    // Procesar multimedia directo de WhatsApp
     if (
       ['image', 'video', 'audio', 'ptt', 'document', 'sticker'].includes(
-        messageType
+        messageTypeRaw
       )
     ) {
-      console.log(`[WPP] Processing ${messageType} multimedia message`);
-
       try {
-        // Intentar descargar el media
         const mediaData = await client.downloadMedia(message);
-        console.log(
-          `[WPP] Downloaded media, length: ${mediaData ? mediaData.length : 0}`
-        );
-
-        if (mediaData && mediaData.length > 100) {
-          const processed = await processBase64Content(mediaData);
-          if (processed) {
-            mediaUrl = processed.mediaUrl;
-            mediaType = processed.mediaType;
-            finalContent =
-              body ||
-              `${messageType === 'ptt' ? 'audio' : messageType} compartido`;
-            console.log(
-              `[WPP] Successfully processed ${messageType} as ${mediaType}: ${mediaUrl}`
+        if (mediaData && mediaData.length > 50) {
+          const stored = await persistBase64Media(mediaData, messageTypeRaw, {
+            mimetype: messageMimetype,
+            filename: messageFilename,
+          });
+          if (stored) {
+            mediaUrl = stored.url;
+            mediaType = stored.mediaType;
+            finalContent = buildMediaDescription(
+              messageTypeRaw,
+              messageFilename,
+              caption
             );
-          } else {
-            console.warn(`[WPP] Failed to process base64 for ${messageType}`);
           }
-        } else {
-          console.warn(`[WPP] No media data or too small for ${messageType}`);
         }
       } catch (downloadError) {
         console.error(
-          `[WPP] Error downloading media for ${messageType}:`,
+          `[WPP] Error downloading media for ${messageTypeRaw}:`,
           downloadError
         );
+      }
 
-        // Fallback: intentar procesar el body como base64
-        if (body && body.length > 100) {
-          console.log(
-            `[WPP] Trying fallback base64 processing for ${messageType}`
+      if (!mediaUrl && bodyIsBase64) {
+        const stored = await persistBase64Media(body, messageTypeRaw, {
+          mimetype: messageMimetype,
+          filename: messageFilename,
+        });
+        if (stored) {
+          mediaUrl = stored.url;
+          mediaType = stored.mediaType;
+          finalContent = buildMediaDescription(
+            messageTypeRaw,
+            messageFilename,
+            caption
           );
-          const processed = await processBase64Content(body);
-          if (processed) {
-            mediaUrl = processed.mediaUrl;
-            mediaType = processed.mediaType;
-            finalContent = `${
-              messageType === 'ptt' ? 'audio' : messageType
-            } compartido`;
-            console.log(
-              `[WPP] Fallback successful for ${messageType}: ${mediaUrl}`
-            );
-          }
         }
       }
-    }
-
-    // Detectar ubicación
-    else if (messageType === 'location' && messageAny.lat && messageAny.lng) {
+    } else if (
+      messageTypeRaw === 'location' &&
+      messageAny.lat &&
+      messageAny.lng
+    ) {
+      const lat = Number(messageAny.lat);
+      const lng = Number(messageAny.lng);
       mediaType = 'location';
-      finalContent = `📍 Ubicación: ${messageAny.lat}, ${messageAny.lng}`;
-      console.log(`[WPP] Location message processed`);
-    }
-
-    // Fallback: detectar si el contenido del body es base64
-    else if (!mediaType && body && body.length > 1000) {
-      console.log(`[WPP] Checking if body content is base64...`);
-      const mediaInfo = await processBase64Content(body);
-      if (mediaInfo) {
-        mediaUrl = mediaInfo.mediaUrl;
-        mediaType = mediaInfo.mediaType;
-        finalContent = `${mediaType} compartido`;
-        console.log(
-          `[WPP] Body content processed as base64 ${mediaType}: ${mediaUrl}`
+      mediaUrl = resolveMapsUrl(lat, lng);
+      finalContent = caption ?? buildLocationDescription(lat, lng);
+    } else if (bodyIsBase64) {
+      const stored = await persistBase64Media(
+        body,
+        messageTypeRaw || 'document',
+        {
+          mimetype: messageMimetype,
+          filename: messageFilename,
+        }
+      );
+      if (stored) {
+        mediaUrl = stored.url;
+        mediaType = stored.mediaType;
+        finalContent = buildMediaDescription(
+          messageTypeRaw || 'document',
+          messageFilename,
+          caption
         );
       }
     }
   } catch (error) {
     console.error('[WPP] Error in multimedia processing:', error);
+  }
+
+  if (!finalContent || !finalContent.trim()) {
+    if (mediaType === 'location' && messageAny.lat && messageAny.lng) {
+      finalContent = buildLocationDescription(
+        Number(messageAny.lat),
+        Number(messageAny.lng)
+      );
+    } else if (mediaType) {
+      finalContent = buildMediaDescription(
+        messageTypeRaw,
+        messageFilename,
+        caption
+      );
+    } else if (!bodyIsBase64 && body.trim().length) {
+      finalContent = body.trim();
+    } else if (caption) {
+      finalContent = caption;
+    } else {
+      finalContent = 'Mensaje recibido';
+    }
+  }
+
+  if (bodyIsBase64 && finalContent === body) {
+    finalContent = buildMediaDescription(
+      messageTypeRaw,
+      messageFilename,
+      caption
+    );
   }
 
   const record = await createConversationMessage({
@@ -1199,14 +1322,15 @@ export async function startSession(ownerUserId: number, io?: SocketIOServer) {
     catchQR: (qrCode: string, asciiQR: string) => {
       const cached = sessions.get(ownerUserId);
       if (cached) {
-        cached.lastQr = asciiQR;
+        cached.lastQr = qrCode;
+        cached.lastQrAscii = asciiQR;
         sessions.set(ownerUserId, cached);
       }
       emitToRoom(io, `user:${ownerUserId}`, 'session:qr', {
         qr: qrCode,
         ascii: asciiQR,
       });
-      void upsertBotSession(ownerUserId, { lastQr: asciiQR });
+      void upsertBotSession(ownerUserId, { lastQr: qrCode });
     },
     statusFind: (status: string) => {
       const statusMap: Record<string, BotSessionStatus> = {
@@ -1246,6 +1370,7 @@ export async function startSession(ownerUserId: number, io?: SocketIOServer) {
     client,
     status: 'CONNECTED',
     lastQr: null,
+    lastQrAscii: null,
     connectedAt: new Date(),
     paused: false,
   };

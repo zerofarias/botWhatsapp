@@ -29,6 +29,7 @@ export async function getBotStatus(req: Request, res: Response) {
     ? {
         status: cache.status,
         lastQr: cache.lastQr,
+        lastQrAscii: cache.lastQrAscii,
         connectedAt: cache.connectedAt?.toISOString() ?? null,
         paused: cache.paused,
         clientReady: Boolean(cache.client),
@@ -36,7 +37,10 @@ export async function getBotStatus(req: Request, res: Response) {
     : null;
 
   res.json({
-    record,
+    record: {
+      ...record,
+      lastQrAscii: cache?.lastQrAscii ?? null,
+    },
     cache: cacheInfo,
   });
 }
@@ -49,6 +53,7 @@ export async function startBot(req: Request, res: Response) {
     res.json({
       status: session?.status ?? 'CONNECTING',
       lastQr: session?.lastQr ?? null,
+      lastQrAscii: session?.lastQrAscii ?? null,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -66,6 +71,7 @@ export async function stopBot(req: Request, res: Response) {
 export async function getBotQr(req: Request, res: Response) {
   if (!ensureUser(req, res)) return;
 
+  const cache = getSessionInfo(req.user!.id);
   const record = await prisma.botSession.findUnique({
     where: {
       ownerUserId_sessionName: {
@@ -76,7 +82,11 @@ export async function getBotQr(req: Request, res: Response) {
     select: { lastQr: true, updatedAt: true },
   });
 
-  res.json(record ?? { lastQr: null });
+  res.json({
+    lastQr: record?.lastQr ?? null,
+    lastQrAscii: cache?.lastQrAscii ?? null,
+    updatedAt: record?.updatedAt ?? null,
+  });
 }
 
 export async function togglePause(req: Request, res: Response) {

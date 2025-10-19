@@ -26,6 +26,7 @@ import {
   FlowGraphResponse,
   FlowNodeData,
   FlowOption,
+  FlowCondition,
   SaveGraphResponse,
   SerializedEdge,
   SerializedNode,
@@ -33,10 +34,16 @@ import {
   ListSettings,
 } from './types';
 import { getFlowGraph, saveFlowGraph } from '../../api/flows';
+import { api } from '../../services/api';
 import './flow-builder.css';
 
 const DEFAULT_POSITION: XYPosition = { x: 160, y: 120 };
 const DEFAULT_NODE_TYPE = 'default';
+
+type AreaOption = {
+  id: number;
+  name: string;
+};
 
 function slugify(value: string): string {
   return value
@@ -62,6 +69,22 @@ function normalizeOptionalString(value: unknown): string | undefined {
     return trimmed.length ? trimmed : undefined;
   }
   return undefined;
+}
+
+function normalizeAreaId(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length) {
+      const parsed = Number(trimmed);
+      if (!Number.isNaN(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return null;
 }
 
 function sanitizeOptions(options?: FlowOption[]): FlowOption[] {
@@ -104,6 +127,47 @@ function sanitizeOptions(options?: FlowOption[]): FlowOption[] {
       targetId:
         typeof option?.targetId === 'string' && option.targetId.length > 0
           ? option.targetId
+          : null,
+    };
+  });
+}
+
+function sanitizeConditions(conditions?: FlowCondition[]): FlowCondition[] {
+  if (!Array.isArray(conditions)) {
+    return [];
+  }
+
+  return conditions.map((condition) => {
+    const id =
+      typeof condition?.id === 'string' && condition.id.length > 0
+        ? condition.id
+        : uuidv4();
+
+    const matchRaw =
+      typeof condition?.match === 'string' ? condition.match : '';
+    const match = matchRaw.trim();
+
+    const labelRaw =
+      typeof condition?.label === 'string' ? condition.label : '';
+    const label = labelRaw.trim();
+
+    const matchModeRaw =
+      typeof condition?.matchMode === 'string'
+        ? condition.matchMode.toUpperCase()
+        : 'EXACT';
+    const matchMode: FlowCondition['matchMode'] =
+      matchModeRaw === 'CONTAINS' || matchModeRaw === 'REGEX'
+        ? matchModeRaw
+        : 'EXACT';
+
+    return {
+      id,
+      label: label || match || id,
+      match,
+      matchMode,
+      targetId:
+        typeof condition?.targetId === 'string' && condition.targetId.length > 0
+          ? condition.targetId
           : null,
     };
   });
@@ -154,6 +218,10 @@ function sanitizeListSettingsValue(
 
 function normalizeNodeFromServer(node: SerializedNode): FlowBuilderNode {
   const sanitizedOptions = sanitizeOptions(node.data?.options);
+  const sanitizedConditions = sanitizeConditions(
+    node.data?.conditions as FlowCondition[] | undefined
+  );
+  const areaId = normalizeAreaId((node.data as any)?.areaId);
   const messageKind = (node.data?.messageKind as string | undefined) ?? 'TEXT';
   const buttonSettings = sanitizeButtonSettingsValue(
     node.data?.buttonSettings as ButtonSettings | undefined
@@ -171,6 +239,8 @@ function normalizeNodeFromServer(node: SerializedNode): FlowBuilderNode {
       message: node.data?.message ?? '',
       type: node.data?.type ?? 'MENU',
       options: sanitizedOptions,
+      conditions: sanitizedConditions,
+      areaId,
       flowId:
         typeof node.data?.flowId === 'number'
           ? node.data?.flowId
@@ -186,12 +256,20 @@ function normalizeNodeFromServer(node: SerializedNode): FlowBuilderNode {
 }
 
 function normalizeEdgeFromServer(edge: SerializedEdge): FlowBuilderEdge {
-  const data =
-    edge.data && typeof edge.data === 'object'
-      ? edge.data
-      : edge.data === undefined
-      ? {}
-      : {};
+  const raw =
+    edge.data && typeof edge.data === 'object' ? edge.data : undefined;
+  const optionId =
+    raw && typeof (raw as { optionId?: unknown }).optionId === 'string'
+      ? ((raw as { optionId: string }).optionId as string)
+      : undefined;
+  const conditionId =
+    raw && typeof (raw as { conditionId?: unknown }).conditionId === 'string'
+      ? ((raw as { conditionId: string }).conditionId as string)
+      : undefined;
+
+  const data: { optionId?: string; conditionId?: string } = {};
+  if (optionId) data.optionId = optionId;
+  if (conditionId) data.conditionId = conditionId;
 
   return {
     id:
@@ -219,6 +297,8 @@ function toSerializedNode(node: FlowBuilderNode): SerializedNode {
       message: node.data.message,
       type: node.data.type,
       options: sanitizeOptions(node.data.options),
+      conditions: sanitizeConditions(node.data.conditions),
+      areaId: node.data.areaId ?? null,
       flowId: node.data.flowId ?? null,
       messageKind: node.data.messageKind ?? 'TEXT',
       ...(buttonSettings ? { buttonSettings } : {}),
@@ -228,8 +308,21 @@ function toSerializedNode(node: FlowBuilderNode): SerializedNode {
 }
 
 function toSerializedEdge(edge: FlowBuilderEdge): SerializedEdge {
+  const optionId =
+    edge.data && typeof edge.data.optionId === 'string'
+      ? edge.data.optionId
+      : undefined;
+  const conditionId =
+    edge.data && typeof edge.data.conditionId === 'string'
+      ? edge.data.conditionId
+      : undefined;
   const sanitizedData =
-    edge.data && typeof edge.data === 'object' ? edge.data : undefined;
+    optionId || conditionId
+      ? {
+          ...(optionId ? { optionId } : {}),
+          ...(conditionId ? { conditionId } : {}),
+        }
+      : undefined;
   const label = typeof edge.label === 'string' ? edge.label : '';
 
   return {
@@ -251,6 +344,8 @@ function createNode(position: XYPosition): FlowBuilderNode {
       message: '',
       type: 'MENU',
       options: [],
+      conditions: [],
+      areaId: null,
       flowId: null,
       messageKind: 'TEXT',
     },
@@ -259,17 +354,48 @@ function createNode(position: XYPosition): FlowBuilderNode {
 
 const FlowBuilderInner: React.FC = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNodeData>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<{ optionId?: string }>(
-    []
-  );
+  const [edges, setEdges, onEdgesChange] = useEdgesState<{
+    optionId?: string;
+    conditionId?: string;
+  }>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [areas, setAreas] = useState<AreaOption[]>([]);
+  const [areasLoading, setAreasLoading] = useState(false);
 
   const nodesRef = useRef<FlowBuilderNode[]>([]);
   const reactFlowWrapper = useRef<HTMLDivElement | null>(null);
   const reactFlowInstance = useRef<ReactFlowInstance | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAreasLoading(true);
+    (async () => {
+      try {
+        const { data } = await api.get<AreaOption[]>('/areas', {
+          params: { active: true },
+        });
+        if (!cancelled) {
+          setAreas(data);
+        }
+      } catch (error) {
+        console.error('[FlowBuilder] Failed to load areas', error);
+        if (!cancelled) {
+          setAreas([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setAreasLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -317,44 +443,70 @@ const FlowBuilderInner: React.FC = () => {
   const syncEdgesForNode = useCallback(
     (node: FlowBuilderNode) => {
       setEdges((previousEdges: FlowBuilderEdge[]) => {
-        const optionMap = new Map(
-          node.data.options.map((option) => [option.id, option])
+        const options = node.data.options ?? [];
+        const conditions = node.data.conditions ?? [];
+
+        const optionMap = new Map(options.map((option) => [option.id, option]));
+        const conditionMap = new Map(
+          conditions.map((condition) => [condition.id, condition])
         );
 
-        const retainedEdges = previousEdges
-          .filter((edge) => {
-            if (edge.source !== node.id) return true;
-            const optionId = edge.data?.optionId;
-            if (!optionId) {
-              return false;
-            }
+        const nextEdges: FlowBuilderEdge[] = [];
+
+        previousEdges.forEach((edge) => {
+          if (edge.source !== node.id) {
+            nextEdges.push(edge);
+            return;
+          }
+
+          const optionId = edge.data?.optionId;
+          if (optionId) {
             const option = optionMap.get(optionId);
-            return Boolean(option && option.targetId);
-          })
-          .map((edge) => {
-            if (edge.source !== node.id) return edge;
-            const option = optionMap.get(edge.data?.optionId ?? '');
-            if (!option || !option.targetId) {
-              return edge;
+            if (option && option.targetId) {
+              nextEdges.push({
+                ...edge,
+                target: option.targetId,
+                label: option.trigger || option.label,
+                data: { optionId },
+              });
             }
-            return {
-              ...edge,
-              target: option.targetId,
-              label: option.trigger || option.label,
-            };
-          });
+            return;
+          }
+
+          const conditionId = edge.data?.conditionId;
+          if (conditionId) {
+            const condition = conditionMap.get(conditionId);
+            if (condition && condition.targetId) {
+              nextEdges.push({
+                ...edge,
+                target: condition.targetId,
+                label: condition.label || condition.match || 'Condicion',
+                data: { conditionId },
+              });
+            }
+            return;
+          }
+          // Ignore edges that are no longer linked to an option/condition
+        });
 
         const existingOptionIds = new Set(
-          retainedEdges
+          nextEdges
             .filter((edge) => edge.source === node.id)
             .map((edge) => edge.data?.optionId)
             .filter((value): value is string => Boolean(value))
         );
 
+        const existingConditionIds = new Set(
+          nextEdges
+            .filter((edge) => edge.source === node.id)
+            .map((edge) => edge.data?.conditionId)
+            .filter((value): value is string => Boolean(value))
+        );
+
         const additions: FlowBuilderEdge[] = [];
-        node.data.options.forEach((option) => {
-          if (!option.targetId) return;
-          if (existingOptionIds.has(option.id)) return;
+
+        options.forEach((option) => {
+          if (!option.targetId || existingOptionIds.has(option.id)) return;
           additions.push({
             id: `edge-${option.id}`,
             source: node.id,
@@ -365,7 +517,20 @@ const FlowBuilderInner: React.FC = () => {
           });
         });
 
-        return [...retainedEdges, ...additions];
+        conditions.forEach((condition) => {
+          if (!condition.targetId || existingConditionIds.has(condition.id))
+            return;
+          additions.push({
+            id: `edge-${condition.id}`,
+            source: node.id,
+            target: condition.targetId,
+            data: { conditionId: condition.id },
+            label: condition.label || condition.match || 'Condicion',
+            type: DEFAULT_NODE_TYPE,
+          });
+        });
+
+        return [...nextEdges, ...additions];
       });
     },
     [setEdges]
@@ -488,6 +653,44 @@ const FlowBuilderInner: React.FC = () => {
     [handleNodesDelete]
   );
 
+  const handleDuplicateNode = useCallback(
+    (nodeId: string) => {
+      const originalNode = nodesRef.current.find((node) => node.id === nodeId);
+      if (!originalNode) return;
+
+      const originalOptions = originalNode.data.options ?? [];
+      const originalConditions = originalNode.data.conditions ?? [];
+
+      const newNode: FlowBuilderNode = {
+        ...originalNode,
+        id: uuidv4(),
+        position: {
+          x: originalNode.position.x + 50,
+          y: originalNode.position.y + 50,
+        },
+        data: {
+          ...originalNode.data,
+          label: `${originalNode.data.label} (copia)`,
+          flowId: null, // Reset flowId for the new copy
+          options: originalOptions.map((option) => ({
+            ...option,
+            id: uuidv4(), // Ensure options have new unique IDs
+            targetId: null, // Reset connections
+          })),
+          conditions: originalConditions.map((condition) => ({
+            ...condition,
+            id: uuidv4(),
+            targetId: null,
+          })),
+        },
+      };
+
+      setNodes((previous) => previous.concat(newNode));
+      setSelectedNodeId(newNode.id);
+    },
+    [setNodes]
+  );
+
   const handleSave = useCallback(async () => {
     const serializedNodes: SerializedNode[] = nodes.map(toSerializedNode);
     const serializedEdges: SerializedEdge[] = edges.map(toSerializedEdge);
@@ -606,8 +809,11 @@ const FlowBuilderInner: React.FC = () => {
         <NodeEditor
           node={selectedNode}
           allNodes={nodes}
+          areas={areas}
+          areasLoading={areasLoading}
           onChange={handleNodeUpdate}
           onDeleteNode={handleDeleteNode}
+          onDuplicateNode={handleDuplicateNode}
         />
       )}
     </div>

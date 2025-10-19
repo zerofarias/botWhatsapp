@@ -847,59 +847,9 @@ function MessageBubble({
       : 'operator';
 
   const renderMediaContent = () => {
-    // Función para detectar si el contenido es base64
-    const isBase64Image = (content: string): boolean => {
-      return (
-        content.length > 1000 &&
-        /^[A-Za-z0-9+/]+={0,2}$/.test(content.substring(0, 100))
-      );
-    };
+    const mediaUrl = resolveMediaUrl(message.mediaUrl);
 
-    const isBase64Audio = (content: string): boolean => {
-      return (
-        content.length > 500 &&
-        /^[A-Za-z0-9+/]+={0,2}$/.test(content.substring(0, 100))
-      );
-    };
-
-    // Si no hay mediaType pero el contenido parece ser base64, detectar el tipo
-    if (!message.mediaType && message.content.length > 500) {
-      // Intentar detectar si es imagen (contenido más largo)
-      if (isBase64Image(message.content)) {
-        const imageUrl = `data:image/jpeg;base64,${message.content}`;
-        return (
-          <div className="chat-media">
-            <img
-              src={imageUrl}
-              alt="Imagen compartida"
-              className="chat-image"
-              onClick={() => onImageClick(imageUrl)}
-            />
-            <p className="chat-media__caption">Imagen recibida</p>
-          </div>
-        );
-      }
-
-      // Intentar detectar si es audio (contenido medio)
-      if (isBase64Audio(message.content)) {
-        const audioUrl = `data:audio/ogg;base64,${message.content}`;
-        return (
-          <div className="chat-media">
-            <audio controls className="chat-audio">
-              <source src={audioUrl} type="audio/ogg" />
-              <source
-                src={`data:audio/mpeg;base64,${message.content}`}
-                type="audio/mpeg"
-              />
-              Tu navegador no soporta audio.
-            </audio>
-            <p className="chat-media__caption">Audio recibido</p>
-          </div>
-        );
-      }
-    }
-
-    if (!message.mediaType || !message.mediaUrl) {
+    if (!message.mediaType || !mediaUrl) {
       return <p>{message.content}</p>;
     }
 
@@ -908,10 +858,10 @@ function MessageBubble({
         return (
           <div className="chat-media">
             <img
-              src={message.mediaUrl}
+              src={mediaUrl}
               alt="Imagen compartida"
               className="chat-image"
-              onClick={() => message.mediaUrl && onImageClick(message.mediaUrl)}
+              onClick={() => onImageClick(mediaUrl)}
             />
             {message.content && (
               <p className="chat-media__caption">{message.content}</p>
@@ -923,7 +873,7 @@ function MessageBubble({
         return (
           <div className="chat-media">
             <video controls className="chat-video" preload="metadata">
-              <source src={message.mediaUrl} />
+              <source src={mediaUrl} />
               Tu navegador no soporta videos.
             </video>
             {message.content && (
@@ -936,7 +886,7 @@ function MessageBubble({
         return (
           <div className="chat-media">
             <audio controls className="chat-audio">
-              <source src={message.mediaUrl} />
+              <source src={mediaUrl} />
               Tu navegador no soporta audio.
             </audio>
             {message.content && (
@@ -949,7 +899,7 @@ function MessageBubble({
         return (
           <div className="chat-media">
             <a
-              href={message.mediaUrl}
+              href={mediaUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="chat-document"
@@ -962,30 +912,24 @@ function MessageBubble({
           </div>
         );
 
-      case 'location': {
-        const locationMatch = message.content.match(
-          /📍 Ubicación: ([-\d.]+), ([-\d.]+)/
+      case 'location':
+        return (
+          <div className="chat-media">
+            <a
+              href={mediaUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="chat-location"
+            >
+              📍 Ver ubicación en Maps
+            </a>
+            {message.content &&
+              !message.content.startsWith('http') &&
+              !message.content.startsWith('📍') && (
+                <p className="chat-media__caption">{message.content}</p>
+              )}
+          </div>
         );
-        if (locationMatch) {
-          const [, lat, lng] = locationMatch;
-          return (
-            <div className="chat-media">
-              <a
-                href={`https://www.google.com/maps?q=${lat},${lng}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="chat-location"
-              >
-                📍 Ver ubicación en Maps
-              </a>
-              <p className="chat-media__caption">
-                Ubicación: {lat}, {lng}
-              </p>
-            </div>
-          );
-        }
-        return <p>{message.content}</p>;
-      }
 
       default:
         return <p>{message.content}</p>;

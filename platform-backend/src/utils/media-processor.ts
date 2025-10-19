@@ -1,36 +1,29 @@
-import fs from 'fs/promises';
-import path from 'path';
+import {
+  saveBase64File,
+  getMediaTypeFromMimetype,
+  getMimetypeFromExtension,
+} from '../services/media.service.js';
 
-// Función para detectar si una cadena es base64
-export function isBase64String(str: string): boolean {
-  if (!str || str.length < 100) return false;
-
-  // Patrón básico de base64
+export function isBase64String(value: string): boolean {
+  if (!value || value.length < 80) return false;
+  const sanitized = value.replace(/\s+/g, '');
   const base64Pattern = /^[A-Za-z0-9+/]+={0,2}$/;
-
-  // Verificar si parece base64 de imagen
-  return str.length > 1000 && base64Pattern.test(str.substring(0, 100));
+  return sanitized.length > 80 && base64Pattern.test(sanitized.slice(0, 160));
 }
 
-// Función para obtener la extensión basada en los primeros bytes del base64
-export function getFileExtensionFromBase64(base64: string): string {
-  const header = base64.substring(0, 50);
-
-  // Convertir a buffer para leer los magic bytes
+function getFileExtensionFromBase64(base64: string): string {
   try {
-    const buffer = Buffer.from(base64.substring(0, 100), 'base64');
+    const sample = base64.slice(0, 120);
+    const buffer = Buffer.from(sample, 'base64');
     const magic = buffer.toString('hex').toUpperCase();
 
-    // Magic bytes comunes
     if (magic.startsWith('FFD8FF')) return '.jpg';
     if (magic.startsWith('89504E47')) return '.png';
     if (magic.startsWith('47494638')) return '.gif';
     if (magic.startsWith('52494646')) return '.webp';
-    if (
-      magic.startsWith('00000018667479706D703432') ||
-      magic.startsWith('00000020667479706D703432')
-    )
+    if (magic.startsWith('00000018') && magic.includes('667479706D703432'))
       return '.mp4';
+    if (magic.startsWith('0000001C667479704D3441')) return '.m4a';
     if (
       magic.startsWith('494433') ||
       magic.startsWith('FFF3') ||
@@ -40,28 +33,21 @@ export function getFileExtensionFromBase64(base64: string): string {
     if (magic.startsWith('4F676753')) return '.ogg';
     if (magic.startsWith('25504446')) return '.pdf';
   } catch (error) {
-    console.warn('Error detecting file type:', error);
+    console.warn('[Media] Unable to detect extension from base64:', error);
   }
-
   return '.bin';
 }
 
-// Función para obtener el tipo de media basado en la extensión
-export function getMediaTypeFromExtension(extension: string): string {
-  const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-  const videoExts = ['.mp4', '.avi', '.mov', '.webm'];
-  const audioExts = ['.mp3', '.ogg', '.wav', '.m4a'];
-  const docExts = ['.pdf', '.doc', '.docx', '.txt'];
-
-  if (imageExts.includes(extension.toLowerCase())) return 'image';
-  if (videoExts.includes(extension.toLowerCase())) return 'video';
-  if (audioExts.includes(extension.toLowerCase())) return 'audio';
-  if (docExts.includes(extension.toLowerCase())) return 'document';
-
+function getMediaTypeFromExtension(extension: string): string {
+  const lower = extension.toLowerCase();
+  if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(lower))
+    return 'image';
+  if (['.mp4', '.webm', '.mov', '.mpg'].includes(lower)) return 'video';
+  if (['.mp3', '.ogg', '.wav', '.m4a'].includes(lower)) return 'audio';
+  if (['.pdf', '.doc', '.docx', '.txt'].includes(lower)) return 'document';
   return 'document';
 }
 
-// Función para procesar base64 y guardarlo como archivo
 export async function processBase64Content(
   content: string
 ): Promise<{ mediaUrl: string; mediaType: string } | null> {
@@ -70,47 +56,21 @@ export async function processBase64Content(
   }
 
   try {
-    // Crear directorio de uploads si no existe
-    const uploadsDir = path.join(process.cwd(), 'uploads');
-
-    try {
-      await fs.access(uploadsDir);
-    } catch {
-      await fs.mkdir(uploadsDir, { recursive: true });
-    }
-
-    // Crear subdirectorio por fecha
-    const now = new Date();
-    const yearMonth = `${now.getFullYear()}-${String(
-      now.getMonth() + 1
-    ).padStart(2, '0')}`;
-    const monthDir = path.join(uploadsDir, yearMonth);
-
-    try {
-      await fs.access(monthDir);
-    } catch {
-      await fs.mkdir(monthDir, { recursive: true });
-    }
-
-    // Detectar tipo de archivo
     const extension = getFileExtensionFromBase64(content);
     const mediaType = getMediaTypeFromExtension(extension);
+    const mimetype = getMimetypeFromExtension(extension);
 
-    // Generar nombre único
-    const timestamp = Date.now();
-    const randomSuffix = Math.random().toString(36).substring(2, 8);
-    const filename = `media-${timestamp}-${randomSuffix}${extension}`;
+    const mediaFile = await saveBase64File({
+      base64: content,
+      mimetype,
+      originalName: `media-${Date.now()}${extension}`,
+      subdirectory: mediaType,
+    });
 
-    // Guardar archivo
-    const filePath = path.join(monthDir, filename);
-    const buffer = Buffer.from(content, 'base64');
-    await fs.writeFile(filePath, buffer);
-
-    const mediaUrl = `/uploads/${yearMonth}/${filename}`;
-
-    console.log(`[Media] Saved base64 content as ${mediaType}: ${mediaUrl}`);
-
-    return { mediaUrl, mediaType };
+    return {
+      mediaUrl: mediaFile.url,
+      mediaType: getMediaTypeFromMimetype(mediaFile.mimetype),
+    };
   } catch (error) {
     console.error('[Media] Error processing base64 content:', error);
     return null;

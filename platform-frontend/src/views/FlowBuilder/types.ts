@@ -10,12 +10,38 @@ export const FLOW_NODE_TYPES = [
 
 export type FlowNodeType = (typeof FLOW_NODE_TYPES)[number];
 
+export const FLOW_NODE_TYPE_LABELS: Record<FlowNodeType, string> = {
+  MENU: 'Menú',
+  MESSAGE: 'Mensaje',
+  ACTION: 'Acción',
+  REDIRECT: 'Agente',
+  END: 'Finalizar',
+};
+
+export const FLOW_NODE_TYPE_DESCRIPTIONS: Record<FlowNodeType, string> = {
+  MENU: 'Presenta opciones numéricas al contacto',
+  MESSAGE: 'Envía un texto simple o interactivo',
+  ACTION: 'Reserva para integraciones futuras',
+  REDIRECT: 'Deriva la conversación a un agente/área',
+  END: 'Finaliza la automatización en este punto',
+};
+
 export type FlowMessageKind = 'TEXT' | 'BUTTONS' | 'LIST';
 
 export interface FlowOption {
   id: string;
   label: string;
   trigger: string;
+  targetId: string | null;
+}
+
+export type FlowConditionMatchMode = 'EXACT' | 'CONTAINS' | 'REGEX';
+
+export interface FlowCondition {
+  id: string;
+  label: string;
+  match: string;
+  matchMode: FlowConditionMatchMode;
   targetId: string | null;
 }
 
@@ -35,6 +61,8 @@ export interface FlowNodeData {
   message: string;
   type: FlowNodeType;
   options: FlowOption[];
+  conditions: FlowCondition[];
+  areaId: number | null;
   flowId?: number | null;
   messageKind: FlowMessageKind;
   buttonSettings?: ButtonSettings;
@@ -43,7 +71,7 @@ export interface FlowNodeData {
 
 export type FlowBuilderNode = Node<FlowNodeData>;
 
-export type FlowBuilderEdge = Edge<{ optionId?: string }>;
+export type FlowBuilderEdge = Edge<{ optionId?: string; conditionId?: string }>;
 
 export interface FlowGraphPayload {
   nodes: SerializedNode[];
@@ -69,7 +97,7 @@ export interface SerializedEdge {
   source: string;
   target: string;
   label?: string | null;
-  data?: { optionId?: string };
+  data?: { optionId?: string; conditionId?: string };
 }
 
 export interface FlowGraphResponse {

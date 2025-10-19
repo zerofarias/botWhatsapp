@@ -8,10 +8,12 @@ interface BotStatus {
     connectedAt: string | null;
     paused: boolean;
     lastQr: string | null;
+    lastQrAscii?: string | null;
   };
   cache?: {
     status: string;
     lastQr: string | null;
+    lastQrAscii?: string | null;
     connectedAt?: string;
     paused: boolean;
   } | null;
@@ -51,8 +53,13 @@ export default function DashboardOverview() {
   const [statsError, setStatsError] = useState<string | null>(null);
   const socket = useSocket();
 
-  const lastQr = useMemo(
+  const lastQrImage = useMemo(
     () => status?.cache?.lastQr ?? status?.record.lastQr ?? null,
+    [status]
+  );
+
+  const lastQrAscii = useMemo(
+    () => status?.cache?.lastQrAscii ?? status?.record.lastQrAscii ?? null,
     [status]
   );
 
@@ -128,6 +135,8 @@ export default function DashboardOverview() {
               cache: {
                 status: payload,
                 lastQr: prev.cache?.lastQr ?? prev.record.lastQr,
+                lastQrAscii:
+                  prev.cache?.lastQrAscii ?? prev.record.lastQrAscii ?? null,
                 connectedAt:
                   prev.cache?.connectedAt ??
                   prev.record.connectedAt ??
@@ -139,7 +148,7 @@ export default function DashboardOverview() {
       );
     };
 
-    const onQr = ({ ascii }: { ascii: string }) => {
+    const onQr = ({ ascii, qr }: { ascii: string; qr: string }) => {
       setStatus((prev) =>
         prev
           ? {
@@ -147,7 +156,8 @@ export default function DashboardOverview() {
               cache: {
                 status:
                   prev.cache?.status ?? prev.record.status ?? 'CONNECTING',
-                lastQr: ascii,
+                lastQr: qr,
+                lastQrAscii: ascii,
                 connectedAt:
                   prev.cache?.connectedAt ??
                   prev.record.connectedAt ??
@@ -366,18 +376,39 @@ export default function DashboardOverview() {
         }}
       >
         <h2 style={{ marginTop: 0 }}>Codigo QR</h2>
-        {lastQr ? (
-          <pre
-            style={{
-              background: '#0f172a',
-              color: '#fff',
-              padding: '1rem',
-              borderRadius: '10px',
-              overflow: 'auto',
-            }}
-          >
-            {lastQr}
-          </pre>
+        {lastQrImage ? (
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            <img
+              src={
+                lastQrImage.startsWith('data:')
+                  ? lastQrImage
+                  : `data:image/png;base64,${lastQrImage}`
+              }
+              alt="Codigo QR de WhatsApp"
+              style={{
+                width: '220px',
+                height: '220px',
+                objectFit: 'contain',
+                borderRadius: '12px',
+                border: '1px solid #e2e8f0',
+                padding: '0.5rem',
+                background: '#f8fafc',
+              }}
+            />
+            {lastQrAscii && (
+              <pre
+                style={{
+                  background: '#0f172a',
+                  color: '#fff',
+                  padding: '1rem',
+                  borderRadius: '10px',
+                  overflow: 'auto',
+                }}
+              >
+                {lastQrAscii}
+              </pre>
+            )}
+          </div>
         ) : (
           <p>Aun no se ha generado un QR. Inicia sesion para obtenerlo.</p>
         )}
