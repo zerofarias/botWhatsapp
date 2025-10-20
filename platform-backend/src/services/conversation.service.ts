@@ -1,3 +1,51 @@
+/**
+ * Obtiene el historial combinado de mensajes de todas las conversaciones de una persona (por teléfono).
+ * Devuelve un array de mensajes ordenados por fecha, con etiquetas de inicio/fin por cada conversación.
+ */
+import { listConversationMessages } from './message.service.js';
+export async function getCombinedChatHistoryByPhone(userPhone: string) {
+  // Buscar todas las conversaciones de ese teléfono
+  const conversations = await prisma.conversation.findMany({
+    where: { userPhone },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, createdAt: true, closedAt: true },
+  });
+  const history: Array<any> = [];
+  for (const conv of conversations) {
+    // Etiqueta de inicio
+    history.push({
+      type: 'label',
+      label: `Inicio de conversación (${conv.createdAt.toISOString()})`,
+      conversationId: conv.id.toString(),
+      timestamp: conv.createdAt,
+    });
+    // Mensajes
+    const messages = await listConversationMessages(conv.id);
+    for (const msg of messages) {
+      history.push({
+        ...msg,
+        type: 'message',
+        conversationId: conv.id.toString(),
+      });
+    }
+    // Etiqueta de fin
+    history.push({
+      type: 'label',
+      label: `Fin de conversación (${
+        conv.closedAt ? conv.closedAt.toISOString() : 'abierta'
+      })`,
+      conversationId: conv.id.toString(),
+      timestamp: conv.closedAt || null,
+    });
+  }
+  // Ordenar por fecha
+  history.sort(
+    (a, b) =>
+      new Date(a.createdAt || a.timestamp).getTime() -
+      new Date(b.createdAt || b.timestamp).getTime()
+  );
+  return history;
+}
 import {
   ConversationEventType,
   ConversationStatus,

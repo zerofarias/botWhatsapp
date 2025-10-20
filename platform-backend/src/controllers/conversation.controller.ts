@@ -1,3 +1,29 @@
+import { getCombinedChatHistoryByPhone } from '../services/conversation.service.js';
+// Nuevo endpoint: historial combinado de chats por teléfono
+export async function getCombinedChatHistoryHandler(
+  req: Request,
+  res: Response
+) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  const phone = req.params.phone;
+  if (!phone || typeof phone !== 'string') {
+    return res.status(400).json({ message: 'Phone is required.' });
+  }
+  // Opcional: verificar permisos del usuario sobre ese teléfono
+  try {
+    const history = await getCombinedChatHistoryByPhone(phone);
+    res.json(history);
+  } catch (error) {
+    res
+      .status(500)
+      .json({
+        message: 'Error al obtener historial combinado',
+        error: String(error),
+      });
+  }
+}
 import type { Request, Response } from 'express';
 import { ConversationStatus } from '@prisma/client';
 import {

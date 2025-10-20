@@ -116,6 +116,7 @@
     "puppeteer-extra-plugin-user-data-dir": "^2.4.1",
     "puppeteer-extra-plugin-user-preferences": "^2.4.1",
     "qrcode-terminal": "^0.12.0",
+    "react-icons": "^5.5.0",
     "reflect-metadata": "^0.2.1",
     "rimraf": "^3.0.2",
     "sanitize-filename": "^1.6.3",

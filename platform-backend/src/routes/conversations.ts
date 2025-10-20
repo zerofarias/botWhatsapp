@@ -6,9 +6,12 @@ import {
   getConversationMessagesHandler,
   listConversationsHandler,
   sendConversationMessageHandler,
+  getCombinedChatHistoryHandler,
 } from '../controllers/conversation.controller.js';
 
 export const conversationRouter = Router();
+// Historial combinado de chats por teléfono
+conversationRouter.get('/history/:phone', getCombinedChatHistoryHandler);
 
 conversationRouter.use(authenticate);
 

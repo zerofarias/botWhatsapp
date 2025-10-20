@@ -604,6 +604,33 @@ export default function ChatPage() {
   const composerDisabled =
     !activeConversation || activeConversation.status === 'CLOSED';
 
+  // Estado para historial combinado
+  const [combinedHistory, setCombinedHistory] = useState<any[]>([]);
+  const [loadingCombinedHistory, setLoadingCombinedHistory] = useState(false);
+
+  // Cargar historial combinado cada vez que cambia el contacto seleccionado
+  useEffect(() => {
+    if (!activeConversation) {
+      setCombinedHistory([]);
+      return;
+    }
+    const phone =
+      activeConversation.contact?.phone ?? activeConversation.userPhone;
+    if (!phone) {
+      setCombinedHistory([]);
+      return;
+    }
+    setLoadingCombinedHistory(true);
+    api
+      .get(`/conversations/history/${phone}`)
+      .then(({ data }) => setCombinedHistory(data))
+      .catch((error) => {
+        console.error('[Chat] Error al cargar historial combinado', error);
+        setCombinedHistory([]);
+      })
+      .finally(() => setLoadingCombinedHistory(false));
+  }, [activeConversation]);
+
   return (
     <div className="chat-screen">
       <aside className="chat-sidebar">
@@ -709,22 +736,45 @@ export default function ChatPage() {
               </div>
             </header>
             <div className="chat-main__messages" ref={messagesContainerRef}>
-              {loadingMessages ? (
+              {loadingCombinedHistory ? (
                 <div className="chat-main__placeholder">
                   Cargando historial…
                 </div>
-              ) : messages.length ? (
-                messages.map((message) => (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    isOwn={message.senderType === 'OPERATOR'}
-                    onImageClick={handleImageClick}
-                  />
-                ))
+              ) : combinedHistory.length ? (
+                combinedHistory.map((item, idx) => {
+                  if (item.type === 'label') {
+                    return (
+                      <div
+                        key={item.label + '-' + idx}
+                        className="chat-label"
+                        style={{
+                          textAlign: 'center',
+                          color: '#64748b',
+                          fontWeight: 'bold',
+                          margin: '1rem 0',
+                          fontSize: '0.95rem',
+                          background: '#f1f5f9',
+                          borderRadius: '8px',
+                          padding: '0.5rem',
+                        }}
+                      >
+                        {item.label}
+                      </div>
+                    );
+                  }
+                  // Mensaje normal
+                  return (
+                    <MessageBubble
+                      key={item.id + '-' + idx}
+                      message={item}
+                      isOwn={item.senderType === 'OPERATOR'}
+                      onImageClick={handleImageClick}
+                    />
+                  );
+                })
               ) : (
                 <div className="chat-main__placeholder">
-                  Aún no hay mensajes en este chat.
+                  No hay mensajes para este contacto.
                 </div>
               )}
             </div>

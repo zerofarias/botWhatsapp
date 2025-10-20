@@ -1,5 +1,8 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth, type Role } from '../context/AuthContext';
+import { useState } from 'react';
+import '../styles/sidebar.css';
+import { sidebarIcons } from '../components/SidebarIcons';
 
 type NavigationLink = {
   to: string;
@@ -46,6 +49,7 @@ function formatRole(role?: Role) {
 
 export default function DashboardLayout() {
   const { user, logout } = useAuth();
+  const [collapsed, setCollapsed] = useState(false);
 
   const availableLinks = NAVIGATION_LINKS.filter((link) => {
     if (!link.roles) return true;
@@ -54,52 +58,46 @@ export default function DashboardLayout() {
   });
 
   return (
-    <div>
-      <header
-        style={{
-          backgroundColor: '#0f172a',
-          color: '#fff',
-          padding: '1rem 2rem',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}
-      >
-        <div>
-          <strong>WPPConnect Platform</strong>
-          <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>
-            {user?.name ?? 'Usuario'} · {formatRole(user?.role)}
-          </div>
+    <div className={`dashboard-layout${collapsed ? ' collapsed' : ''}`}>
+      <aside className="sidebar">
+        <div className="sidebar__brand">
+          <span className="sidebar__logo">WPPConnect</span>
+          <button
+            className="sidebar__collapse"
+            onClick={() => setCollapsed((c) => !c)}
+            title="Colapsar menú"
+          >
+            {collapsed ? '»' : '«'}
+          </button>
         </div>
-        <nav style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+        <div className="sidebar__user">
+          <div className="sidebar__user-name">{user?.name ?? 'Usuario'}</div>
+          <div className="sidebar__user-role">{formatRole(user?.role)}</div>
+        </div>
+        <nav className="sidebar__nav">
           {availableLinks.map((link) => (
             <NavLink
               key={link.to}
               to={link.to}
-              style={({ isActive }) => ({
-                color: isActive ? '#38bdf8' : '#fff',
-              })}
+              className={({ isActive }) =>
+                'sidebar__nav-link' + (isActive ? ' active' : '')
+              }
               end={link.to === '/dashboard'}
             >
-              {link.label}
+              <span className="sidebar__icon">
+                {sidebarIcons[link.label] ?? '•'}
+              </span>
+              {!collapsed && (
+                <span className="sidebar__text">{link.label}</span>
+              )}
             </NavLink>
           ))}
         </nav>
-        <button
-          onClick={logout}
-          style={{
-            background: '#ef4444',
-            border: 'none',
-            padding: '0.5rem 1rem',
-            borderRadius: '8px',
-            color: '#fff',
-            cursor: 'pointer',
-          }}
-        >
+        <button className="sidebar__logout" onClick={logout}>
           Cerrar sesión
         </button>
-      </header>
-      <main className="container" style={{ padding: '2rem 0' }}>
+      </aside>
+      <main className="dashboard-main">
         <Outlet />
       </main>
     </div>

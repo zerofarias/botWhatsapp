@@ -12,3 +12,14 @@ export const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// Interceptor para agregar el token si existe
+api.interceptors.request.use((config) => {
+  // Si usas cookies para la sesión, withCredentials ya lo envía
+  // Si usas token en localStorage/sessionStorage, agrégalo aquí
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return config;
+});
