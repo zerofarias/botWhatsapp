@@ -81,9 +81,9 @@ const ChatPage = () => {
         loadingMessages={loadingHistory}
         isClosing={closing}
         isNoteMode={noteMode}
+        setNoteMode={setNoteMode}
         onSendMessage={handleSubmitMessage}
         onCloseConversation={closeConversation}
-        onToggleNoteMode={() => setNoteMode((prev) => !prev)}
       />
       <ImageModal
         imageUrl={selectedImageUrl}

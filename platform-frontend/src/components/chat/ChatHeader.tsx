@@ -13,16 +13,14 @@ function getDisplayName(conversation: ConversationSummary) {
 type ChatHeaderProps = {
   conversation: ConversationSummary;
   onCloseConversation: () => void;
-  onToggleNoteMode: () => void;
-  isNoteMode: boolean;
+  // onToggleNoteMode y isNoteMode eliminados, funcionalidad movida a ChatComposer
   isClosing: boolean;
 };
 
 const ChatHeader: React.FC<ChatHeaderProps> = ({
   conversation,
   onCloseConversation,
-  onToggleNoteMode,
-  isNoteMode,
+  // onToggleNoteMode, isNoteMode eliminados
   isClosing,
 }) => {
   const displayName = getDisplayName(conversation);
@@ -39,9 +37,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
         </div>
       </div>
       <div className="chat-header-actions">
-        <button onClick={onToggleNoteMode} disabled={isNoteMode}>
-          📝 Nota
-        </button>
+        {/* Botón Nota eliminado, funcionalidad movida a ChatComposer */}
         <button
           onClick={onCloseConversation}
           disabled={isClosing || conversation.status === 'CLOSED'}

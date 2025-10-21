@@ -10,9 +10,9 @@ type ChatViewProps = {
   loadingMessages: boolean;
   isClosing: boolean;
   isNoteMode: boolean;
+  setNoteMode: (value: boolean) => void;
   onSendMessage: (content: string) => void;
   onCloseConversation: () => void;
-  onToggleNoteMode: () => void;
 };
 
 const ChatView: React.FC<ChatViewProps> = ({
@@ -21,9 +21,9 @@ const ChatView: React.FC<ChatViewProps> = ({
   loadingMessages,
   isClosing,
   isNoteMode,
+  setNoteMode,
   onSendMessage,
   onCloseConversation,
-  onToggleNoteMode,
 }) => {
   if (!conversation) {
     return (
@@ -43,14 +43,13 @@ const ChatView: React.FC<ChatViewProps> = ({
       <ChatHeader
         conversation={conversation}
         isClosing={isClosing}
-        isNoteMode={isNoteMode}
         onCloseConversation={onCloseConversation}
-        onToggleNoteMode={onToggleNoteMode}
       />
       <MessageList messages={messages} loading={loadingMessages} />
       <ChatComposer
         disabled={composerDisabled}
         isNoteMode={isNoteMode}
+        setNoteMode={setNoteMode}
         onSubmit={onSendMessage}
       />
     </section>
