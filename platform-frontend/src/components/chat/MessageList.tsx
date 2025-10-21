@@ -23,9 +23,9 @@ const MessageList: React.FC<MessageListProps> = ({ loading, messages }) => {
       (msg) => msg.type === 'message' && msg.isRead === false
     );
     if (firstUnreadIndex !== -1 && firstUnreadRef.current) {
-      firstUnreadRef.current.scrollIntoView({ behavior: 'smooth' });
+      firstUnreadRef.current.scrollIntoView({ behavior: 'auto' });
     } else if (endOfMessagesRef.current) {
-      endOfMessagesRef.current.scrollIntoView({ behavior: 'smooth' });
+      endOfMessagesRef.current.scrollIntoView({ behavior: 'auto' });
     }
   }, [messages]);
 

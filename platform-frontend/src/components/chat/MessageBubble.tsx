@@ -63,6 +63,15 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ item }) => {
     ? 'message-bubble--outgoing'
     : 'message-bubble--incoming';
 
+  // Si la URL es relativa, anteponer el hostname y puerto del backend
+  const getFullMediaUrl = (url?: string | null) => {
+    if (!url) return '';
+    if (url.startsWith('/uploads/')) {
+      return `http://localhost:4000${url}`;
+    }
+    return url;
+  };
+
   return (
     <div className={`message-bubble-container ${containerClass}`}>
       <div className={`message-bubble ${bubbleClass}`}>
@@ -74,7 +83,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ item }) => {
           {item.mediaType && item.mediaUrl ? (
             item.mediaType.includes('image') ? (
               <img
-                src={item.mediaUrl}
+                src={getFullMediaUrl(item.mediaUrl)}
                 alt="Imagen recibida"
                 style={{
                   maxWidth: '220px',
@@ -85,11 +94,15 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ item }) => {
             ) : item.mediaType.includes('audio') ? (
               <audio
                 controls
-                src={item.mediaUrl}
+                src={getFullMediaUrl(item.mediaUrl)}
                 style={{ width: '200px', marginBottom: '0.5rem' }}
               />
             ) : (
-              <a href={item.mediaUrl} target="_blank" rel="noopener noreferrer">
+              <a
+                href={getFullMediaUrl(item.mediaUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 Archivo recibido
               </a>
             )

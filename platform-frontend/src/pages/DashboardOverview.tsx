@@ -38,6 +38,8 @@ export default function DashboardOverview() {
   const [status, setStatus] = useState<BotStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<MessagePreview[]>([]);
+  const [startLoading, setStartLoading] = useState(false);
+  const [stopLoading, setStopLoading] = useState(false);
   const [conversationStats, setConversationStats] = useState<ConversationStats>(
     {
       active: 0,
@@ -202,13 +204,23 @@ export default function DashboardOverview() {
   }, [socket, fetchConversationStats]);
 
   const handleStart = async () => {
-    await api.post('/bot/start');
-    void fetchStatus();
+    setStartLoading(true);
+    try {
+      await api.post('/bot/start');
+      void fetchStatus();
+    } finally {
+      setStartLoading(false);
+    }
   };
 
   const handleStop = async () => {
-    await api.post('/bot/stop');
-    void fetchStatus();
+    setStopLoading(true);
+    try {
+      await api.post('/bot/stop');
+      void fetchStatus();
+    } finally {
+      setStopLoading(false);
+    }
   };
 
   const handlePauseToggle = async (paused: boolean) => {
@@ -317,29 +329,33 @@ export default function DashboardOverview() {
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <button
             onClick={handleStart}
+            disabled={startLoading}
             style={{
               padding: '0.65rem 1.2rem',
               borderRadius: '10px',
               border: 'none',
-              background: '#22c55e',
+              background: startLoading ? '#a7f3d0' : '#22c55e',
               color: '#fff',
-              cursor: 'pointer',
+              cursor: startLoading ? 'not-allowed' : 'pointer',
+              opacity: startLoading ? 0.7 : 1,
             }}
           >
-            Iniciar
+            {startLoading ? 'Iniciando...' : 'Iniciar'}
           </button>
           <button
             onClick={handleStop}
+            disabled={stopLoading}
             style={{
               padding: '0.65rem 1.2rem',
               borderRadius: '10px',
               border: 'none',
-              background: '#ef4444',
+              background: stopLoading ? '#fecaca' : '#ef4444',
               color: '#fff',
-              cursor: 'pointer',
+              cursor: stopLoading ? 'not-allowed' : 'pointer',
+              opacity: stopLoading ? 0.7 : 1,
             }}
           >
-            Detener
+            {stopLoading ? 'Deteniendo...' : 'Detener'}
           </button>
           <button
             onClick={() =>
