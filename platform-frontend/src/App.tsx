@@ -12,8 +12,6 @@ import ContactsPage from './pages/ContactsPage';
 import WorkingHoursPage from './pages/WorkingHoursPage';
 import FlowBuilder from './views/FlowBuilder/FlowBuilder';
 
-import ChatHistoryPage from './pages/ChatHistoryPage';
-
 export default function App() {
   return (
     <Routes>
@@ -24,7 +22,6 @@ export default function App() {
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardOverview />} />
           <Route path="chat" element={<ChatPage />} />
-          <Route path="history" element={<ChatHistoryPage />} />
           <Route path="flows" element={<FlowsPage />} />
           <Route path="flow-builder" element={<FlowBuilder />} />
           <Route path="users" element={<UsersPage />} />
