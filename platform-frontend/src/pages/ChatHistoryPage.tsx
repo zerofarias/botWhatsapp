@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './ChatHistoryPage.css';
-
 // Define types for the data we'll be fetching
 type Conversation = {
   id: string;
