@@ -1,5 +1,6 @@
 import { markAllMessagesAsReadByPhone } from '../services/api';
 import { useState, useEffect } from 'react';
+import { useSocket } from './useSocket';
 import {
   api,
   createConversationNote,
@@ -8,6 +9,7 @@ import {
 import type { ConversationSummary } from '../types/chat';
 
 export function useChatSession(activeConversation: ConversationSummary | null) {
+  const socket = useSocket();
   const [history, setHistory] = useState<unknown[]>([]); // Cambia 'unknown' por el tipo correcto si lo tienes
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -44,10 +46,28 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
             if (isMounted) setLoading(false);
           });
       });
+
+    // Escuchar mensajes nuevos por socket
+    if (socket && activeConversation) {
+      const onMessage = (payload: { conversationId: string }) => {
+        if (payload.conversationId === activeConversation.id) {
+          getCombinedHistory(activeConversation.userPhone)
+            .then((fullHistory) => {
+              if (isMounted) setHistory(fullHistory || []);
+            })
+            .catch(() => {});
+        }
+      };
+      socket.on('message:new', onMessage);
+      return () => {
+        isMounted = false;
+        socket.off('message:new', onMessage);
+      };
+    }
     return () => {
       isMounted = false;
     };
-  }, [activeConversation]);
+  }, [activeConversation, socket]);
 
   const sendMessage = async (content: string, isNote: boolean) => {
     if (!activeConversation) return;
@@ -70,6 +90,11 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
         await api.post(`/conversations/${activeConversation.id}/messages`, {
           content,
         });
+        // Recargar historial después de enviar mensaje
+        const fullHistory = await getCombinedHistory(
+          activeConversation.userPhone
+        );
+        setHistory(fullHistory || []);
       }
     } catch (error) {
       console.error('[useChatSession] Failed to send message', error);
