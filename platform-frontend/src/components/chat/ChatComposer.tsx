@@ -24,8 +24,22 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const trimmed = inputValue.trim();
+      if (trimmed) {
+        onSubmit(trimmed);
+        setInputValue('');
+      }
+    }
+  };
+
   return (
-    <form className="chat-composer-container" onSubmit={handleSubmit}>
+    <form
+      className="chat-composer-container chat-composer-row"
+      onSubmit={handleSubmit}
+    >
       <textarea
         className={`chat-composer-textarea${isNoteMode ? ' note-mode' : ''}`}
         placeholder={
@@ -33,14 +47,18 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
         }
         value={inputValue}
         onChange={(e) => setInputValue(e.target.value)}
+        onKeyDown={handleKeyDown}
         disabled={disabled}
         rows={2}
       />
-      <div className="chat-composer-actions">
-        <button type="submit" disabled={disabled || !inputValue.trim()}>
-          Enviar
-        </button>
-      </div>
+      <button
+        type="submit"
+        className="chat-composer-send-btn"
+        disabled={disabled || !inputValue.trim()}
+        style={{ marginLeft: '8px', alignSelf: 'flex-end', height: '40px' }}
+      >
+        Enviar
+      </button>
     </form>
   );
 };

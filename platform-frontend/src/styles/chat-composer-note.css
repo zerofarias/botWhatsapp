@@ -1,3 +1,32 @@
+.chat-composer-row {
+  display: flex;
+  align-items: flex-end;
+}
+
+.chat-composer-textarea {
+  flex: 1;
+  resize: none;
+  min-width: 0;
+}
+
+.chat-composer-send-btn {
+  height: 40px;
+  min-width: 80px;
+  font-weight: 500;
+  background: #ffd700;
+  border: none;
+  border-radius: 6px;
+  color: #333;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.chat-composer-send-btn:disabled {
+  background: #eee;
+  color: #aaa;
+  cursor: not-allowed;
+}
+
 .chat-composer-textarea.note-mode {
   background-color: #fffbe6;
   border: 1.5px solid #ffd700;
