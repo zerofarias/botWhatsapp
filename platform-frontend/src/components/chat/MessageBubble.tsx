@@ -8,6 +8,8 @@ type Message = {
   createdAt?: string;
   senderType?: 'USER' | 'OPERATOR' | 'BOT' | 'CONTACT';
   label?: string;
+  mediaType?: string | null;
+  mediaUrl?: string | null;
 };
 
 type MessageBubbleProps = {
@@ -68,6 +70,31 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ item }) => {
           {item.senderType !== 'CONTACT' && !isOutgoing && (
             <div className="message-bubble-meta sender">{item.senderType}</div>
           )}
+          {/* Renderizar contenido multimedia si existe */}
+          {item.mediaType && item.mediaUrl ? (
+            item.mediaType.includes('image') ? (
+              <img
+                src={item.mediaUrl}
+                alt="Imagen recibida"
+                style={{
+                  maxWidth: '220px',
+                  borderRadius: '8px',
+                  marginBottom: '0.5rem',
+                }}
+              />
+            ) : item.mediaType.includes('audio') ? (
+              <audio
+                controls
+                src={item.mediaUrl}
+                style={{ width: '200px', marginBottom: '0.5rem' }}
+              />
+            ) : (
+              <a href={item.mediaUrl} target="_blank" rel="noopener noreferrer">
+                Archivo recibido
+              </a>
+            )
+          ) : null}
+          {/* Texto del mensaje */}
           <p>{item.content}</p>
         </div>
         <div className="message-bubble-meta">
