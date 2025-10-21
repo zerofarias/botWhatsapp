@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import MessageBubble from './MessageBubble';
 
 type Message = {
   type: 'message' | 'note' | 'label';
   id?: string;
+  isRead?: boolean;
   // ... other properties
 };
 
@@ -13,10 +14,20 @@ type MessageListProps = {
 };
 
 const MessageList: React.FC<MessageListProps> = ({ loading, messages }) => {
-  // const endOfMessagesRef = useRef<HTMLDivElement>(null);
-  // useEffect(() => {
-  //   endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
-  // }, [messages]);
+  const endOfMessagesRef = useRef<HTMLDivElement>(null);
+  const firstUnreadRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Buscar el primer mensaje no leído
+    const firstUnreadIndex = messages.findIndex(
+      (msg) => msg.type === 'message' && msg.isRead === false
+    );
+    if (firstUnreadIndex !== -1 && firstUnreadRef.current) {
+      firstUnreadRef.current.scrollIntoView({ behavior: 'smooth' });
+    } else if (endOfMessagesRef.current) {
+      endOfMessagesRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
   if (loading) {
     return <div className="chat-view-empty">Cargando mensajes...</div>;
@@ -28,10 +39,25 @@ const MessageList: React.FC<MessageListProps> = ({ loading, messages }) => {
 
   return (
     <div className="message-list">
-      {messages.map((item, index) => (
-        <MessageBubble key={`${item.id ?? 'msg'}-${index}`} item={item} />
-      ))}
-      {/* <div ref={endOfMessagesRef} /> */}
+      {messages.map((item, index) => {
+        if (item.type === 'message' && item.isRead === false) {
+          // Solo el primer no leído
+          const firstUnreadIndex = messages.findIndex(
+            (msg) => msg.type === 'message' && msg.isRead === false
+          );
+          if (index === firstUnreadIndex) {
+            return (
+              <div ref={firstUnreadRef} key={`${item.id ?? 'msg'}-${index}`}>
+                <MessageBubble item={item} />
+              </div>
+            );
+          }
+        }
+        return (
+          <MessageBubble key={`${item.id ?? 'msg'}-${index}`} item={item} />
+        );
+      })}
+      <div ref={endOfMessagesRef} />
     </div>
   );
 };

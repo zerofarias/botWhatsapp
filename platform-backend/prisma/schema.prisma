@@ -166,6 +166,7 @@ model Message {
   mediaType      String?       @map("media_type")
   mediaUrl       String?       @map("media_url")
   isDelivered    Boolean       @default(true) @map("is_delivered")
+  isRead         Boolean       @default(false) @map("is_read")
   externalId     String?       @unique @map("external_id")
   createdAt      DateTime      @default(now()) @map("created_at")
 

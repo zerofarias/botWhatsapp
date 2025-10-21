@@ -36,6 +36,7 @@ export async function getCombinedChatHistoryByPhone(userPhone: string) {
         mediaType: msg.mediaType,
         mediaUrl: msg.mediaUrl,
         isDelivered: msg.isDelivered,
+        isRead: msg.isRead,
         externalId: msg.externalId,
         createdAt: msg.createdAt,
         type: 'message',

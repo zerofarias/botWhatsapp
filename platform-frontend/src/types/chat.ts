@@ -41,6 +41,7 @@ export type ConversationMessage = {
   mediaUrl: string | null;
   externalId: string | null;
   isDelivered: boolean;
+  isRead: boolean;
   createdAt: string;
 };
 

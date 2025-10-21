@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { api, getAllChats } from '../services/api';
+import { api, getAllChats, getAllChatsByPhone } from '../services/api';
 import { useSocket } from './useSocket';
 import { useAuth } from '../context/AuthContext';
 import type { ConversationSummary, ConversationMessage } from '../types/chat';
@@ -14,9 +14,8 @@ function sortConversations(items: ConversationSummary[]) {
 export function useConversations() {
   const { user, loading: authLoading } = useAuth();
   const socket = useSocket();
-  const [allConversations, setAllConversations] = useState<
-    ConversationSummary[]
-  >([]);
+  const [abiertas, setAbiertas] = useState<ConversationSummary[]>([]);
+  const [cerradas, setCerradas] = useState<ConversationSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [unread, setUnread] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
@@ -28,7 +27,24 @@ export function useConversations() {
     setLoading(true);
     getAllChats()
       .then((data) => {
-        if (isMounted) setAllConversations(data || []);
+        if (isMounted) {
+          // Agrupar por abiertas/cerradas
+          const abiertas = [];
+          const cerradas = [];
+          for (const conv of data || []) {
+            if (
+              conv.status === 'ACTIVE' ||
+              conv.status === 'PENDING' ||
+              conv.status === 'PAUSED'
+            ) {
+              abiertas.push(conv);
+            } else if (conv.status === 'CLOSED') {
+              cerradas.push(conv);
+            }
+          }
+          setAbiertas(abiertas);
+          setCerradas(cerradas);
+        }
       })
       .catch((error) =>
         console.error('[useConversations] Failed to fetch', error)
@@ -54,13 +70,8 @@ export function useConversations() {
     [filter, user]
   );
 
-  const unifiedConversations = useMemo(
-    () => sortConversations(allConversations),
-    [allConversations]
-  );
-
-  const filteredConversations = useMemo(() => {
-    const base = unifiedConversations.filter(matchesFilter);
+  const abiertasFiltradas = useMemo(() => {
+    const base = sortConversations(abiertas).filter(matchesFilter);
     if (!searchTerm.trim()) return base;
     const normalized = searchTerm.trim().toLowerCase();
     return base.filter((c) => {
@@ -71,11 +82,26 @@ export function useConversations() {
         phone.toLowerCase().includes(normalized)
       );
     });
-  }, [unifiedConversations, searchTerm, matchesFilter]);
+  }, [abiertas, searchTerm, matchesFilter]);
+
+  const cerradasFiltradas = useMemo(() => {
+    const base = sortConversations(cerradas).filter(matchesFilter);
+    if (!searchTerm.trim()) return base;
+    const normalized = searchTerm.trim().toLowerCase();
+    return base.filter((c) => {
+      const name = c.contact?.name ?? c.contactName ?? '';
+      const phone = c.userPhone;
+      return (
+        name.toLowerCase().includes(normalized) ||
+        phone.toLowerCase().includes(normalized)
+      );
+    });
+  }, [cerradas, searchTerm, matchesFilter]);
 
   return {
     loading,
-    conversations: filteredConversations,
+    abiertas: abiertasFiltradas,
+    cerradas: cerradasFiltradas,
     unread,
     setUnread,
     filter,

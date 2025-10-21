@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { markConversationMessagesAsRead } from '../../services/api';
 import type { ConversationSummary } from '../../types/chat';
 import ChatHeader from './ChatHeader';
 import MessageList from './MessageList';
@@ -25,6 +26,12 @@ const ChatView: React.FC<ChatViewProps> = ({
   onSendMessage,
   onCloseConversation,
 }) => {
+  useEffect(() => {
+    if (conversation) {
+      markConversationMessagesAsRead(conversation.id).catch(() => {});
+    }
+  }, [conversation]);
+
   if (!conversation) {
     return (
       <div className="chat-view-empty">

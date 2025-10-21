@@ -1,3 +1,48 @@
+// Endpoint para marcar todos los mensajes de todas las conversaciones de un número como leídos
+export async function markAllMessagesAsReadByPhoneHandler(
+  req: Request,
+  res: Response
+) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  const userPhone = req.body.userPhone;
+  if (!userPhone || typeof userPhone !== 'string') {
+    return res.status(400).json({ message: 'userPhone is required.' });
+  }
+  const updatedCount = await markAllMessagesAsReadByPhone(userPhone);
+  return res.json({ updated: updatedCount });
+}
+import {
+  markMessagesAsRead,
+  markAllMessagesAsReadByPhone,
+} from '../services/message.service.js';
+// Endpoint para marcar todos los mensajes de una conversación como leídos
+export async function markConversationMessagesAsRead(
+  req: Request,
+  res: Response
+) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const conversationIdRaw = req.body.conversationId;
+  if (!conversationIdRaw) {
+    return res.status(400).json({ message: 'conversationId is required.' });
+  }
+
+  let conversationId: bigint;
+  try {
+    conversationId = BigInt(conversationIdRaw);
+  } catch {
+    return res.status(400).json({ message: 'Invalid conversationId.' });
+  }
+
+  // Opcional: verificar permisos del usuario aquí
+
+  const updatedCount = await markMessagesAsRead(conversationId);
+  return res.json({ updated: updatedCount });
+}
 import type { Request, Response } from 'express';
 import { prisma } from '../config/prisma.js';
 import { listConversationMessages } from '../services/message.service.js';

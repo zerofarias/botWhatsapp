@@ -1,3 +1,41 @@
+// Marca como leídos todos los mensajes de todas las conversaciones de un número
+export async function markAllMessagesAsReadByPhone(
+  userPhone: string
+): Promise<number> {
+  // Buscar todas las conversaciones de ese número
+  const conversations = await prisma.conversation.findMany({
+    where: { userPhone },
+    select: { id: true },
+  });
+  const ids = conversations.map((c) => c.id);
+  if (ids.length === 0) return 0;
+  const result = await prisma.message.updateMany({
+    where: {
+      conversationId: { in: ids },
+      isRead: false,
+    },
+    data: { isRead: true },
+  });
+  return result.count;
+}
+export async function markMessagesAsRead(
+  conversationId: bigint | number
+): Promise<number> {
+  const id =
+    typeof conversationId === 'bigint'
+      ? conversationId
+      : BigInt(conversationId);
+  const result = await prisma.message.updateMany({
+    where: {
+      conversationId: id,
+      isRead: false,
+    },
+    data: {
+      isRead: true,
+    },
+  });
+  return result.count;
+}
 import { Prisma, type MessageSender } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 
@@ -10,6 +48,7 @@ const messageSelect = Prisma.validator<Prisma.MessageSelect>()({
   mediaType: true,
   mediaUrl: true,
   isDelivered: true,
+  isRead: true,
   externalId: true,
   createdAt: true,
 });

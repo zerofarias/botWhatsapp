@@ -1,3 +1,17 @@
+// Marcar todos los mensajes de todas las conversaciones de un número como leídos
+export async function markAllMessagesAsReadByPhone(userPhone: string) {
+  const res = await api.post(`/messages/mark-read-by-phone/${userPhone}`);
+  return res.data;
+}
+// Marcar todos los mensajes de una conversación como leídos
+export async function markConversationMessagesAsRead(
+  conversationId: string | number
+) {
+  const res = await api.post(`/messages/mark-read`, {
+    conversationId,
+  });
+  return res.data;
+}
 // Todas las conversaciones del sistema (todos los usuarios)
 export async function getAllChats() {
   const res = await api.get('/conversations/all');
