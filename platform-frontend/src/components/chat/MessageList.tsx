@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import MessageBubble from './MessageBubble';
 
 type Message = {
@@ -13,11 +13,10 @@ type MessageListProps = {
 };
 
 const MessageList: React.FC<MessageListProps> = ({ loading, messages }) => {
-  const endOfMessagesRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  // const endOfMessagesRef = useRef<HTMLDivElement>(null);
+  // useEffect(() => {
+  //   endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // }, [messages]);
 
   if (loading) {
     return <div className="chat-view-empty">Cargando mensajes...</div>;
@@ -32,7 +31,7 @@ const MessageList: React.FC<MessageListProps> = ({ loading, messages }) => {
       {messages.map((item, index) => (
         <MessageBubble key={`${item.id ?? 'msg'}-${index}`} item={item} />
       ))}
-      <div ref={endOfMessagesRef} />
+      {/* <div ref={endOfMessagesRef} /> */}
     </div>
   );
 };

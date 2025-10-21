@@ -1,3 +1,8 @@
+// Todas las conversaciones del sistema (todos los usuarios)
+export async function getAllChats() {
+  const res = await api.get('/conversations/all');
+  return res.data;
+}
 import axios from 'axios';
 
 const baseURL =

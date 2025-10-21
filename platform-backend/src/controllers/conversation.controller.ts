@@ -1,6 +1,32 @@
-// Endpoint para listar todos los chats de un número, separados por estado
+// Endpoint para listar todas las conversaciones del sistema (todas las personas)
 import { prisma } from '../config/prisma.js';
 import { conversationSelect } from '../services/conversation.service.js';
+
+export async function listAllChatsHandler(req: Request, res: Response) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  try {
+    const allChats = await prisma.conversation.findMany({
+      orderBy: { createdAt: 'asc' },
+      select: conversationSelect,
+    });
+    const mapped = allChats.map((c) => ({
+      ...c,
+      id: c.id.toString(),
+      contact: c.contact ? { ...c.contact, id: c.contact.id.toString() } : null,
+    }));
+    res.json(mapped);
+  } catch (error) {
+    res
+      .status(500)
+      .json({
+        message: 'Error al obtener todas las conversaciones',
+        error: String(error),
+      });
+  }
+}
+// Endpoint para listar todos los chats de un número, separados por estado
 
 function mapConversationForResponse(conversation: any) {
   const contact = conversation.contact

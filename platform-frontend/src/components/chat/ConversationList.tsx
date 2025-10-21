@@ -34,6 +34,8 @@ const ConversationList: React.FC<ConversationListProps> = ({
   onFilterChange,
   onConversationSelect,
 }) => {
+  // Agrupar por usuario (userPhone)
+
   return (
     <aside className="conversation-list-panel">
       <header className="conversation-list-header">
@@ -65,15 +67,32 @@ const ConversationList: React.FC<ConversationListProps> = ({
         {loading ? (
           <div className="conversation-list-empty">Cargando...</div>
         ) : conversations.length > 0 ? (
-          conversations.map((conv) => (
-            <ConversationListItem
-              key={conv.id}
-              conversation={conv}
-              isActive={conv.id === selectedId}
-              isUnread={unreadConversations.has(conv.id)}
-              onSelect={() => onConversationSelect(conv.id)}
-            />
-          ))
+          // Mostrar solo el último chat por usuario/contacto
+          (() => {
+            const latestByUser: Record<string, ConversationSummary> = {};
+            for (const conv of conversations) {
+              const label =
+                conv.contact?.name?.trim() ||
+                conv.contactName?.trim() ||
+                conv.userPhone;
+              if (
+                !latestByUser[label] ||
+                new Date(conv.lastActivity) >
+                  new Date(latestByUser[label].lastActivity)
+              ) {
+                latestByUser[label] = conv;
+              }
+            }
+            return Object.values(latestByUser).map((conv) => (
+              <ConversationListItem
+                key={conv.id}
+                conversation={conv}
+                isActive={conv.id === selectedId}
+                isUnread={unreadConversations.has(conv.id)}
+                onSelect={() => onConversationSelect(conv.id)}
+              />
+            ));
+          })()
         ) : (
           <div className="conversation-list-empty">No hay conversaciones.</div>
         )}

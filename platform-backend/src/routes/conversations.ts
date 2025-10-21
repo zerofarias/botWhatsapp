@@ -10,10 +10,13 @@ import {
   createConversationNoteHandler,
   listConversationNotesHandler,
   listAllChatsByPhoneHandler,
+  listAllChatsHandler,
 } from '../controllers/conversation.controller.js';
 
 export const conversationRouter = Router();
 conversationRouter.use(authenticate);
+// Endpoint para obtener todas las conversaciones del sistema
+conversationRouter.get('/all', listAllChatsHandler);
 // Historial combinado de chats por teléfono
 conversationRouter.get('/history/:phone', getCombinedChatHistoryHandler);
 

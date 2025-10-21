@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { api, getAllChatsByPhone } from '../services/api';
+import { api, getAllChats } from '../services/api';
 import { useSocket } from './useSocket';
 import { useAuth } from '../context/AuthContext';
 import type { ConversationSummary, ConversationMessage } from '../types/chat';
@@ -11,44 +11,35 @@ function sortConversations(items: ConversationSummary[]) {
   );
 }
 
-export function useConversations(userPhone?: string) {
+export function useConversations() {
   const { user, loading: authLoading } = useAuth();
   const socket = useSocket();
-  const [abiertos, setAbiertos] = useState<ConversationSummary[]>([]);
-  const [cerrados, setCerrados] = useState<ConversationSummary[]>([]);
+  const [allConversations, setAllConversations] = useState<
+    ConversationSummary[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [unread, setUnread] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all');
 
   useEffect(() => {
-    if (authLoading || !userPhone) {
-      return;
-    }
-
+    if (authLoading) return;
     let isMounted = true;
     setLoading(true);
-
-    getAllChatsByPhone(userPhone)
+    getAllChats()
       .then((data) => {
-        if (isMounted) {
-          setAbiertos(data.abiertos || []);
-          setCerrados(data.cerrados || []);
-        }
+        if (isMounted) setAllConversations(data || []);
       })
       .catch((error) =>
         console.error('[useConversations] Failed to fetch', error)
       )
       .finally(() => {
-        if (isMounted) {
-          setLoading(false);
-        }
+        if (isMounted) setLoading(false);
       });
-
     return () => {
       isMounted = false;
     };
-  }, [userPhone, authLoading]);
+  }, [authLoading]);
 
   const matchesFilter = useCallback(
     (conversation: ConversationSummary) => {
@@ -63,68 +54,10 @@ export function useConversations(userPhone?: string) {
     [filter, user]
   );
 
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleConversationUpdate = (payload: ConversationSummary) => {
-      setAbiertos((prev) => {
-        const filtered = prev.filter((item) => item.id !== payload.id);
-        if (!matchesFilter(payload)) {
-          return filtered;
-        }
-        filtered.push(payload);
-        return sortConversations(filtered);
-      });
-    };
-
-    const handleNewMessage = (payload: ConversationMessage) => {
-      setAbiertos((prev) => {
-        const convIndex = prev.findIndex(
-          (c) => c.id === payload.conversationId
-        );
-        if (convIndex === -1) return prev;
-        const updatedConv = {
-          ...prev[convIndex],
-          lastMessage: { ...payload },
-          lastActivity: payload.createdAt,
-        };
-        const without = prev.filter((c) => c.id !== payload.conversationId);
-        return sortConversations([updatedConv, ...without]);
-      });
-      setUnread((prev) => new Set(prev).add(payload.conversationId));
-    };
-
-    socket.on('conversation:update', handleConversationUpdate);
-    socket.on('message:new', handleNewMessage);
-    socket.on('message:update', handleNewMessage);
-
-    return () => {
-      socket.off('conversation:update', handleConversationUpdate);
-      socket.off('message:new', handleNewMessage);
-      socket.off('message:update', handleNewMessage);
-    };
-  }, [socket, matchesFilter]);
-
-  const unifiedConversations = useMemo(() => {
-    const allConversations = [...abiertos, ...cerrados];
-
-    const conversationsByPhone = new Map<string, ConversationSummary>();
-
-    for (const conv of allConversations) {
-      const key = conv.userPhone;
-      const existing = conversationsByPhone.get(key);
-
-      if (
-        !existing ||
-        new Date(conv.lastActivity) > new Date(existing.lastActivity)
-      ) {
-        conversationsByPhone.set(key, conv);
-      }
-    }
-
-    const unified = Array.from(conversationsByPhone.values());
-    return sortConversations(unified);
-  }, [abiertos, cerrados]);
+  const unifiedConversations = useMemo(
+    () => sortConversations(allConversations),
+    [allConversations]
+  );
 
   const filteredConversations = useMemo(() => {
     const base = unifiedConversations.filter(matchesFilter);

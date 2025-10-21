@@ -18,7 +18,7 @@ const ChatPage = () => {
     setFilter,
     searchTerm,
     setSearchTerm,
-  } = useConversations(TEST_PHONE);
+  } = useConversations();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [imageModalOpen, setImageModalOpen] = useState(false);
