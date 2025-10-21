@@ -13,7 +13,6 @@ type NavigationLink = {
 const NAVIGATION_LINKS: NavigationLink[] = [
   { to: '/dashboard', label: 'Estado' },
   { to: '/dashboard/chat', label: 'Chat' },
-  { to: '/dashboard/history', label: 'Historial' },
   { to: '/dashboard/flows', label: 'Flujos', roles: ['ADMIN', 'SUPERVISOR'] },
   {
     to: '/dashboard/flow-builder',
