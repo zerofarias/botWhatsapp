@@ -26,11 +26,7 @@ interface MessagePreview {
   timestamp: string;
 }
 
-interface ConversationSummary {
-  id: string;
-  status: 'PENDING' | 'ACTIVE' | 'PAUSED' | 'CLOSED';
-  area: { id: number; name: string | null } | null;
-}
+import type { ConversationSummary } from '../types/chat';
 
 interface ConversationStats {
   active: number;

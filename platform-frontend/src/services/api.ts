@@ -13,13 +13,37 @@ export const api = axios.create({
   },
 });
 
-// Interceptor para agregar el token si existe
-api.interceptors.request.use((config) => {
-  // Si usas cookies para la sesión, withCredentials ya lo envía
-  // Si usas token en localStorage/sessionStorage, agrégalo aquí
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers['Authorization'] = `Bearer ${token}`;
-  }
-  return config;
-});
+// Si el backend solo usa sesión, no agregues Authorization
+
+// Notas internas de conversación
+export async function createConversationNote(
+  conversationId: string | number,
+  content: string
+) {
+  const res = await api.post(`/conversations/${conversationId}/notes`, {
+    content,
+  });
+  return res.data;
+}
+
+export async function listConversationNotes(conversationId: string | number) {
+  const res = await api.get(`/conversations/${conversationId}/notes`);
+  return res.data;
+}
+
+export async function getAllChatsByPhone(userPhone: string) {
+  const res = await api.get(`/conversations/all-by-phone/${userPhone}`);
+  return res.data;
+}
+
+export async function listConversationMessages(
+  conversationId: string | number
+) {
+  const res = await api.get(`/conversations/${conversationId}/messages`);
+  return res.data;
+}
+
+export async function getCombinedHistory(phone: string) {
+  const res = await api.get(`/conversations/history/${phone}`);
+  return res.data;
+}

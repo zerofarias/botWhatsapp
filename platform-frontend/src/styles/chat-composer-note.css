@@ -1,0 +1,5 @@
+.chat-composer-textarea.note-mode {
+  background-color: #fffbe6;
+  border: 1.5px solid #ffd700;
+  transition: background 0.2s, border 0.2s;
+}

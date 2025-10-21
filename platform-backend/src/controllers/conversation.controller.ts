@@ -1,5 +1,73 @@
-import { getCombinedChatHistoryByPhone } from '../services/conversation.service.js';
-// Nuevo endpoint: historial combinado de chats por teléfono
+// Endpoint para listar todos los chats de un número, separados por estado
+import { prisma } from '../config/prisma.js';
+import { conversationSelect } from '../services/conversation.service.js';
+
+function mapConversationForResponse(conversation: any) {
+  const contact = conversation.contact
+    ? {
+        ...conversation.contact,
+        id: conversation.contact.id.toString(),
+      }
+    : null;
+
+  return {
+    ...conversation,
+    id: conversation.id.toString(),
+    contact,
+  };
+}
+
+export async function listAllChatsByPhoneHandler(req: Request, res: Response) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  const phone = req.params.phone;
+  if (!phone || typeof phone !== 'string') {
+    return res.status(400).json({ message: 'Phone is required.' });
+  }
+
+  const possibleFormats = [
+    phone,
+    `+${phone}`,
+    phone.startsWith('+') ? phone.substring(1) : null,
+  ].filter(Boolean) as string[];
+
+  // Buscar todas las conversaciones de ese número
+  const allChats = await prisma.conversation.findMany({
+    where: {
+      userPhone: {
+        in: possibleFormats,
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+    select: conversationSelect,
+  });
+
+  const abiertosRaw = allChats.filter(
+    (c: { status: ConversationStatus }) =>
+      c.status === 'ACTIVE' || c.status === 'PENDING' || c.status === 'PAUSED'
+  );
+  const cerradosRaw = allChats.filter(
+    (c: { status: ConversationStatus }) => c.status === 'CLOSED'
+  );
+
+  const abiertos = abiertosRaw.map(mapConversationForResponse);
+  const cerrados = cerradosRaw.map(mapConversationForResponse);
+
+  res.json({ abiertos, cerrados });
+}
+import type { Request, Response } from 'express';
+import { ConversationStatus } from '@prisma/client';
+import {
+  getCombinedChatHistoryByPhone,
+  addConversationEvent,
+  closeConversationRecord,
+  ensureConversationAccess,
+  listConversationsForUser,
+  touchConversation,
+  addConversationNote,
+  listConversationNotes,
+} from '../services/conversation.service.js';
 export async function getCombinedChatHistoryHandler(
   req: Request,
   res: Response
@@ -16,23 +84,95 @@ export async function getCombinedChatHistoryHandler(
     const history = await getCombinedChatHistoryByPhone(phone);
     res.json(history);
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: 'Error al obtener historial combinado',
-        error: String(error),
-      });
+    res.status(500).json({
+      message: 'Error al obtener historial combinado',
+      error: String(error),
+    });
   }
 }
-import type { Request, Response } from 'express';
-import { ConversationStatus } from '@prisma/client';
-import {
-  addConversationEvent,
-  closeConversationRecord,
-  ensureConversationAccess,
-  listConversationsForUser,
-  touchConversation,
-} from '../services/conversation.service.js';
+
+export async function createConversationNoteHandler(
+  req: Request,
+  res: Response
+) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  const conversationIdParam = req.params.id;
+  let conversationId: bigint;
+  try {
+    conversationId = BigInt(conversationIdParam);
+  } catch {
+    return res.status(400).json({ message: 'Invalid conversation id.' });
+  }
+  const conversation = await ensureConversationAccess(req.user, conversationId);
+  if (!conversation) {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
+  const { content } = req.body ?? {};
+  if (!content || typeof content !== 'string' || !content.trim().length) {
+    return res.status(400).json({ message: 'Content is required.' });
+  }
+  const note = await addConversationNote(
+    conversationId,
+    content.trim(),
+    req.user.id
+  );
+  let noteContent = '';
+  if (
+    note.payload &&
+    typeof note.payload === 'object' &&
+    'content' in note.payload
+  ) {
+    noteContent = (note.payload as any).content;
+  }
+  res.status(201).json({
+    id: note.id.toString(),
+    content: noteContent,
+    createdAt: note.createdAt,
+    createdById: note.createdById,
+  });
+}
+
+// Listar notas internas de una conversación
+export async function listConversationNotesHandler(
+  req: Request,
+  res: Response
+) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  const conversationIdParam = req.params.id;
+  let conversationId: bigint;
+  try {
+    conversationId = BigInt(conversationIdParam);
+  } catch {
+    return res.status(400).json({ message: 'Invalid conversation id.' });
+  }
+  const conversation = await ensureConversationAccess(req.user, conversationId);
+  if (!conversation) {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
+  const notes = await listConversationNotes(conversationId);
+  res.json(
+    notes.map((note) => {
+      let noteContent = '';
+      if (
+        note.payload &&
+        typeof note.payload === 'object' &&
+        'content' in note.payload
+      ) {
+        noteContent = (note.payload as any).content;
+      }
+      return {
+        id: note.id.toString(),
+        content: noteContent,
+        createdAt: note.createdAt,
+        createdById: note.createdById,
+      };
+    })
+  );
+}
 import {
   broadcastConversationEvent,
   broadcastConversationUpdate,

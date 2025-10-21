@@ -13,6 +13,11 @@ export async function getCombinedChatHistoryByPhone(userPhone: string) {
   const history: Array<any> = [];
   for (const conv of conversations) {
     // Etiqueta de inicio
+    if (!conv.createdAt) {
+      // Omitting conversations with null createdAt to prevent crashes.
+      // A more sophisticated error logging could be added here.
+      continue;
+    }
     history.push({
       type: 'label',
       label: `Inicio de conversación (${conv.createdAt.toISOString()})`,
@@ -23,11 +28,41 @@ export async function getCombinedChatHistoryByPhone(userPhone: string) {
     const messages = await listConversationMessages(conv.id);
     for (const msg of messages) {
       history.push({
-        ...msg,
+        id: msg.id.toString(),
+        conversationId: msg.conversationId.toString(),
+        senderType: msg.senderType,
+        senderId: msg.senderId,
+        content: msg.content,
+        mediaType: msg.mediaType,
+        mediaUrl: msg.mediaUrl,
+        isDelivered: msg.isDelivered,
+        externalId: msg.externalId,
+        createdAt: msg.createdAt,
         type: 'message',
+      });
+    }
+
+    // Notas internas
+    const notes = await listConversationNotes(conv.id);
+    for (const note of notes) {
+      let noteContent = '';
+      if (
+        note.payload &&
+        typeof note.payload === 'object' &&
+        'content' in note.payload
+      ) {
+        noteContent = (note.payload as any).content;
+      }
+      history.push({
+        id: note.id.toString(),
+        type: 'note',
+        content: noteContent,
+        createdAt: note.createdAt,
+        createdById: note.createdById,
         conversationId: conv.id.toString(),
       });
     }
+
     // Etiqueta de fin
     history.push({
       type: 'label',
@@ -39,11 +74,18 @@ export async function getCombinedChatHistoryByPhone(userPhone: string) {
     });
   }
   // Ordenar por fecha
-  history.sort(
-    (a, b) =>
-      new Date(a.createdAt || a.timestamp).getTime() -
-      new Date(b.createdAt || b.timestamp).getTime()
-  );
+  history.sort((a, b) => {
+    const timeA = a.createdAt || a.timestamp;
+    const timeB = b.createdAt || b.timestamp;
+
+    // Si alguno no tiene fecha, no se puede comparar de forma fiable,
+    // pero para mantener un orden estable, podemos tratarlos como iguales
+    // o moverlos al principio/final. Moverlos al final es más seguro.
+    if (!timeA) return 1;
+    if (!timeB) return -1;
+
+    return new Date(timeA).getTime() - new Date(timeB).getTime();
+  });
   return history;
 }
 import {
@@ -55,7 +97,7 @@ import {
 import { prisma } from '../config/prisma.js';
 import type { SessionUser } from '../types/express.js';
 
-const conversationSelect = {
+export const conversationSelect = {
   id: true,
   userPhone: true,
   contactName: true,
@@ -175,6 +217,33 @@ export async function addConversationEvent(
       payload: payload ?? Prisma.JsonNull,
       createdById: createdById ?? null,
     },
+  });
+}
+
+// Crear nota interna en la conversación
+export async function addConversationNote(
+  conversationId: bigint,
+  content: string,
+  createdById?: number | null
+) {
+  return prisma.conversationEvent.create({
+    data: {
+      conversationId,
+      eventType: 'NOTE',
+      payload: { content },
+      createdById: createdById ?? null,
+    },
+  });
+}
+
+// Listar notas internas de una conversación
+export async function listConversationNotes(conversationId: bigint) {
+  return prisma.conversationEvent.findMany({
+    where: {
+      conversationId,
+      eventType: 'NOTE',
+    },
+    orderBy: { createdAt: 'asc' },
   });
 }
 
