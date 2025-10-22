@@ -51,24 +51,38 @@ export async function listFlowTree({
       areaId: areaId ?? undefined,
       isActive: includeInactive ? undefined : true,
     },
-    orderBy: [{ parentId: 'asc' }, { orderIndex: 'asc' }, { id: 'asc' }],
     select: flowSelect,
   });
 
-  const nodeMap = new Map<number, FlowNode>();
+  console.log('[DEBUG] Raw flows from DB:', JSON.stringify(flows, null, 2));
+
+  const flowsById: { [key: number]: FlowNode } = {};
+
+  // First pass: create all node objects and map them by ID
+  for (const flow of flows) {
+    flowsById[flow.id] = { ...flow, children: [] };
+  }
+
   const roots: FlowNode[] = [];
 
-  flows.forEach((flow) => {
-    nodeMap.set(flow.id, { ...flow, children: [] });
-  });
-
-  nodeMap.forEach((node) => {
-    if (node.parentId && nodeMap.has(node.parentId)) {
-      nodeMap.get(node.parentId)?.children.push(node);
+  // Second pass: link children to parents
+  for (const flow of flows) {
+    if (flow.parentId && flowsById[flow.parentId]) {
+      flowsById[flow.parentId].children.push(flowsById[flow.id]);
     } else {
-      roots.push(node);
+      roots.push(flowsById[flow.id]);
     }
-  });
+  }
+
+  // Sort children by orderIndex
+  for (const flowId in flowsById) {
+    flowsById[flowId].children.sort(
+      (a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0)
+    );
+  }
+
+  // Sort roots by orderIndex
+  roots.sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
 
   return roots;
 }

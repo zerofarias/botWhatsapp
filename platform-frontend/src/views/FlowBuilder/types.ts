@@ -64,6 +64,7 @@ export interface FlowNodeData {
   conditions: FlowCondition[];
   areaId: number | null;
   flowId?: number | null;
+  parentId?: number | null;
   messageKind: FlowMessageKind;
   buttonSettings?: ButtonSettings;
   listSettings?: ListSettings;

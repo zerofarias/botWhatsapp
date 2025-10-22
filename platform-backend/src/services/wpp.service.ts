@@ -1,3 +1,77 @@
+// Exportar función para obtener snapshot de conversación
+export async function fetchConversationSnapshot(
+  conversationId: bigint | number
+): Promise<ConversationSnapshot | null> {
+  const record = await prisma.conversation.findUnique({
+    where: { id: BigInt(conversationId) },
+    select: {
+      id: true,
+      userPhone: true,
+      contactName: true,
+      contactId: true,
+      areaId: true,
+      assignedToId: true,
+      status: true,
+      botActive: true,
+      lastActivity: true,
+      updatedAt: true,
+      contact: {
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          dni: true,
+        },
+      },
+    },
+  });
+  if (!record) return null;
+  return {
+    id: record.id.toString(),
+    userPhone: record.userPhone,
+    contactName: record.contactName,
+    contactId: record.contactId ?? null,
+    contact: record.contact
+      ? {
+          id: record.contact.id,
+          name: record.contact.name,
+          phone: record.contact.phone,
+          dni: record.contact.dni,
+        }
+      : null,
+    areaId: record.areaId,
+    assignedToId: record.assignedToId,
+    status: record.status,
+    botActive: record.botActive,
+    lastActivity: record.lastActivity.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+// Exportar función para obtener rooms de conversación
+export function conversationRooms(snapshot: ConversationSnapshot) {
+  const rooms = new Set<string>();
+  if (snapshot.assignedToId) {
+    rooms.add(`user:${snapshot.assignedToId}`);
+  }
+  if (snapshot.areaId) {
+    rooms.add(`area:${snapshot.areaId}`);
+  }
+  rooms.add('role:ADMIN');
+  rooms.add('role:SUPERVISOR');
+  return rooms;
+}
+
+// Exportar función para emitir eventos a un room
+export function emitToRoom(
+  io: SocketIOServer | undefined,
+  room: string,
+  event: string,
+  payload: unknown
+) {
+  if (!io) return;
+  io.to(room).emit(event, payload);
+}
 import {
   create as createClient,
   type CreateOptions,
@@ -554,12 +628,84 @@ export function resolveMessageDate(message: Message): Date {
   return new Date();
 }
 
-function evaluateFlowSelection(
+export function evaluateFlowSelection(
   nodes: FlowNode[],
-  normalizedBody: string
+  normalizedBody: string,
+  currentFlowNodeId?: number | null
 ): FlowExecutionResult | null {
-  const flat = flattenFlowTree(nodes).filter((node) => node.isActive);
-  const match = flat.find((node) => {
+  let currentNode: FlowNode | undefined = undefined;
+  if (typeof currentFlowNodeId === 'number') {
+    currentNode = flattenFlowTree(nodes).find(
+      (n) => n.id === currentFlowNodeId
+    );
+  }
+
+  // Log de depuración: mostrar contexto y candidatos
+  console.log('[FLOW] --- Evaluación de flujo ---');
+  console.log('[FLOW] currentFlowNodeId:', currentFlowNodeId);
+  if (currentNode) {
+    console.log(
+      `[FLOW] Nodo actual: id=${currentNode.id}, name="${currentNode.name}", trigger="${currentNode.trigger}"`
+    );
+  } else {
+    console.log('[FLOW] Sin nodo actual, usando nodos raíz');
+  }
+
+  let candidates: FlowNode[] = [];
+  if (currentNode) {
+    if (currentNode.children.length > 0) {
+      // Si el nodo actual tiene hijos, solo evaluar esos hijos activos
+      candidates = currentNode.children.filter((n) => n.isActive);
+    } else {
+      // Si no tiene hijos, revisar condiciones en metadata
+      const builder =
+        currentNode.metadata && typeof currentNode.metadata === 'object'
+          ? (currentNode.metadata as any).builder
+          : undefined;
+      if (builder && Array.isArray(builder.conditions)) {
+        const condition = builder.conditions.find(
+          (cond: any) => cond.match === normalizedBody
+        );
+        if (condition && condition.targetId) {
+          // Buscar el nodo destino por targetId
+          const targetNode = flattenFlowTree(nodes).find((n) => {
+            if (n.metadata && typeof n.metadata === 'object') {
+              const builder = (n.metadata as any).builder;
+              return (
+                builder &&
+                String(builder.reactId) === String(condition.targetId)
+              );
+            }
+            return false;
+          });
+          if (targetNode && targetNode.isActive) {
+            candidates = [targetNode];
+            console.log(
+              '[FLOW] Condición encontrada en metadata, candidato:',
+              targetNode.id,
+              targetNode.name
+            );
+          } else {
+            candidates = [];
+          }
+        } else {
+          candidates = [];
+        }
+      } else {
+        candidates = [];
+      }
+    }
+  } else {
+    // Si no hay nodo actual, buscar entre los nodos raíz activos
+    candidates = nodes.filter((n) => n.isActive);
+  }
+
+  console.log('[FLOW] Nodos candidatos:');
+  candidates.forEach((n) => {
+    console.log(`  - id=${n.id}, name="${n.name}", trigger="${n.trigger}"`);
+  });
+
+  const match = candidates.find((node) => {
     if (!node.trigger) return false;
     return matchesTrigger(node.trigger, normalizedBody);
   });
@@ -581,82 +727,6 @@ function evaluateFlowSelection(
   }
 
   return result;
-}
-
-function conversationRooms(snapshot: ConversationSnapshot) {
-  const rooms = new Set<string>();
-  if (snapshot.assignedToId) {
-    rooms.add(`user:${snapshot.assignedToId}`);
-  }
-  if (snapshot.areaId) {
-    rooms.add(`area:${snapshot.areaId}`);
-  }
-  rooms.add('role:ADMIN');
-  rooms.add('role:SUPERVISOR');
-  return rooms;
-}
-
-function emitToRoom(
-  io: SocketIOServer | undefined,
-  room: string,
-  event: string,
-  payload: unknown
-) {
-  if (!io) return;
-  io.to(room).emit(event, payload);
-}
-
-async function fetchConversationSnapshot(
-  conversationId: bigint | number
-): Promise<ConversationSnapshot | null> {
-  const record = await prisma.conversation.findUnique({
-    where: { id: BigInt(conversationId) },
-    select: {
-      id: true,
-      userPhone: true,
-      contactName: true,
-      contactId: true,
-      areaId: true,
-      assignedToId: true,
-      status: true,
-      botActive: true,
-      lastActivity: true,
-      updatedAt: true,
-      contact: {
-        select: {
-          id: true,
-          name: true,
-          phone: true,
-          dni: true,
-        },
-      },
-    },
-  });
-
-  if (!record) {
-    return null;
-  }
-
-  return {
-    id: record.id.toString(),
-    userPhone: record.userPhone,
-    contactName: record.contactName,
-    contactId: record.contactId ?? null,
-    contact: record.contact
-      ? {
-          id: record.contact.id,
-          name: record.contact.name,
-          phone: record.contact.phone,
-          dni: record.contact.dni,
-        }
-      : null,
-    areaId: record.areaId,
-    assignedToId: record.assignedToId,
-    status: record.status,
-    botActive: record.botActive,
-    lastActivity: record.lastActivity.toISOString(),
-    updatedAt: record.updatedAt.toISOString(),
-  };
 }
 
 function formatMessageRecord(
@@ -1169,92 +1239,140 @@ async function handleIncomingMessage(
     return;
   }
 
-  const evaluation = evaluateFlowSelection(flows, normalizedBody);
+  // --- START OF REFACTORED LOGIC ---
 
+  const convState = await prisma.conversation.findUnique({
+    where: { id: BigInt(conversationId) },
+    select: { currentFlowNodeId: true },
+  });
+  const currentId = convState?.currentFlowNodeId;
+
+  console.log('[FLOW] Trigger recibido:', normalizedBody);
+  console.log('[FLOW] currentFlowNodeId antes:', currentId);
+
+  // 1. Try to evaluate from the current node's context
+  let evaluation = evaluateFlowSelection(flows, normalizedBody, currentId);
+
+  // 2. If that fails, try to evaluate from the root (global triggers)
   if (!evaluation) {
-    if (primaryMenu) {
-      await sendReply(
-        ownerUserId,
-        client,
-        conversationId,
-        message,
-        primaryMenu,
-        io
-      );
-    }
-    return;
+    console.log('[FLOW] No match in current context, trying root nodes.');
+    evaluation = evaluateFlowSelection(flows, normalizedBody, undefined);
   }
 
-  await sendReply(ownerUserId, client, conversationId, message, evaluation, io);
+  // 3. If we have a match, process it
+  if (evaluation) {
+    console.log(
+      '[FLOW] Nodo evaluado:',
+      evaluation.matchedNode.id,
+      evaluation.matchedNode.name
+    );
 
-  if (evaluation.redirectAreaId !== undefined) {
-    const areaId = evaluation.redirectAreaId;
+    // Update conversation state
+    await touchConversation(conversationId, {
+      currentFlowNodeId: evaluation.matchedNode.id,
+    });
+    const convAfter = await prisma.conversation.findUnique({
+      where: { id: BigInt(conversationId) },
+      select: { currentFlowNodeId: true },
+    });
+    console.log(
+      '[FLOW] currentFlowNodeId después:',
+      convAfter?.currentFlowNodeId
+    );
 
-    if (areaId !== null) {
-      const area = await prisma.area.findUnique({
-        where: { id: areaId },
-        include: { workingHours: true },
-      });
+    // Send reply and handle redirects
+    await sendReply(
+      ownerUserId,
+      client,
+      conversationId,
+      message,
+      evaluation,
+      io
+    );
 
-      if (area) {
-        let withinSchedule = true;
-        if (area.workingHours.length) {
-          withinSchedule = checkIfWithinWorkingHours(
-            dayjs(),
-            area.workingHours
-          );
-        }
+    if (evaluation.redirectAreaId !== undefined) {
+      const areaId = evaluation.redirectAreaId;
 
-        if (!withinSchedule) {
-          const messageText = formatAfterHoursMessage(
-            area.workingHours[0],
-            AFTER_HOURS_MESSAGE
-          );
-          await sendReply(
-            ownerUserId,
-            client,
-            conversationId,
-            message,
-            messageText,
-            io
-          );
-          await touchConversation(conversationId, {
-            area: { connect: { id: areaId } },
-            lastActivity: record.createdAt,
-            status: 'PENDING',
-            botActive: true,
-          });
-          await broadcastConversationUpdate(io, conversationId);
-          await addConversationEvent(
-            conversationId,
-            'NOTE',
-            {
-              type: 'after_hours',
-              areaId,
-              message: messageText,
-            },
-            ownerUserId
-          );
-          logSystem('Mensaje de ausencia enviado');
-          return;
+      if (areaId !== null) {
+        const area = await prisma.area.findUnique({
+          where: { id: areaId },
+          include: { workingHours: true },
+        });
+
+        if (area) {
+          let withinSchedule = true;
+          if (area.workingHours.length) {
+            withinSchedule = checkIfWithinWorkingHours(
+              dayjs(),
+              area.workingHours
+            );
+          }
+
+          if (!withinSchedule) {
+            const messageText = formatAfterHoursMessage(
+              area.workingHours[0],
+              AFTER_HOURS_MESSAGE
+            );
+            await sendReply(
+              ownerUserId,
+              client,
+              conversationId,
+              message,
+              messageText,
+              io
+            );
+            await touchConversation(conversationId, {
+              area: { connect: { id: areaId } },
+              lastActivity: record.createdAt,
+              status: 'PENDING',
+              botActive: true,
+            });
+            await broadcastConversationUpdate(io, conversationId);
+            await addConversationEvent(
+              conversationId,
+              'NOTE',
+              {
+                type: 'after_hours',
+                areaId,
+                message: messageText,
+              },
+              ownerUserId
+            );
+            logSystem('Mensaje de ausencia enviado');
+            return;
+          }
         }
       }
-    }
 
-    const { operatorId } = await assignConversationToArea(
-      conversationId,
-      areaId,
-      { requestedById: ownerUserId }
-    );
-    await broadcastConversationUpdate(io, conversationId);
-
-    if (!operatorId) {
-      await broadcastConversationEvent(
-        io,
+      const { operatorId } = await assignConversationToArea(
         conversationId,
-        'conversation:pending_assignment'
+        areaId,
+        { requestedById: ownerUserId }
       );
+      await broadcastConversationUpdate(io, conversationId);
+
+      if (!operatorId) {
+        await broadcastConversationEvent(
+          io,
+          conversationId,
+          'conversation:pending_assignment'
+        );
+      }
     }
+    return; // End of processing
+  }
+
+  // 4. If nothing matched, send the main menu as a last resort
+  if (primaryMenu) {
+    console.log('[FLOW] No match found, sending primary menu.');
+    await sendReply(
+      ownerUserId,
+      client,
+      conversationId,
+      message,
+      primaryMenu,
+      io
+    );
   }
 }
 

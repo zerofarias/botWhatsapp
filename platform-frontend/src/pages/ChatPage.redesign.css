@@ -33,6 +33,8 @@
   flex-direction: column;
   background-color: var(--chat-panel-bg);
   border-right: 1px solid var(--chat-border);
+  height: 100vh;
+  overflow: hidden;
 }
 
 .conversation-list-header {

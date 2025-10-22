@@ -12,15 +12,20 @@ export default function SettingsPage() {
     displayName: '',
     phoneNumber: '',
     paused: false,
+    conversationDuration: 20, // duración en horas
   });
   const [message, setMessage] = useState<string | null>(null);
 
   const fetchMetadata = async () => {
-    const { data } = await api.get<{ record: BotRecord }>('/bot/status');
+    const { data } = await api.get<{
+      record: BotRecord;
+      conversationDuration?: number;
+    }>('/bot/status');
     setForm({
       displayName: data.record.displayName ?? '',
       phoneNumber: data.record.phoneNumber ?? '',
       paused: data.record.paused,
+      conversationDuration: data.conversationDuration ?? 20,
     });
   };
 
@@ -33,6 +38,7 @@ export default function SettingsPage() {
     await api.patch('/bot/metadata', {
       displayName: form.displayName,
       phoneNumber: form.phoneNumber,
+      conversationDuration: form.conversationDuration,
     });
     await api.post('/bot/pause', { paused: form.paused });
     setMessage('Configuración guardada.');
@@ -59,6 +65,27 @@ export default function SettingsPage() {
               setForm((prev) => ({ ...prev, displayName: event.target.value }))
             }
             placeholder="Nombre mostrado en el panel"
+            style={{
+              padding: '0.65rem 1rem',
+              borderRadius: '8px',
+              border: '1px solid #cbd5f5',
+            }}
+          />
+        </label>
+
+        <label style={{ display: 'grid', gap: '0.35rem' }}>
+          <span>Duración de conversaciones abiertas (horas)</span>
+          <input
+            type="number"
+            min={1}
+            max={168}
+            value={form.conversationDuration}
+            onChange={(e) =>
+              setForm((prev) => ({
+                ...prev,
+                conversationDuration: Number(e.target.value),
+              }))
+            }
             style={{
               padding: '0.65rem 1rem',
               borderRadius: '8px',

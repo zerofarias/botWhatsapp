@@ -94,6 +94,7 @@
     "webpack-cli": "^6.0.1"
   },
   "dependencies": {
+    "@prisma/client": "^6.17.1",
     "@wppconnect/wa-js": "^v3.18.7",
     "@wppconnect/wa-version": "^1.5.2434",
     "atob": "^2.1.2",
@@ -102,6 +103,7 @@
     "catch-exit": "^2.0.0",
     "chalk": "~4.1.2",
     "chrome-launcher": "^0.15.2",
+    "dayjs": "^1.11.18",
     "execa": "^5.1.1",
     "express": "^4.21.1",
     "file-type": "~16.5.4",

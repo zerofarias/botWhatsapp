@@ -91,8 +91,10 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
       handleUpdate({ areaId: null });
       return;
     }
-    const parsed = Number(value);
-    handleUpdate({ areaId: Number.isNaN(parsed) ? null : parsed });
+    const nextAreaId = Number(value);
+    if (Number.isFinite(nextAreaId)) {
+      handleUpdate({ areaId: nextAreaId });
+    }
   };
 
   const updateOption = (optionId: string, patch: Partial<FlowOption>) => {
@@ -244,9 +246,17 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
     return null;
   };
 
+  const nodeTypeClass = `flow-node-type-${(
+    node.data.type ||
+    node.type ||
+    ''
+  ).toLowerCase()}`;
   return (
     <aside className="node-editor">
-      <div className="node-editor__header">
+      <div
+        className={`node-editor__header ${nodeTypeClass}`}
+        style={{ borderRadius: '8px 8px 0 0', borderBottom: 'none' }}
+      >
         <h3 className="node-editor__title">Editar Nodo</h3>
         {typeof node.data.flowId === 'number' && (
           <span className="node-editor__badge">ID: {node.data.flowId}</span>

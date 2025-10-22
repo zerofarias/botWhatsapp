@@ -300,6 +300,7 @@ function toSerializedNode(node: FlowBuilderNode): SerializedNode {
       conditions: sanitizeConditions(node.data.conditions),
       areaId: node.data.areaId ?? null,
       flowId: node.data.flowId ?? null,
+      parentId: (node.data as any).parentId ?? null,
       messageKind: node.data.messageKind ?? 'TEXT',
       ...(buttonSettings ? { buttonSettings } : {}),
       ...(listSettings ? { listSettings } : {}),
@@ -692,7 +693,36 @@ const FlowBuilderInner: React.FC = () => {
   );
 
   const handleSave = useCallback(async () => {
-    const serializedNodes: SerializedNode[] = nodes.map(toSerializedNode);
+    console.log('Iniciando guardado...');
+    const flowIdMap = new Map<string, number>();
+    nodes.forEach((node) => {
+      if (node.data.flowId) {
+        flowIdMap.set(node.id, node.data.flowId);
+      }
+    });
+
+    const parentMap = new Map<string, string>();
+    edges.forEach((edge) => {
+      if (edge.source && edge.target) {
+        parentMap.set(edge.target, edge.source);
+      }
+    });
+
+    const nodesWithParent = nodes.map((node) => {
+      const parentReactId = parentMap.get(node.id);
+      const parentFlowId = parentReactId ? flowIdMap.get(parentReactId) : null;
+
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          parentId: parentFlowId ?? null,
+        },
+      };
+    });
+
+    const serializedNodes: SerializedNode[] =
+      nodesWithParent.map(toSerializedNode);
     const serializedEdges: SerializedEdge[] = edges.map(toSerializedEdge);
 
     const payload: FlowGraphPayload = {
@@ -780,7 +810,14 @@ const FlowBuilderInner: React.FC = () => {
 
       <div ref={reactFlowWrapper} className="flow-builder__canvas-wrapper">
         <ReactFlow
-          nodes={nodes}
+          nodes={nodes.map((node) => ({
+            ...node,
+            className: `flow-node-type-${(
+              node.data.type ||
+              node.type ||
+              ''
+            ).toLowerCase()}`,
+          }))}
           edges={edges}
           onInit={(instance: ReactFlowInstance) => {
             reactFlowInstance.current = instance;

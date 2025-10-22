@@ -362,6 +362,7 @@ type GraphNodePayload = {
     flowId?: unknown;
     areaId?: unknown;
     isActive?: unknown;
+    parentId?: unknown;
     messageKind?: unknown;
     buttonSettings?: unknown;
     listSettings?: unknown;
@@ -585,6 +586,12 @@ export async function saveFlowGraph(req: Request, res: Response) {
             ? data.flowId
             : null;
 
+        const parentId =
+          typeof (data as any).parentId === 'number' &&
+          Number.isInteger((data as any).parentId)
+            ? (data as any).parentId
+            : null;
+
         let recordId: number;
 
         if (flowId) {
@@ -612,6 +619,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
               isActive,
               areaId: areaId ?? null,
               metadata: metadataPayload,
+              parentId,
             },
             select: { id: true },
           });
@@ -629,6 +637,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
               areaId: areaId ?? null,
               isActive,
               createdBy: req.user!.id,
+              parentId,
             },
             select: { id: true },
           });
