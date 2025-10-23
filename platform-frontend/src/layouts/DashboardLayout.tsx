@@ -19,6 +19,7 @@ const NAVIGATION_LINKS: NavigationLink[] = [
     label: 'Flow Builder',
     roles: ['ADMIN', 'SUPERVISOR'],
   },
+  { to: '/dashboard/bots', label: 'Bots', roles: ['ADMIN', 'SUPERVISOR'] },
   { to: '/dashboard/users', label: 'Usuarios', roles: ['ADMIN'] },
   { to: '/dashboard/areas', label: 'Areas', roles: ['ADMIN'] },
   {

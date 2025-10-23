@@ -638,6 +638,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
               isActive,
               createdBy: req.user!.id,
               parentId,
+              botId: 1, // TODO: Make this dynamic based on user selection
             },
             select: { id: true },
           });

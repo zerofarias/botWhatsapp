@@ -430,23 +430,35 @@
   color: #b91c1c;
 }
 
+/* Color especial para nodo Pregunta y Guarda */
+
+.flow-node-type-pregunta_guardar {
+  border: 2px solid #a855f7;
+  background-color: #f3e8ff;
+}
+
 /* Colores por tipo de nodo en el Flow Builder */
+
 .flow-node-type-message {
   border: 2px solid #3b82f6;
   background-color: #e0f2fe;
 }
+
 .flow-node-type-end {
   border: 2px solid #ef4444;
   background-color: #fee2e2;
 }
+
 .flow-node-type-menu {
   border: 2px solid #22c55e;
   background-color: #dcfce7;
 }
+
 .flow-node-type-redirect {
   border: 2px solid #f59e42;
   background-color: #fff7ed;
 }
+
 .flow-node-type-action {
   border: 2px solid #64748b;
   background-color: #f3f4f6;

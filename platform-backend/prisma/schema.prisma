@@ -64,6 +64,22 @@ model UserArea {
   @@map("user_areas")
 }
 
+model Bot {
+  id            Int      @id @default(autoincrement())
+  name          String
+  description   String?
+  isDefault     Boolean  @default(false) @map("is_default")
+  initialFlowId Int?     @map("initial_flow_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  flows         Flow[]
+  conversations Conversation[]
+
+  @@index([isDefault], map: "idx_bots_is_default")
+  @@map("bots")
+}
+
 model BotSession {
   id          Int              @id @default(autoincrement())
   ownerUserId Int              @map("owner_user_id")
@@ -94,19 +110,22 @@ model Flow {
   metadata   Json?
   isActive   Boolean  @default(true) @map("is_active")
   createdBy  Int      @map("created_by")
+  botId      Int      @map("bot_id")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  parent   Flow?  @relation("FlowHierarchy", fields: [parentId], references: [id])
-  children Flow[] @relation("FlowHierarchy")
-  area     Area?  @relation(fields: [areaId], references: [id])
-  creator  User   @relation("FlowCreator", fields: [createdBy], references: [id])
+  parent              Flow?            @relation("FlowHierarchy", fields: [parentId], references: [id])
+  children            Flow[]           @relation("FlowHierarchy")
+  area                Area?            @relation(fields: [areaId], references: [id])
+  creator             User             @relation("FlowCreator", fields: [createdBy], references: [id])
+  bot                 Bot              @relation(fields: [botId], references: [id], onDelete: Cascade)
   outgoingConnections FlowConnection[] @relation("FromFlow")
   incomingConnections FlowConnection[] @relation("ToFlow")
 
   @@index([parentId], map: "idx_flows_parent")
   @@index([areaId], map: "idx_flows_area")
   @@index([trigger], map: "idx_flows_trigger")
+  @@index([botId], map: "idx_flows_bot")
   @@map("flows")
 }
 
@@ -124,27 +143,30 @@ model FlowConnection {
 }
 
 model Conversation {
-  id               BigInt             @id @default(autoincrement())
-  userPhone        String             @map("user_phone")
-  contactName      String?            @map("contact_name")
-  contactId        Int?               @map("contact_id")
-  areaId           Int?               @map("area_id")
-  assignedToId     Int?               @map("assigned_to")
-  status           ConversationStatus @default(PENDING)
-  botActive        Boolean            @default(true) @map("bot_active")
-  lastActivity     DateTime           @default(now()) @map("last_activity")
-  lastBotMessageAt DateTime?          @map("last_bot_message_at")
-  closedAt         DateTime?          @map("closed_at")
-  closedReason     String?            @map("closed_reason")
-  closedById       Int?               @map("closed_by")
-  createdAt        DateTime           @default(now()) @map("created_at")
-  updatedAt        DateTime           @updatedAt @map("updated_at")
-  currentFlowNodeId Int?              @map("current_flow_node_id")
+  id                BigInt             @id @default(autoincrement())
+  userPhone         String             @map("user_phone")
+  contactName       String?            @map("contact_name")
+  contactId         Int?               @map("contact_id")
+  areaId            Int?               @map("area_id")
+  assignedToId      Int?               @map("assigned_to")
+  status            ConversationStatus @default(PENDING)
+  botActive         Boolean            @default(true) @map("bot_active")
+  lastActivity      DateTime           @default(now()) @map("last_activity")
+  lastBotMessageAt  DateTime?          @map("last_bot_message_at")
+  closedAt          DateTime?          @map("closed_at")
+  closedReason      String?            @map("closed_reason")
+  closedById        Int?               @map("closed_by")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  currentFlowNodeId Int?               @map("current_flow_node_id")
+  context           Json?              @map("context")
+  botId             Int?               @map("bot_id")
 
   area       Area?               @relation(fields: [areaId], references: [id])
   assignedTo User?               @relation("ConversationAssignedTo", fields: [assignedToId], references: [id])
   closedBy   User?               @relation("ConversationClosedBy", fields: [closedById], references: [id])
   contact    Contact?            @relation(fields: [contactId], references: [id])
+  bot        Bot?                @relation(fields: [botId], references: [id], onDelete: SetNull)
   messages   Message[]
   events     ConversationEvent[]
 
@@ -154,6 +176,7 @@ model Conversation {
   @@index([assignedToId], map: "idx_conversations_assigned_to")
   @@index([lastActivity], map: "idx_conversations_last_activity")
   @@index([contactId], map: "idx_conversations_contact")
+  @@index([botId], map: "idx_conversations_bot")
   @@map("conversations")
 }
 

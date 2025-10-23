@@ -130,6 +130,7 @@ export async function saveFlow(createdBy: number, input: FlowInput) {
       metadata: input.metadata ?? Prisma.JsonNull,
       isActive: input.isActive ?? true,
       createdBy,
+      botId: 1, // TODO: Make this dynamic based on user selection
     },
     select: flowSelect,
   });

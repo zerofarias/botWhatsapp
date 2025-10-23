@@ -685,19 +685,38 @@ export function evaluateFlowSelection(
               targetNode.id,
               targetNode.name
             );
-          } else {
-            candidates = [];
           }
-        } else {
-          candidates = [];
         }
-      } else {
-        candidates = [];
+      }
+      // Fallback: Si no hay candidatos, buscar nodos hermanos activos (mismo parentId)
+      if (!candidates.length && typeof currentNode.parentId === 'number') {
+        candidates = nodes.filter(
+          (n) =>
+            n.parentId === currentNode.parentId &&
+            n.id !== currentNode.id &&
+            n.isActive
+        );
+        if (candidates.length) {
+          console.log(
+            '[FLOW] Fallback: candidatos hermanos:',
+            candidates.map((n) => n.id)
+          );
+        }
+      }
+      // Fallback: Si aún no hay candidatos, buscar nodos raíz activos
+      if (!candidates.length) {
+        candidates = nodes.filter((n) => n.parentId == null && n.isActive);
+        if (candidates.length) {
+          console.log(
+            '[FLOW] Fallback: candidatos raíz:',
+            candidates.map((n) => n.id)
+          );
+        }
       }
     }
   } else {
     // Si no hay nodo actual, buscar entre los nodos raíz activos
-    candidates = nodes.filter((n) => n.isActive);
+    candidates = nodes.filter((n) => n.parentId == null && n.isActive);
   }
 
   console.log('[FLOW] Nodos candidatos:');
@@ -902,10 +921,30 @@ async function sendReply(
 ) {
   const evaluation =
     typeof replyOrEvaluation === 'string' ? null : replyOrEvaluation;
-  const replyText =
+  let finalReplyText =
     typeof replyOrEvaluation === 'string'
       ? replyOrEvaluation
       : replyOrEvaluation.reply;
+
+  if (finalReplyText.includes('{')) {
+    const convWithContext = await prisma.conversation.findUnique({
+      where: { id: BigInt(conversationId) },
+      select: { context: true },
+    });
+    const context =
+      convWithContext?.context &&
+      typeof convWithContext.context === 'object' &&
+      !Array.isArray(convWithContext.context)
+        ? convWithContext.context
+        : {};
+
+    finalReplyText = finalReplyText.replace(
+      /\{(\w+)\}/g,
+      (match, variableName) => {
+        return String((context as any)[variableName] ?? match);
+      }
+    );
+  }
 
   let outbound: Message | null = null;
 
@@ -926,7 +965,7 @@ async function sendReply(
           const footer = builderConfig.buttonFooter ?? '';
           const raw = await (client as any).sendButtons(
             message.from,
-            replyText,
+            finalReplyText,
             buttons,
             title,
             footer
@@ -957,7 +996,7 @@ async function sendReply(
 
           const raw = await (client as any).sendListMessage(
             message.from,
-            replyText,
+            finalReplyText,
             buttonText,
             sections,
             sectionTitle,
@@ -973,7 +1012,7 @@ async function sendReply(
   }
 
   if (!outbound) {
-    const rawMessage = await client.sendText(message.from, replyText);
+    const rawMessage = await client.sendText(message.from, finalReplyText);
     outbound =
       rawMessage && typeof rawMessage === 'object'
         ? (rawMessage as Message)
@@ -984,7 +1023,7 @@ async function sendReply(
     conversationId,
     senderType: 'BOT',
     senderId: ownerUserId,
-    content: replyText,
+    content: finalReplyText,
     isDelivered: Boolean(outbound),
     externalId: outbound ? extractMessageExternalId(outbound) : null,
     createdAt: outbound ? resolveMessageDate(outbound) : new Date(),
@@ -1239,27 +1278,52 @@ async function handleIncomingMessage(
     return;
   }
 
-  // --- START OF REFACTORED LOGIC ---
-
   const convState = await prisma.conversation.findUnique({
     where: { id: BigInt(conversationId) },
-    select: { currentFlowNodeId: true },
+    select: { currentFlowNodeId: true, context: true },
   });
   const currentId = convState?.currentFlowNodeId;
 
   console.log('[FLOW] Trigger recibido:', normalizedBody);
   console.log('[FLOW] currentFlowNodeId antes:', currentId);
 
-  // 1. Try to evaluate from the current node's context
+  const previousNodeId = currentId;
+  if (previousNodeId) {
+    const previousNode = flattenFlowTree(flows).find(
+      (n) => n.id === previousNodeId
+    );
+    const builderMeta =
+      previousNode?.metadata && typeof previousNode.metadata === 'object'
+        ? (previousNode.metadata as any).builder
+        : null;
+    const variableName = builderMeta?.saveResponseToVariable;
+
+    if (variableName && typeof variableName === 'string') {
+      console.log(`[CONTEXT] Saving response to variable '${variableName}'`);
+
+      const currentContext =
+        convState?.context &&
+        typeof convState.context === 'object' &&
+        !Array.isArray(convState.context)
+          ? convState.context
+          : {};
+
+      const newContext = {
+        ...currentContext,
+        [variableName]: body,
+      };
+
+      await touchConversation(conversationId, { context: newContext });
+    }
+  }
+
   let evaluation = evaluateFlowSelection(flows, normalizedBody, currentId);
 
-  // 2. If that fails, try to evaluate from the root (global triggers)
   if (!evaluation) {
     console.log('[FLOW] No match in current context, trying root nodes.');
     evaluation = evaluateFlowSelection(flows, normalizedBody, undefined);
   }
 
-  // 3. If we have a match, process it
   if (evaluation) {
     console.log(
       '[FLOW] Nodo evaluado:',
@@ -1267,7 +1331,6 @@ async function handleIncomingMessage(
       evaluation.matchedNode.name
     );
 
-    // Update conversation state
     await touchConversation(conversationId, {
       currentFlowNodeId: evaluation.matchedNode.id,
     });
@@ -1280,7 +1343,6 @@ async function handleIncomingMessage(
       convAfter?.currentFlowNodeId
     );
 
-    // Send reply and handle redirects
     await sendReply(
       ownerUserId,
       client,
@@ -1359,10 +1421,9 @@ async function handleIncomingMessage(
         );
       }
     }
-    return; // End of processing
+    return;
   }
 
-  // 4. If nothing matched, send the main menu as a last resort
   if (primaryMenu) {
     console.log('[FLOW] No match found, sending primary menu.');
     await sendReply(

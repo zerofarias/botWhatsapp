@@ -8,6 +8,7 @@ import {
   FaClock,
   FaAddressBook,
   FaSitemap,
+  FaRobot,
 } from 'react-icons/fa';
 
 export const sidebarIcons: Record<string, JSX.Element> = {
@@ -15,6 +16,7 @@ export const sidebarIcons: Record<string, JSX.Element> = {
   Chat: <FaComments />,
   Flujos: <FaProjectDiagram />,
   'Flow Builder': <FaSitemap />,
+  Bots: <FaRobot />,
   Usuarios: <FaUsers />,
   Areas: <FaSitemap />,
   Contactos: <FaAddressBook />,

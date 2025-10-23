@@ -100,7 +100,7 @@ export default function AreasPage() {
           boxShadow: '0 12px 24px -18px rgba(15, 23, 42, 0.35)',
         }}
       >
-        <h2 style={{ margin: 0 }}>Crear Ã¡rea de atenciÃ³n</h2>
+        <h2 style={{ margin: 0 }}>Crear área de atención</h2>
         <p style={{ marginTop: '0.25rem', color: '#64748b' }}>
           Organiza tus flujos por equipos (Soporte, Ventas, Administración...).
         </p>
@@ -114,7 +114,7 @@ export default function AreasPage() {
           }}
         >
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Nombre del Ã¡rea</span>
+            <span>Nombre del área</span>
             <input
               value={createState.name}
               onChange={(event) =>
@@ -157,7 +157,7 @@ export default function AreasPage() {
                 }))
               }
             />
-            Ãrea activa
+            Área activa
           </label>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <button
@@ -172,7 +172,7 @@ export default function AreasPage() {
                 cursor: submitting ? 'wait' : 'pointer',
               }}
             >
-              {submitting ? 'Creando...' : 'Crear Ã¡rea'}
+              {submitting ? 'Creando...' : 'Crear área'}
             </button>
             {error && <span style={{ color: '#ef4444' }}>{error}</span>}
           </div>
@@ -197,9 +197,9 @@ export default function AreasPage() {
           }}
         >
           <div>
-            <h2 style={{ margin: 0 }}>ÃÁreas configuradas</h2>
+            <h2 style={{ margin: 0 }}>Áreas configuradas</h2>
             <p style={{ margin: 0, color: '#64748b' }}>
-              GestionÃ¡ quÃ© equipos reciben conversaciones y flujos.
+              Gestioná qué equipos reciben conversaciones y flujos.
             </p>
           </div>
           <button

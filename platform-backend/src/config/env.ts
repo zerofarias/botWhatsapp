@@ -1,6 +1,11 @@
-import dotenv from 'dotenv';
-
 dotenv.config();
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Carga .env desde la raíz de platform-backend, sin importar el cwd
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const requiredEnv = ['DATABASE_URL', 'SESSION_SECRET'] as const;
 

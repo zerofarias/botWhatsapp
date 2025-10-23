@@ -6,6 +6,7 @@ export const FLOW_NODE_TYPES = [
   'ACTION',
   'REDIRECT',
   'END',
+  'PREGUNTA_GUARDAR',
 ] as const;
 
 export type FlowNodeType = (typeof FLOW_NODE_TYPES)[number];
@@ -16,6 +17,7 @@ export const FLOW_NODE_TYPE_LABELS: Record<FlowNodeType, string> = {
   ACTION: 'Acción',
   REDIRECT: 'Agente',
   END: 'Finalizar',
+  PREGUNTA_GUARDAR: 'Pregunta y Guarda',
 };
 
 export const FLOW_NODE_TYPE_DESCRIPTIONS: Record<FlowNodeType, string> = {
@@ -24,6 +26,8 @@ export const FLOW_NODE_TYPE_DESCRIPTIONS: Record<FlowNodeType, string> = {
   ACTION: 'Reserva para integraciones futuras',
   REDIRECT: 'Deriva la conversación a un agente/área',
   END: 'Finaliza la automatización en este punto',
+  PREGUNTA_GUARDAR:
+    'Pregunta al usuario y guarda la respuesta en una variable de contexto',
 };
 
 export type FlowMessageKind = 'TEXT' | 'BUTTONS' | 'LIST';
@@ -66,6 +70,7 @@ export interface FlowNodeData {
   flowId?: number | null;
   parentId?: number | null;
   messageKind: FlowMessageKind;
+  saveResponseToVariable?: string | null;
   buttonSettings?: ButtonSettings;
   listSettings?: ListSettings;
 }

@@ -285,10 +285,33 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
                 {FLOW_NODE_TYPE_LABELS[type]}
               </option>
             ))}
+            <option value="PREGUNTA_GUARDAR">Pregunta y Guarda</option>
           </select>
           <p className="node-editor__note">
-            {FLOW_NODE_TYPE_DESCRIPTIONS[node.data.type]}
+            {node.data.type === 'PREGUNTA_GUARDAR'
+              ? 'Este nodo preguntará al usuario y guardará la respuesta en una variable de contexto.'
+              : FLOW_NODE_TYPE_DESCRIPTIONS[node.data.type]}
           </p>
+          {node.data.type === 'PREGUNTA_GUARDAR' && (
+            <>
+              <label className="node-editor__label">
+                Nombre de la variable a guardar
+              </label>
+              <input
+                type="text"
+                value={node.data.saveResponseToVariable || ''}
+                onChange={(e) =>
+                  handleUpdate({ saveResponseToVariable: e.target.value })
+                }
+                className="node-editor__input"
+                placeholder="Ej: dni, nombre, email"
+              />
+              <p className="node-editor__note">
+                La respuesta del usuario se guardará en esta variable y podrá
+                usarse en otros mensajes como {'{dni}'}, {'{nombre}'}, etc.
+              </p>
+            </>
+          )}
         </div>
 
         <div className="node-editor__section">
