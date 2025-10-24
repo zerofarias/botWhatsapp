@@ -52,17 +52,17 @@ export default function DashboardOverview() {
   const socket = useSocket();
 
   const lastQrImage = useMemo(
-    () => status?.cache?.lastQr ?? status?.record.lastQr ?? null,
+    () => status?.cache?.lastQr ?? status?.record?.lastQr ?? null,
     [status]
   );
 
   const lastQrAscii = useMemo(
-    () => status?.cache?.lastQrAscii ?? status?.record.lastQrAscii ?? null,
+    () => status?.cache?.lastQrAscii ?? status?.record?.lastQrAscii ?? null,
     [status]
   );
 
   const currentStatus = useMemo(
-    () => status?.cache?.status ?? status?.record.status ?? 'DESCONOCIDO',
+    () => status?.cache?.status ?? status?.record?.status ?? 'DESCONOCIDO',
     [status]
   );
 

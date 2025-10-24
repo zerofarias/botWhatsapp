@@ -10,6 +10,7 @@ import { conversationRouter } from './conversations.js';
 import { contactRouter } from './contacts.js';
 import { workingHourRouter } from './working-hours.js';
 import { quickRepliesRouter } from './quick-replies.js';
+import nodesRouter from './nodes.routes.js';
 
 export const apiRouter = Router();
 
@@ -24,3 +25,4 @@ apiRouter.use('/conversations', conversationRouter);
 apiRouter.use('/contacts', contactRouter);
 apiRouter.use('/working-hours', workingHourRouter);
 apiRouter.use('/quick-replies', quickRepliesRouter);
+apiRouter.use(nodesRouter);

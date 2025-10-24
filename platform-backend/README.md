@@ -63,10 +63,11 @@ Este servicio expone la API REST de la plataforma WPPConnect y gestiona la integ
 ```bash
 npm install
 npm run dev   # servidor con recarga
-npm run build # compila TypeScript
+npm run build # compila TypeScript y corrige imports con tsc-alias
 ```
 
-La API queda disponible en `http://localhost:4000`.
+> Nota: El script de build ejecuta automáticamente `tsc-alias` para corregir los imports relativos y agregar la extensión `.js` en los archivos de la carpeta `dist`, asegurando compatibilidad con Node.js en modo ES Modules. En los archivos fuente TypeScript, mantén los imports sin extensión.
+> La API queda disponible en `http://localhost:4000`.
 
 ## Referencia rapida de flujos
 

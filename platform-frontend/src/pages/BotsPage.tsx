@@ -1,6 +1,7 @@
 import React, { useEffect, useState, FormEvent } from 'react';
 import { api } from '../services/api';
 import '../styles/modal.css'; // Assuming a simple modal style is available
+import FlowNodesPage from './FlowNodesPage';
 
 // Mock Bot type until prisma types are properly shared
 type BotType = {
@@ -111,6 +112,10 @@ export default function BotsPage() {
                     <button className="btn btn-sm btn-danger ms-2">
                       Delete
                     </button>
+                    {/* Botón para ver nodos del flujo inicial */}
+                    {bot.initialFlowId && (
+                      <FlowNodesPage flowId={bot.initialFlowId} />
+                    )}
                   </td>
                 </tr>
               ))

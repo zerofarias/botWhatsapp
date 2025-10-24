@@ -1,3 +1,20 @@
+model Node {
+  id         Int      @id @default(autoincrement())
+  flowId     Int      @map("flow_id")
+  name       String
+  type       String
+  content    String?
+  orderIndex Int      @default(0) @map("order_index")
+  metadata   Json?
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  flow Flow @relation(fields: [flowId], references: [id])
+
+  @@map("nodes")
+}
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -15,7 +32,7 @@ model Area {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  defaultUsers  User[]          @relation("AreaDefaultUsers")
+  defaultUsers  User[]         @relation("AreaDefaultUsers")
   userAreas     UserArea[]
   flows         Flow[]
   conversations Conversation[]
@@ -119,6 +136,7 @@ model Flow {
   area                Area?            @relation(fields: [areaId], references: [id])
   creator             User             @relation("FlowCreator", fields: [createdBy], references: [id])
   bot                 Bot              @relation(fields: [botId], references: [id], onDelete: Cascade)
+  nodes               Node[]
   outgoingConnections FlowConnection[] @relation("FromFlow")
   incomingConnections FlowConnection[] @relation("ToFlow")
 
@@ -130,9 +148,9 @@ model Flow {
 }
 
 model FlowConnection {
-  id      Int   @id @default(autoincrement())
-  fromId  Int   @map("from_id")
-  toId    Int   @map("to_id")
+  id      Int    @id @default(autoincrement())
+  fromId  Int    @map("from_id")
+  toId    Int    @map("to_id")
   trigger String
 
   from Flow @relation("FromFlow", fields: [fromId], references: [id])
@@ -225,29 +243,29 @@ model Session {
 }
 
 model Contact {
-  id          Int         @id @default(autoincrement())
-  name        String
-  phone       String      @unique
-  dni         String?     @db.VarChar(20)
-  areaId      Int?        @map("area_id")
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String   @unique
+  dni       String?  @db.VarChar(20)
+  areaId    Int?     @map("area_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  area         Area?        @relation(fields: [areaId], references: [id])
+  area          Area?          @relation(fields: [areaId], references: [id])
   conversations Conversation[]
 
   @@map("contacts")
 }
 
 model WorkingHour {
-  id         Int      @id @default(autoincrement())
-  areaId     Int      @map("area_id")
-  startTime  String   @map("start_time")
-  endTime    String   @map("end_time")
-  days       String
-  message    String?  @map("message")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id        Int      @id @default(autoincrement())
+  areaId    Int      @map("area_id")
+  startTime String   @map("start_time")
+  endTime   String   @map("end_time")
+  days      String
+  message   String?  @map("message")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   area Area @relation(fields: [areaId], references: [id])
 
@@ -299,7 +317,7 @@ enum ConversationEventType {
 
 model QuickReply {
   id        Int      @id @default(autoincrement())
-  title     String   // "Saludo Inicial", "Info Horarios", etc.
+  title     String // "Saludo Inicial", "Info Horarios", etc.
   content   String   @db.Text // El mensaje completo
   shortcut  String?  @unique // "/saludo", "/horarios", etc.
   areaId    Int?     @map("area_id") // Si es específico de un área

@@ -656,6 +656,95 @@ button {
   font: inherit;
 }
 
+/* Bots page specific styles */
+
+.page-container {
+  padding: 1.5rem;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e6eef6;
+  box-shadow: 0 10px 30px -20px rgba(15, 23, 42, 0.12);
+}
+
+.page-container h1 {
+  margin: 0;
+  font-size: 1.4rem;
+  color: #0f172a;
+}
+
+.page-container p {
+  color: #64748b;
+  margin-top: 0.25rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.table th,
+.table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  text-align: left;
+}
+
+.table-striped tbody tr:nth-child(odd) {
+  background: rgba(15, 23, 42, 0.02);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-primary {
+  background: #1c7ed6;
+  color: #fff;
+}
+
+.btn-success {
+  background: #16a34a;
+  color: #fff;
+}
+
+.btn-danger {
+  background: #dc2626;
+  color: #fff;
+}
+
+.btn-sm {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+  border-radius: 6px;
+}
+
+.ms-2 {
+  margin-left: 0.5rem;
+}
+
+.mt-3 {
+  margin-top: 1rem;
+}
+
+.text-center {
+  text-align: center;
+}
+
+/* Modal tweaks to match platform look */
+
+.modal-content {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
 .link-button:hover {
   text-decoration: underline;
 }
