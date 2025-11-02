@@ -673,9 +673,9 @@
 .conditional-node {
   min-width: 260px;
   background: #fff;
-  border: 2px solid #fb8c00;
-  border-radius: 12px;
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   padding: 12px;
   position: relative;
 }
@@ -693,16 +693,16 @@
 
 .conditional-node__title {
   font-weight: 600;
-  color: #78350f;
+  color: #9c27b0;
 }
 
 .conditional-node__chip {
   font-size: 0.75rem;
   padding: 2px 8px;
   border-radius: 999px;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-  color: #9a3412;
+  background: #f3e5f5;
+  border: 1px solid #ce93d8;
+  color: #6a1b9a;
 }
 
 .conditional-node__body {
@@ -715,21 +715,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #fffaf5;
-  border: 1px solid #fed7aa;
-  border-radius: 10px;
+  background: #f3e5f5;
+  border: 1px solid #e1bee7;
+  border-radius: 6px;
   padding: 8px 12px;
   position: relative;
   min-height: 44px;
 }
 
 .conditional-node__row.is-connected {
-  border-color: #f97316;
-  background: #fffbeb;
+  border-color: #9c27b0;
+  background: #ede7f6;
 }
 
 .conditional-node__row--default {
-  background: #fef3c7;
+  background: #e1bee7;
+  border-color: #9c27b0;
   border-style: dashed;
 }
 
@@ -743,28 +744,38 @@
 .conditional-node__row-operator {
   font-size: 0.7rem;
   font-weight: 600;
-  color: #b45309;
+  color: #7b1fa2;
   letter-spacing: 0.05em;
 }
 
 .conditional-node__row-value {
   font-size: 0.8rem;
-  color: #7f1d1d;
+  color: #6a1b9a;
 }
 
 .conditional-node__handle {
-  width: 12px;
-  height: 12px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  border: 2px solid #fb8c00;
-  background: #fff;
+  border: 2px solid #9c27b0;
+  background: #9c27b0;
   position: absolute;
-  right: -6px;
+  right: 4px;
+  top: 50%;
   transform: translateY(-50%);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.conditional-node__handle:hover {
+  width: 10px;
+  height: 10px;
+  box-shadow: 0 0 8px rgba(156, 39, 176, 0.6);
 }
 
 .conditional-node__handle--default {
-  border-color: #f59e0b;
+  border-color: #7b1fa2;
+  background: #7b1fa2;
 }
 
 /* ========================================
@@ -860,17 +871,9 @@
   box-shadow: 0 2px 8px rgba(156, 39, 176, 0.3) !important;
 }
 
-.node-conditional.node-shape-diamond {
-  transform: rotate(45deg) !important;
-}
-
 .node-conditional::before {
-  content: '⚡' !important;
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(-45deg);
-  font-size: 1.2rem;
+  content: '' !important;
+  display: none;
 }
 
 /* DELAY Node - Yellow */
@@ -1002,9 +1005,8 @@
 
 /* Node Hover Effects */
 .react-flow__node:hover {
-  box-shadow: 4px 16px rgba(0, 0, 0, 0.15) !important;
-  transform: scale(1.02) !important;
-  transition: all 0.2s ease !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2) !important;
+  transition: box-shadow 0.2s ease !important;
 }
 
 .react-flow__node.selected {

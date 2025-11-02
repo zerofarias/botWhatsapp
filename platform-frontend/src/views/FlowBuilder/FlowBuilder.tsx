@@ -56,7 +56,7 @@ function getNodeShapeClass(nodeType: string): string {
     case 'END':
       return 'node-shape-circle';
     case 'CONDITIONAL':
-      return 'node-shape-diamond';
+      return 'node-shape-rounded'; // CONDITIONAL tiene su propio estilo personalizado
     default:
       return 'node-shape-rounded';
   }
