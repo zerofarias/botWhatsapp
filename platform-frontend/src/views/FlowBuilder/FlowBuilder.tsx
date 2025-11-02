@@ -42,6 +42,12 @@ import { FlowToolbar } from '../../components/flow-builder/FlowToolbar';
 import { ConditionalNode } from '../../components/flow-builder/nodes/ConditionalNode';
 import { GenericNode } from '../../components/flow-builder/nodes/GenericNode';
 import { DeleteableEdge } from './components/DeleteableEdge';
+import {
+  buildVariableAvailabilityMap,
+  getAvailableVariablesForNode,
+  validateVariableReferences,
+  getAvailableVariableNames,
+} from './utils/variableTracker';
 // import { api } from '../../services/api';
 import './flow-builder.css';
 
@@ -702,6 +708,12 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
   const reactFlowInstance = useRef<ReactFlowInstance | null>(null);
   const persistGraphRef = useRef<(() => Promise<void>) | null>(null);
 
+  // Construir mapa de disponibilidad de variables para todos los nodos
+  const variabilityMap = useMemo(
+    () => buildVariableAvailabilityMap(nodes, edges),
+    [nodes, edges]
+  );
+
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
@@ -806,11 +818,79 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
     [botId]
   );
 
+  // Validar variables en el flujo
+  const validateFlowVariables = useCallback(
+    (
+      nodesToValidate: FlowBuilderNode[]
+    ): { valid: boolean; errors: string[] } => {
+      const errors: string[] = [];
+
+      nodesToValidate.forEach((node) => {
+        if (node.data.type === 'TEXT') {
+          const textData = node.data as any;
+          const message = textData.message || '';
+          const availableVarNames = getAvailableVariableNames(
+            node.id,
+            variabilityMap
+          );
+          const result = validateVariableReferences(message, availableVarNames);
+
+          if (!result.valid && result.missingVariables.length > 0) {
+            errors.push(
+              `Nodo "${
+                textData.label
+              }": variables no disponibles en mensaje: ${result.missingVariables.join(
+                ', '
+              )}`
+            );
+          }
+        }
+
+        if (node.data.type === 'CONDITIONAL') {
+          const condData = node.data as any;
+          const sourceVar = condData.sourceVariable || '';
+
+          if (!sourceVar) {
+            errors.push(
+              `Nodo "${condData.label}": debes seleccionar una variable para evaluar`
+            );
+          } else {
+            const availableVarNames = getAvailableVariableNames(
+              node.id,
+              variabilityMap
+            );
+            if (!availableVarNames.includes(sourceVar)) {
+              errors.push(
+                `Nodo "${condData.label}": la variable "${sourceVar}" no está disponible en este punto`
+              );
+            }
+          }
+        }
+      });
+
+      return {
+        valid: errors.length === 0,
+        errors,
+      };
+    },
+    [variabilityMap]
+  );
+
   const persistGraph = useCallback(
     async (
       nextNodes?: FlowBuilderNode[],
       nextEdges?: FlowBuilderEdge[]
     ): Promise<void> => {
+      const nodesToSave = nextNodes || nodes;
+
+      // Validar variables antes de persistir
+      const validation = validateFlowVariables(nodesToSave);
+      if (!validation.valid) {
+        console.warn('Validación de variables fallida:', validation.errors);
+        setError(`Error de validación: ${validation.errors.join('; ')}`);
+        return;
+      }
+
       const payload = buildGraphPayload(nextNodes, nextEdges);
 
       try {
@@ -841,11 +921,13 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
         }
 
         setHasPendingChanges(false);
+        setError(null); // Limpiar errores después de guardar exitosamente
       } catch (err) {
         console.error('Error al guardar flujo:', err);
+        setError('Error al guardar el flujo. Por favor intenta de nuevo.');
       }
     },
-    [buildGraphPayload, setNodes]
+    [buildGraphPayload, setNodes, nodes, validateFlowVariables]
   );
 
   // Guardar ref de persistGraph para usarlo en el useEffect de auto-guardado
@@ -1131,13 +1213,27 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
           : nodeDataType.toLowerCase();
         const shapeClass = getNodeShapeClass(nodeDataType);
 
+        // Enriquecer nodos CONDITIONAL y TEXT con variables disponibles
+        let enrichedData = node.data;
+        if (node.data.type === 'CONDITIONAL' || node.data.type === 'TEXT') {
+          const availableVars = getAvailableVariablesForNode(
+            node.id,
+            variabilityMap
+          );
+          enrichedData = {
+            ...node.data,
+            availableVariables: availableVars,
+          };
+        }
+
         return {
           ...node,
+          data: enrichedData,
           type: nodeType,
           className: `flow-node-type-${baseClass} node-${baseClass} ${shapeClass}`,
         };
       }),
-    [nodes]
+    [nodes, variabilityMap]
   );
 
   const handleConnect = useCallback(

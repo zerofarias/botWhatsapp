@@ -124,6 +124,13 @@ export interface TextNodeData extends BaseNodeData {
   saveResponseToVariable?: string | null;
   buttonSettings?: ButtonSettings;
   listSettings?: ListSettings;
+  // Variables disponibles en este punto del flujo (para UI)
+  availableVariables?: Array<{
+    name: string;
+    createdByNodeId?: string;
+    createdByNodeType?: string;
+    createdByNodeLabel?: string;
+  }>;
 }
 
 export interface CaptureNodeData extends BaseNodeData {
@@ -143,6 +150,13 @@ export interface ConditionalNodeData extends BaseNodeData {
   defaultLabel?: string;
   defaultTargetId?: string | null;
   defaultConditionId?: string;
+  // Variables disponibles en este punto del flujo (para UI)
+  availableVariables?: Array<{
+    name: string;
+    createdByNodeId?: string;
+    createdByNodeType?: string;
+    createdByNodeLabel?: string;
+  }>;
 }
 
 export type ConditionalOperator =

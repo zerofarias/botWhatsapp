@@ -569,6 +569,59 @@
   font-size: 0.8rem;
 }
 
+.text-node-form__variables-helper {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.text-node-form__variables-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #15803d;
+  margin: 0;
+}
+
+.text-node-form__variables-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.text-node-form__variable-tag {
+  display: inline-block;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: 4px;
+  color: #166534;
+  font-weight: 500;
+}
+
+.text-node-form__variable-tag small {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: normal;
+  color: #4b5563;
+  margin-top: 2px;
+}
+
+.text-node-form__variables-error {
+  font-size: 0.8rem;
+  padding: 6px 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  color: #991b1b;
+}
+
 /* Capture node custom component */
 
 .capture-node-form {
@@ -707,6 +760,34 @@
   background: #f3e5f5;
   border: 1px solid #ce93d8;
   color: #6a1b9a;
+}
+
+.conditional-node__select,
+.conditional-node__input {
+  font-size: 0.8rem;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid #ce93d8;
+  background: #f3e5f5;
+  color: #6a1b9a;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  max-width: 150px;
+}
+
+.conditional-node__select:hover,
+.conditional-node__input:hover {
+  border-color: #9c27b0;
+  background: #ede7f6;
+}
+
+.conditional-node__select:focus,
+.conditional-node__input:focus {
+  outline: none;
+  border-color: #9c27b0;
+  box-shadow: 0 0 0 2px rgba(156, 39, 176, 0.2);
+  background: #ffffff;
 }
 
 .conditional-node__body {

@@ -1,5 +1,16 @@
 import React from 'react';
 import type { FlowVariableType } from '../../views/FlowBuilder/types';
+import {
+  extractVariableReferences,
+  validateVariableReferences,
+} from '../../views/FlowBuilder/utils/variableTracker';
+
+export interface AvailableVariableUI {
+  name: string;
+  createdByNodeId?: string;
+  createdByNodeType?: string;
+  createdByNodeLabel?: string;
+}
 
 export interface TextNodeFormProps {
   value: string;
@@ -8,6 +19,7 @@ export interface TextNodeFormProps {
   variableType?: FlowVariableType;
   audioModel?: string | null;
   imageModel?: string | null;
+  availableVariables?: AvailableVariableUI[];
   onChange: (data: {
     value: string;
     waitForResponse: boolean;
@@ -42,10 +54,17 @@ export const TextNodeForm: React.FC<TextNodeFormProps> = ({
   variableType = 'STRING',
   audioModel = 'none',
   imageModel = 'none',
+  availableVariables = [],
   onChange,
 }) => {
   const normalizedVariable = (variableName ?? '').trim();
   const variableError = waitForResponse && normalizedVariable.length === 0;
+
+  // Validar referencias a variables en el mensaje
+  const variableReferences = extractVariableReferences(value);
+  const availableVarNames = availableVariables.map((v) => v.name);
+  const { valid: referencesValid, missingVariables } =
+    validateVariableReferences(value, availableVarNames);
 
   const handleChange = (patch: Partial<TextNodeFormProps>) => {
     onChange({
@@ -112,6 +131,30 @@ export const TextNodeForm: React.FC<TextNodeFormProps> = ({
           onChange={(e) => handleChange({ value: e.target.value })}
           rows={6}
         />
+        {availableVariables && availableVariables.length > 0 && (
+          <div className="text-node-form__variables-helper">
+            <p className="text-node-form__variables-title">
+              💡 Variables disponibles: usa para insertar
+            </p>
+            <div className="text-node-form__variables-list">
+              {availableVariables.map((v) => (
+                <span key={v.name} className="text-node-form__variable-tag">
+                  {'{'}
+                  {'{'}
+                  {v.name}
+                  {'}'}
+                  {'}'}
+                  <small>de {v.createdByNodeLabel}</small>
+                </span>
+              ))}
+            </div>
+            {missingVariables.length > 0 && (
+              <div className="text-node-form__variables-error">
+                ⚠️ Variables no disponibles: {missingVariables.join(', ')}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="text-node-form__divider" />

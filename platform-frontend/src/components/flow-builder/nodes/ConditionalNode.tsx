@@ -64,7 +64,22 @@ export const ConditionalNode: React.FC<NodeProps<ConditionalNodeData>> = ({
       <Handle type="target" position={Position.Left} />
       <div className="conditional-node__header">
         <span className="conditional-node__title">{data.label}</span>
-        {data.sourceVariable && (
+        {data.availableVariables && data.availableVariables.length > 0 ? (
+          <select
+            value={data.sourceVariable || ''}
+            className="conditional-node__select"
+            title="Selecciona la variable a evaluar"
+            onClick={(e) => e.stopPropagation()}
+            disabled
+          >
+            <option value="">-- Selecciona variable --</option>
+            {data.availableVariables.map((v) => (
+              <option key={v.name} value={v.name}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+        ) : (
           <span className="conditional-node__chip">{data.sourceVariable}</span>
         )}
       </div>

@@ -129,6 +129,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
             variableType={data.responseVariableType ?? 'STRING'}
             audioModel={data.audioModel ?? null}
             imageModel={data.imageModel ?? null}
+            availableVariables={data.availableVariables}
             onChange={({
               value,
               waitForResponse,
@@ -197,6 +198,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
           sourceVariable={data.sourceVariable}
           evaluations={data.evaluations}
           defaultLabel={data.defaultLabel}
+          availableVariables={data.availableVariables}
           onChange={({ sourceVariable, evaluations, defaultLabel }) =>
             handleUpdate({ sourceVariable, evaluations, defaultLabel })
           }

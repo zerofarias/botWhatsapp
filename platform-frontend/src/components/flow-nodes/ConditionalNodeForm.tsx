@@ -4,10 +4,18 @@ import type {
   ConditionalOperator,
 } from '../../views/FlowBuilder/types';
 
+export interface AvailableVariableUI {
+  name: string;
+  createdByNodeId?: string;
+  createdByNodeType?: string;
+  createdByNodeLabel?: string;
+}
+
 export interface ConditionalNodeFormProps {
   sourceVariable: string;
   evaluations: ConditionalEvaluation[];
   defaultLabel?: string;
+  availableVariables?: AvailableVariableUI[];
   onChange: (data: {
     sourceVariable: string;
     evaluations: ConditionalEvaluation[];
@@ -30,6 +38,7 @@ export const ConditionalNodeForm: React.FC<ConditionalNodeFormProps> = ({
   sourceVariable,
   evaluations,
   defaultLabel,
+  availableVariables = [],
   onChange,
 }) => {
   const handleEvalChange = (
@@ -79,18 +88,46 @@ export const ConditionalNodeForm: React.FC<ConditionalNodeFormProps> = ({
       <h3 style={{ margin: 0, color: '#fb8c00' }}>Condicional</h3>
       <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         Variable a evaluar
-        <input
-          type="text"
-          value={sourceVariable}
-          onChange={(e) =>
-            onChange({
-              sourceVariable: e.target.value,
-              evaluations,
-              defaultLabel,
-            })
-          }
-          placeholder="flow_variable"
-        />
+        {availableVariables && availableVariables.length > 0 ? (
+          <select
+            value={sourceVariable}
+            onChange={(e) =>
+              onChange({
+                sourceVariable: e.target.value,
+                evaluations,
+                defaultLabel,
+              })
+            }
+            style={{
+              padding: '8px',
+              borderRadius: '4px',
+              border: '1px solid #fb8c00',
+              fontFamily: 'inherit',
+              backgroundColor: '#fff',
+            }}
+          >
+            <option value="">-- Selecciona una variable --</option>
+            {availableVariables.map((v) => (
+              <option key={v.name} value={v.name}>
+                {v.name}
+                {v.createdByNodeLabel ? ` (de ${v.createdByNodeLabel})` : ''}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type="text"
+            value={sourceVariable}
+            onChange={(e) =>
+              onChange({
+                sourceVariable: e.target.value,
+                evaluations,
+                defaultLabel,
+              })
+            }
+            placeholder="flow_variable"
+          />
+        )}
       </label>
       <div style={{ display: 'grid', gap: 12 }}>
         {evaluations.map((evaluation, index) => (
