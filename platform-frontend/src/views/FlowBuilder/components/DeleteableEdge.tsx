@@ -1,15 +1,26 @@
 import React from 'react';
-import { EdgeProps, getSmoothStepPath, useReactFlow } from 'reactflow';
+import { EdgeProps, getBezierPath, useReactFlow } from 'reactflow';
 
 export const DeleteableEdge: React.FC<EdgeProps> = (props) => {
-  const { id, sourceX, sourceY, targetX, targetY } = props;
-  const { setEdges } = useReactFlow();
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
+  const {
+    id,
     sourceX,
     sourceY,
     targetX,
     targetY,
-    borderRadius: 50, // Aumentar radio para curvas más pronunciadas
+    sourcePosition,
+    targetPosition,
+  } = props;
+  const { setEdges } = useReactFlow();
+
+  // Usar el camino de Bezier por defecto de ReactFlow
+  const [edgePath, labelX, labelY] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
   });
 
   const onEdgeClick = (e: React.MouseEvent) => {
@@ -19,33 +30,32 @@ export const DeleteableEdge: React.FC<EdgeProps> = (props) => {
 
   return (
     <>
-      {/* Definir marcador personalizado */}
-      <defs>
-        <marker
-          id="arrowhead"
-          markerWidth="10"
-          markerHeight="10"
-          refX="9"
-          refY="3"
-          orient="auto"
-        >
-          <polygon points="0 0, 10 3, 0 6" fill="#7c3aed" />
-        </marker>
-      </defs>
-
+      {/* Línea de conexión con estilo por defecto */}
       <path
         id={id}
         className="react-flow__edge-path"
         d={edgePath}
-        markerEnd="url(#arrowhead)"
         style={{
-          stroke: '#7c3aed',
-          strokeWidth: 3,
-          opacity: 0.9,
+          stroke: '#999',
+          strokeWidth: 2,
           fill: 'none',
         }}
       />
-      {/* Botón X para eliminar */}
+
+      {/* Área invisible para hacer clic y eliminar */}
+      <path
+        id={`${id}-click-area`}
+        d={edgePath}
+        style={{
+          stroke: 'transparent',
+          strokeWidth: 10,
+          fill: 'none',
+          cursor: 'pointer',
+        }}
+        onClick={onEdgeClick}
+      />
+
+      {/* Botón X para eliminar - flotante en el centro de la línea */}
       <foreignObject
         x={labelX - 12}
         y={labelY - 12}
@@ -68,6 +78,7 @@ export const DeleteableEdge: React.FC<EdgeProps> = (props) => {
             fontWeight: 'bold',
             transition: 'background-color 0.2s',
             userSelect: 'none',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
           }}
           onClick={onEdgeClick}
           onMouseEnter={(e) => {

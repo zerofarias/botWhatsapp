@@ -1,3 +1,7 @@
+/* ========================================
+   FLOW BUILDER MAIN LAYOUT
+   ======================================== */
+
 .flow-builder-page {
   display: flex;
   flex-direction: column;
@@ -1019,17 +1023,48 @@
   filter: brightness(1.1) !important;
 }
 
-/* Handle visibility - always on top */
-.react-flow__handle {
-  z-index: 10 !important;
-}
+/* ========================================
+   REACT FLOW NODE & EDGE STYLES
+   ======================================== */
 
 .react-flow__node {
-  z-index: 1 !important;
+  z-index: 2 !important;
+}
+
+.react-flow__node:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15) !important;
+  transition: box-shadow 0.2s ease !important;
+}
+
+.react-flow__node.selected {
+  box-shadow: 0 0 0 3px rgba(30, 144, 255, 0.5) !important;
 }
 
 .react-flow__edge {
-  z-index: 0 !important;
+  z-index: 1 !important;
+}
+
+/* ========================================
+   HANDLE STYLES - CLEAN & SIMPLE
+   ======================================== */
+
+.react-flow__handle {
+  width: 12px !important;
+  height: 12px !important;
+  background: #7c3aed !important;
+  border: 2px solid #ffffff !important;
+  border-radius: 50% !important;
+  z-index: 100 !important;
+  opacity: 1 !important;
+  transition: all 0.15s ease !important;
+  box-shadow: 0 0 0 0 rgba(124, 58, 237, 0) !important;
+}
+
+.react-flow__handle:hover {
+  width: 14px !important;
+  height: 14px !important;
+  background: #6d28d9 !important;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15) !important;
 }
 
 /* Generic Node Styles */

@@ -57,7 +57,7 @@ export const GenericNode: React.FC<NodeProps<FlowNodeData>> = ({
       className={`generic-node ${selected ? 'generic-node--selected' : ''}`}
       onDoubleClick={() => setIsEditing(true)}
     >
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={Position.Left} style={{ top: '50%' }} />
 
       {isEditing ? (
         <input
@@ -73,7 +73,7 @@ export const GenericNode: React.FC<NodeProps<FlowNodeData>> = ({
         <div className="generic-node__label">{label || 'Sin nombre'}</div>
       )}
 
-      <Handle type="source" position={Position.Right} />
+      <Handle type="source" position={Position.Right} style={{ top: '50%' }} />
     </div>
   );
 };
