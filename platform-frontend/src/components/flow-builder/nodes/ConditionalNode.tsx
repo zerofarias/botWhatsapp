@@ -23,19 +23,24 @@ export const ConditionalNode: React.FC<NodeProps<ConditionalNodeData>> = ({
   // Recalcular posiciones cuando cambian las evaluaciones o el tamaño del nodo
   useEffect(() => {
     const newOffsets = new Map<string, number>();
+    const bodyElement = rowRefs.current.get('body-container');
 
     data.evaluations.forEach((evaluation) => {
       const rowElement = rowRefs.current.get(evaluation.id);
-      if (rowElement) {
-        // Usar el centro del elemento (offsetHeight / 2)
-        newOffsets.set(evaluation.id, rowElement.offsetHeight / 2);
+      if (rowElement && bodyElement) {
+        // Calcular la posición relativa al body container
+        const offsetTop = rowElement.offsetTop - bodyElement.offsetTop;
+        const centerY = offsetTop + rowElement.offsetHeight / 2;
+        newOffsets.set(evaluation.id, centerY);
       }
     });
 
     // Para el default
     const defaultRowElement = rowRefs.current.get('default');
-    if (defaultRowElement) {
-      newOffsets.set('default', defaultRowElement.offsetHeight / 2);
+    if (defaultRowElement && bodyElement) {
+      const offsetTop = defaultRowElement.offsetTop - bodyElement.offsetTop;
+      const centerY = offsetTop + defaultRowElement.offsetHeight / 2;
+      newOffsets.set('default', centerY);
     }
 
     setHandleOffsets(newOffsets);
@@ -54,7 +59,14 @@ export const ConditionalNode: React.FC<NodeProps<ConditionalNodeData>> = ({
           <span className="conditional-node__chip">{data.sourceVariable}</span>
         )}
       </div>
-      <div className="conditional-node__body">
+      <div
+        className="conditional-node__body"
+        ref={(el) => {
+          if (el) {
+            rowRefs.current.set('body-container', el);
+          }
+        }}
+      >
         {data.evaluations.map((evaluation) => {
           const handleOffset = handleOffsets.get(evaluation.id) ?? 22; // 22 es el centro por defecto
 
