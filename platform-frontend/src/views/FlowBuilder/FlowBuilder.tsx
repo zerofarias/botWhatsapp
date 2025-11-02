@@ -47,6 +47,21 @@ import './flow-builder.css';
 const DEFAULT_POSITION: XYPosition = { x: 160, y: 120 };
 const DEFAULT_NODE_TYPE = 'default';
 
+/**
+ * Retorna la clase CSS para la forma de un nodo basado en su tipo
+ */
+function getNodeShapeClass(nodeType: string): string {
+  switch (nodeType) {
+    case 'START':
+    case 'END':
+      return 'node-shape-circle';
+    case 'CONDITIONAL':
+      return 'node-shape-diamond';
+    default:
+      return 'node-shape-rounded';
+  }
+}
+
 function slugify(value: string): string {
   return value
     .normalize('NFD')
@@ -1065,13 +1080,17 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
             ? 'conditionalNode'
             : DEFAULT_NODE_TYPE;
 
+        // Generar clases para color-coding y forma
+        const nodeDataType = node.data.type || 'default';
+        const baseClass = isCaptureNode
+          ? 'capture'
+          : nodeDataType.toLowerCase();
+        const shapeClass = getNodeShapeClass(nodeDataType);
+
         return {
           ...node,
           type: nodeType,
-          className: `flow-node-type-${(isCaptureNode
-            ? 'capture'
-            : node.data.type || node.type || ''
-          ).toLowerCase()}`,
+          className: `flow-node-type-${baseClass} node-${baseClass} ${shapeClass}`,
         };
       }),
     [nodes]

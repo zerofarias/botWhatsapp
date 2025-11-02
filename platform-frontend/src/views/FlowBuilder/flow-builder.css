@@ -766,3 +766,248 @@
 .conditional-node__handle--default {
   border-color: #f59e0b;
 }
+
+/* ========================================
+   NODE STYLE CONFIG - COLOR CODING
+   ======================================== */
+
+/* START Node - Green */
+.node-start {
+  background-color: #4caf50 !important;
+  border-color: #2e7d32 !important;
+  color: #ffffff !important;
+  border-width: 3px !important;
+  box-shadow: 0 2px 12px rgba(76, 175, 80, 0.4),
+    inset 0 0 20px rgba(255, 255, 255, 0.1) !important;
+}
+
+.node-start::before {
+  content: '▶️' !important;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.5rem;
+}
+
+.node-start.node-shape-circle {
+  width: 60px !important;
+  height: 60px !important;
+  border-radius: 50% !important;
+}
+
+/* END Node - Red */
+.node-end {
+  background-color: #f44336 !important;
+  border-color: #c62828 !important;
+  color: #ffffff !important;
+  border-width: 3px !important;
+  box-shadow: 0 2px 12px rgba(244, 67, 54, 0.4),
+    inset 0 0 20px rgba(255, 255, 255, 0.1) !important;
+}
+
+.node-end::before {
+  content: '⏹️' !important;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.5rem;
+}
+
+.node-end.node-shape-circle {
+  width: 60px !important;
+  height: 60px !important;
+  border-radius: 50% !important;
+}
+
+/* TEXT Node - Blue */
+.node-text {
+  background-color: #2196f3 !important;
+  border-color: #1565c0 !important;
+  color: #ffffff !important;
+  border-width: 2px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3) !important;
+}
+
+.node-text::before {
+  content: '💬' !important;
+  margin-right: 8px;
+}
+
+/* CAPTURE Node - Orange */
+.node-capture {
+  background-color: #ff9800 !important;
+  border-color: #e65100 !important;
+  color: #ffffff !important;
+  border-width: 2px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3) !important;
+}
+
+.node-capture::before {
+  content: '📥' !important;
+  margin-right: 8px;
+}
+
+/* CONDITIONAL Node - Purple */
+.node-conditional {
+  background-color: #9c27b0 !important;
+  border-color: #6a1b9a !important;
+  color: #ffffff !important;
+  border-width: 2px !important;
+  box-shadow: 0 2px 8px rgba(156, 39, 176, 0.3) !important;
+}
+
+.node-conditional.node-shape-diamond {
+  transform: rotate(45deg) !important;
+}
+
+.node-conditional::before {
+  content: '⚡' !important;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  font-size: 1.2rem;
+}
+
+/* DELAY Node - Yellow */
+.node-delay {
+  background-color: #ffc107 !important;
+  border-color: #f57f17 !important;
+  color: #000000 !important;
+  border-width: 2px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3) !important;
+}
+
+.node-delay::before {
+  content: '⏳' !important;
+  margin-right: 8px;
+}
+
+/* SCHEDULE Node - Gray */
+.node-schedule {
+  background-color: #607d8b !important;
+  border-color: #37474f !important;
+  color: #ffffff !important;
+  border-width: 2px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgba(96, 125, 139, 0.3) !important;
+}
+
+.node-schedule::before {
+  content: '🕐' !important;
+  margin-right: 8px;
+}
+
+/* REDIRECT_BOT Node - Cyan */
+.node-redirect_bot {
+  background-color: #00bcd4 !important;
+  border-color: #00838f !important;
+  color: #ffffff !important;
+  border-width: 2px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgba(0, 188, 212, 0.3) !important;
+}
+
+.node-redirect_bot::before {
+  content: '🤖' !important;
+  margin-right: 8px;
+}
+
+/* REDIRECT_AGENT Node - Cyan */
+.node-redirect_agent {
+  background-color: #00bcd4 !important;
+  border-color: #00838f !important;
+  color: #ffffff !important;
+  border-width: 2px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgba(0, 188, 212, 0.3) !important;
+}
+
+.node-redirect_agent::before {
+  content: '👤' !important;
+  margin-right: 8px;
+}
+
+/* AI Node - Cyan */
+.node-ai {
+  background-color: #00bcd4 !important;
+  border-color: #00838f !important;
+  color: #ffffff !important;
+  border-width: 2px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgba(0, 188, 212, 0.3) !important;
+}
+
+.node-ai::before {
+  content: '🧠' !important;
+  margin-right: 8px;
+}
+
+/* SET_VARIABLE Node - Light Green */
+.node-set_variable {
+  background-color: #81c784 !important;
+  border-color: #558b2f !important;
+  color: #ffffff !important;
+  border-width: 2px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgba(129, 199, 132, 0.3) !important;
+}
+
+.node-set_variable::before {
+  content: '📝' !important;
+  margin-right: 8px;
+}
+
+/* Node Shape Classes */
+.node-shape-circle {
+  border-radius: 50% !important;
+  width: 60px !important;
+  height: 60px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.node-shape-rounded {
+  border-radius: 8px !important;
+  padding: 12px 16px !important;
+  min-height: 45px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.node-shape-diamond {
+  border-radius: 0 !important;
+  width: 60px !important;
+  height: 60px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.node-shape-square {
+  border-radius: 4px !important;
+  padding: 12px 16px !important;
+  min-height: 45px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Node Hover Effects */
+.react-flow__node:hover {
+  box-shadow: 4px 16px rgba(0, 0, 0, 0.15) !important;
+  transform: scale(1.02) !important;
+  transition: all 0.2s ease !important;
+}
+
+.react-flow__node.selected {
+  box-shadow: 0 0 0 3px rgba(30, 144, 255, 0.5) !important;
+  filter: brightness(1.1) !important;
+}
