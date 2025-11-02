@@ -1,26 +1,123 @@
-import crypto from 'node:crypto';
-import type { Request, Response } from 'express';
-import { FlowType, Prisma } from '@prisma/client';
-import {
-  deleteFlow,
-  listFlowTree,
-  saveFlow,
-} from '../services/flow.service.js';
-import { prisma } from '../config/prisma.js';
-
-const allowedTypes: FlowType[] = [
-  'MESSAGE',
-  'MENU',
-  'ACTION',
-  'REDIRECT',
-  'END',
-];
-
-function parseFlowType(value: unknown): FlowType | null {
-  if (typeof value !== 'string') return null;
-  const upper = value.toUpperCase() as FlowType;
-  return allowedTypes.includes(upper) ? upper : null;
+// Listar todas las conexiones (edges) individuales
+export async function listAllFlowEdges(req: Request, res: Response) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  try {
+    // Obtener los IDs de los flows creados por el usuario
+    const userFlows = await prisma.flow.findMany({
+      where: { createdBy: req.user.id },
+      select: { id: true },
+    });
+    const userFlowIds = userFlows.map((f) => f.id);
+    if (userFlowIds.length === 0) {
+      return res.json({ edges: [] });
+    }
+    const edges = await prisma.flowConnection.findMany({
+      where: {
+        fromId: { in: userFlowIds },
+      },
+      select: {
+        id: true,
+        fromId: true,
+        toId: true,
+        trigger: true,
+      },
+      orderBy: [{ id: 'asc' }],
+    });
+    // Formato compatible con frontend (ReactFlow)
+    const serialized = edges.map((edge) => ({
+      id: String(edge.id),
+      source: String(edge.fromId),
+      target: String(edge.toId),
+      label: edge.trigger,
+      data: {},
+    }));
+    return res.json({ edges: serialized });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ message: 'Failed to list edges', error: String(error) });
+  }
 }
+// Listar todos los nodos individuales (no árbol)
+export async function listAllFlowNodes(req: Request, res: Response) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  try {
+    const nodes = await prisma.flow.findMany({
+      where: { createdBy: req.user.id },
+      orderBy: [{ id: 'asc' }],
+    });
+    return res.json({ nodes });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ message: 'Failed to list nodes', error: String(error) });
+  }
+}
+/*
+ * @swagger
+ * /flows:
+ *   get:
+ *     summary: Listar flujos
+ *     tags:
+ *       - Flujos
+ *     responses:
+ *       200:
+ *         description: Lista de flujos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   name:
+ *                     type: string
+ *                   description:
+ *                     type: string
+ *   post:
+ *     summary: Crear o actualizar flujo
+ *     tags:
+ *       - Flujos
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Flujo creado o actualizado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 name:
+ *                   type: string
+ *                 description:
+ *                   type: string
+ *       500:
+ *         description: Error al crear/actualizar flujo
+ */
+
+import type { Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../config/prisma';
+import type { NodeType } from '../types/node-type';
+import { env } from '../config/env';
 
 function normalizeMetadata(
   value: unknown
@@ -48,30 +145,14 @@ function removeDiacritics(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-export async function getFlows(req: Request, res: Response) {
+// CRUD individual para nodos Flow
+// import duplicado eliminado
+
+export async function createFlowNode(req: Request, res: Response) {
   if (!req.user) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
-
-  const areaId = req.query.areaId ? Number(req.query.areaId) : undefined;
-  const includeInactive = req.query.includeInactive === 'true';
-
-  const flows = await listFlowTree({
-    createdBy: req.user.id,
-    areaId: Number.isNaN(areaId) ? undefined : areaId,
-    includeInactive,
-  });
-
-  return res.json(flows);
-}
-
-export async function createOrUpdateFlow(req: Request, res: Response) {
-  if (!req.user) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
   const {
-    id,
     name,
     message,
     type,
@@ -79,59 +160,175 @@ export async function createOrUpdateFlow(req: Request, res: Response) {
     parentId,
     areaId,
     orderIndex,
-    metadata,
+    metadata: rawMetadata,
     isActive,
   } = req.body ?? {};
 
-  const flowType = parseFlowType(type);
-  if (!name || !message || !flowType) {
-    return res.status(400).json({
-      message: 'Name, message and a valid type are required.',
-    });
+  // Sincronizar builder.type con el tipo real del nodo
+  let metadata = rawMetadata;
+  if (type === 'CONDITIONAL') {
+    // Si el nodo es de tipo CONDITIONAL, nos aseguramos que el builder también lo sea.
+    const currentBuilder =
+      metadata &&
+      typeof metadata === 'object' &&
+      metadata.builder &&
+      typeof metadata.builder === 'object'
+        ? metadata.builder
+        : {};
+    const newBuilder = { ...currentBuilder, type: 'CONDITIONAL' };
+    metadata = {
+      ...(metadata && typeof metadata === 'object' ? metadata : {}),
+      builder: newBuilder,
+    };
+  } else if (
+    metadata &&
+    typeof metadata === 'object' &&
+    'builder' in metadata &&
+    typeof metadata.builder === 'object'
+  ) {
+    metadata = { ...metadata, builder: { ...metadata.builder, type: type } };
   }
 
-  const payload = await saveFlow(req.user.id, {
-    id: typeof id === 'number' ? id : undefined,
-    name,
-    message,
-    type: flowType,
-    trigger: typeof trigger === 'string' ? trigger : null,
-    parentId:
-      typeof parentId === 'number'
-        ? parentId
-        : parentId === null
-        ? null
-        : undefined,
-    areaId:
-      typeof areaId === 'number' ? areaId : areaId === null ? null : undefined,
-    orderIndex: typeof orderIndex === 'number' ? orderIndex : null,
-    metadata: normalizeMetadata(metadata),
-    isActive: typeof isActive === 'boolean' ? isActive : undefined,
-  });
-
-  return res.status(id ? 200 : 201).json(payload);
+  if (!name || !message || !type) {
+    return res
+      .status(400)
+      .json({ message: 'Name, message and type are required.' });
+  }
+  try {
+    const node = await prisma.flow.create({
+      data: {
+        name,
+        message,
+        type,
+        trigger: trigger ?? null,
+        parentId: typeof parentId === 'number' ? parentId : null,
+        areaId: typeof areaId === 'number' ? areaId : null,
+        orderIndex: typeof orderIndex === 'number' ? orderIndex : 0,
+        metadata: metadata ?? undefined,
+        isActive: typeof isActive === 'boolean' ? isActive : true,
+        createdBy: req.user.id,
+        botId: 1, // TODO: parametrizar
+      },
+    });
+    return res.status(201).json(node);
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ message: 'Failed to create node', error: String(error) });
+  }
 }
 
-export async function removeFlow(req: Request, res: Response) {
+export async function updateFlowNode(req: Request, res: Response) {
   if (!req.user) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
-
   const id = Number(req.params.id);
   if (Number.isNaN(id)) {
     return res.status(400).json({ message: 'Invalid id' });
   }
+  const {
+    name,
+    message,
+    type,
+    trigger,
+    parentId,
+    areaId,
+    orderIndex,
+    metadata: rawMetadata,
+    isActive,
+  } = req.body ?? {};
+
+  // Sincronizar builder.type con el tipo real del nodo
+  let metadata = rawMetadata;
+  if (type === 'CONDITIONAL') {
+    // Si el nodo es de tipo CONDITIONAL, nos aseguramos que el builder también lo sea.
+    const currentBuilder =
+      metadata &&
+      typeof metadata === 'object' &&
+      metadata.builder &&
+      typeof metadata.builder === 'object'
+        ? metadata.builder
+        : {};
+    const newBuilder = { ...currentBuilder, type: 'CONDITIONAL' };
+    metadata = {
+      ...(metadata && typeof metadata === 'object' ? metadata : {}),
+      builder: newBuilder,
+    };
+  } else if (
+    metadata &&
+    typeof metadata === 'object' &&
+    'builder' in metadata &&
+    typeof metadata.builder === 'object' &&
+    type
+  ) {
+    metadata = { ...metadata, builder: { ...metadata.builder, type: type } };
+  }
 
   try {
-    await deleteFlow(req.user.id, id);
-    return res.status(204).send();
+    const node = await prisma.flow.update({
+      where: { id, createdBy: req.user.id },
+      data: {
+        ...(name !== undefined ? { name } : {}),
+        ...(message !== undefined ? { message } : {}),
+        ...(type !== undefined ? { type } : {}),
+        ...(trigger !== undefined ? { trigger } : {}),
+        ...(parentId !== undefined ? { parentId } : {}),
+        ...(areaId !== undefined ? { areaId } : {}),
+        ...(orderIndex !== undefined ? { orderIndex } : {}),
+        ...(metadata !== undefined
+          ? { metadata: JSON.stringify(metadata) }
+          : {}),
+        ...(isActive !== undefined ? { isActive } : {}),
+      },
+    });
+    return res.json(node);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Unable to delete flow';
-    return res.status(400).json({ message });
+    return res
+      .status(500)
+      .json({ message: 'Failed to update node', error: String(error) });
   }
 }
 
+export async function deleteFlowNode(req: Request, res: Response) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ message: 'Invalid id' });
+  }
+  try {
+    await prisma.flow.deleteMany({ where: { id, createdBy: req.user.id } });
+    return res.status(204).send();
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ message: 'Failed to delete node', error: String(error) });
+  }
+}
+
+export async function getFlowNode(req: Request, res: Response) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ message: 'Invalid id' });
+  }
+  try {
+    const node = await prisma.flow.findFirst({
+      where: { id, createdBy: req.user.id },
+    });
+    if (!node) {
+      return res.status(404).json({ message: 'Node not found' });
+    }
+    return res.json(node);
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ message: 'Failed to get node', error: String(error) });
+  }
+}
 type GraphOption = {
   id: string;
   label: string;
@@ -146,11 +343,22 @@ type BuilderOption = {
   targetId?: string | null;
 };
 
+type ConditionOperator =
+  | 'EQUALS'
+  | 'NOT_EQUALS'
+  | 'CONTAINS'
+  | 'STARTS_WITH'
+  | 'ENDS_WITH'
+  | 'GREATER_THAN'
+  | 'LESS_THAN'
+  | 'REGEX';
+
 type GraphCondition = {
   id: string;
   label: string;
   match: string;
   matchMode: 'EXACT' | 'CONTAINS' | 'REGEX';
+  operator: ConditionOperator;
   targetId: string | null;
 };
 
@@ -159,24 +367,140 @@ type BuilderCondition = {
   label?: string;
   match?: string;
   matchMode?: string;
+  operator?: string;
   targetId?: string | null;
 };
+
+const CONDITIONAL_OPERATOR_VALUES: ConditionOperator[] = [
+  'EQUALS',
+  'NOT_EQUALS',
+  'CONTAINS',
+  'STARTS_WITH',
+  'ENDS_WITH',
+  'GREATER_THAN',
+  'LESS_THAN',
+  'REGEX',
+];
+
+const CONDITIONAL_OPERATOR_SET = new Set(CONDITIONAL_OPERATOR_VALUES);
+
+function normalizeConditionOperator(value?: string | null): ConditionOperator {
+  if (!value) return 'EQUALS';
+  const upper = value.toUpperCase() as ConditionOperator;
+  return CONDITIONAL_OPERATOR_SET.has(upper) ? upper : 'EQUALS';
+}
 
 type BuilderMetadata = {
   reactId?: string;
   position?: Record<string, unknown> | null;
   options?: BuilderOption[];
   conditions?: BuilderCondition[];
+  sourceVariable?: string | null;
+  defaultLabel?: string | null;
+  defaultTargetId?: string | null;
+  defaultConditionId?: string | null;
   messageType?: string;
   buttonTitle?: string | null;
   buttonFooter?: string | null;
   listButtonText?: string | null;
   listTitle?: string | null;
   listDescription?: string | null;
+  type?: string;
+  waitForResponse?: boolean;
+  responseVariableName?: string | null;
+  responseVariableType?: string;
+  audioModel?: string | null;
+  imageModel?: string | null;
+  saveResponseToVariable?: string | null;
+  seconds?: number;
+  week?: Record<string, unknown>;
+  targetBotId?: string | null;
+  agentId?: string | null;
+  prompt?: string | null;
+  model?: string | null;
+  variable?: string | null;
+  value?: string | null;
 };
 
 const DEFAULT_POSITION = { x: 160, y: 120 };
 const DEFAULT_NODE_TYPE = 'default';
+const NODE_TYPE_SET = new Set<NodeType>([
+  'START',
+  'TEXT',
+  'CONDITIONAL',
+  'DELAY',
+  'SCHEDULE',
+  'REDIRECT_BOT',
+  'REDIRECT_AGENT',
+  'AI',
+  'SET_VARIABLE',
+  'END',
+]);
+const VARIABLE_TYPE_SET = new Set(['STRING', 'NUMBER', 'BOOLEAN', 'JSON']);
+
+function normalizeFlowNodeType(value: unknown): NodeType {
+  if (typeof value === 'string') {
+    const upper = value.toUpperCase();
+    if (NODE_TYPE_SET.has(upper as NodeType)) {
+      return upper as NodeType;
+    }
+    if (upper === 'MENU') {
+      return 'TEXT';
+    }
+  }
+  return 'TEXT';
+}
+
+function parseNumericValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function normalizePositionValue(position?: Record<string, unknown> | null): {
+  x: number;
+  y: number;
+} {
+  if (!position) {
+    return { ...DEFAULT_POSITION };
+  }
+  const x = parseNumericValue(position['x']) ?? DEFAULT_POSITION.x;
+  const y = parseNumericValue(position['y']) ?? DEFAULT_POSITION.y;
+  return { x, y };
+}
+
+function buildButtonSettingsFromMetadata(metadata?: BuilderMetadata | null) {
+  const title = sanitizeStringValue(metadata?.buttonTitle ?? null);
+  const footer = sanitizeStringValue(metadata?.buttonFooter ?? null);
+  if (!title && !footer) {
+    return undefined;
+  }
+  return {
+    ...(title ? { title } : {}),
+    ...(footer ? { footer } : {}),
+  };
+}
+
+function buildListSettingsFromMetadata(metadata?: BuilderMetadata | null) {
+  const buttonText = sanitizeStringValue(metadata?.listButtonText ?? null);
+  const listTitle = sanitizeStringValue(metadata?.listTitle ?? null);
+  const description = sanitizeStringValue(metadata?.listDescription ?? null);
+  if (!buttonText && !listTitle && !description) {
+    return undefined;
+  }
+  return {
+    ...(buttonText ? { buttonText } : {}),
+    ...(listTitle ? { title: listTitle } : {}),
+    ...(description ? { description } : {}),
+  };
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object') {
@@ -264,6 +588,42 @@ function extractBuilderMetadata(value: unknown): BuilderMetadata | null {
   const listButtonText = sanitizeStringValue(builder.listButtonText);
   const listTitle = sanitizeStringValue(builder.listTitle);
   const listDescription = sanitizeStringValue(builder.listDescription);
+  const nodeType =
+    typeof builder.type === 'string' && builder.type.length > 0
+      ? builder.type
+      : undefined;
+  const waitForResponse =
+    typeof builder.waitForResponse === 'boolean'
+      ? builder.waitForResponse
+      : undefined;
+  const responseVariableName = sanitizeStringValue(
+    builder.responseVariableName ?? builder.saveResponseToVariable
+  );
+  const responseVariableType =
+    typeof builder.responseVariableType === 'string'
+      ? builder.responseVariableType.toUpperCase()
+      : undefined;
+  const audioModel = sanitizeStringValue(builder.audioModel);
+  const imageModel = sanitizeStringValue(builder.imageModel);
+  const saveResponseToVariable = sanitizeStringValue(
+    builder.saveResponseToVariable
+  );
+  const sourceVariable = sanitizeStringValue(builder.sourceVariable);
+  const defaultLabel = sanitizeStringValue(builder.defaultLabel);
+  const defaultTargetId = sanitizeStringValue(builder.defaultTargetId);
+  const defaultConditionId = sanitizeStringValue(builder.defaultConditionId);
+  const seconds =
+    typeof builder.seconds === 'number' ? builder.seconds : undefined;
+  const week =
+    typeof builder.week === 'object' && builder.week !== null
+      ? (builder.week as Record<string, unknown>)
+      : undefined;
+  const targetBotId = sanitizeStringValue(builder.targetBotId);
+  const agentId = sanitizeStringValue(builder.agentId);
+  const prompt = sanitizeStringValue(builder.prompt);
+  const model = sanitizeStringValue(builder.model);
+  const variable = sanitizeStringValue(builder.variable);
+  const nodeValue = sanitizeStringValue(builder.value);
 
   return {
     reactId:
@@ -279,6 +639,25 @@ function extractBuilderMetadata(value: unknown): BuilderMetadata | null {
     listButtonText,
     listTitle,
     listDescription,
+    type: nodeType,
+    waitForResponse,
+    responseVariableName: responseVariableName ?? null,
+    responseVariableType,
+    audioModel,
+    imageModel,
+    saveResponseToVariable,
+    sourceVariable: sourceVariable ?? null,
+    defaultLabel: defaultLabel ?? null,
+    defaultTargetId: defaultTargetId ?? null,
+    defaultConditionId: defaultConditionId ?? null,
+    seconds,
+    week,
+    targetBotId,
+    agentId,
+    prompt,
+    model,
+    variable,
+    value: nodeValue,
   };
 }
 
@@ -331,11 +710,14 @@ function buildGraphConditionFromBuilder(
 ): GraphCondition {
   const label = sanitizeStringValue(condition.label) ?? '';
   const match = sanitizeStringValue(condition.match) ?? '';
-  const matchModeRaw = sanitizeStringValue(condition.matchMode) ?? 'EXACT';
-  const matchMode =
-    matchModeRaw &&
-    ['EXACT', 'CONTAINS', 'REGEX'].includes(matchModeRaw.toUpperCase())
-      ? (matchModeRaw.toUpperCase() as 'EXACT' | 'CONTAINS' | 'REGEX')
+  const operator = normalizeConditionOperator(
+    condition.operator ?? condition.matchMode
+  );
+  const matchMode: 'EXACT' | 'CONTAINS' | 'REGEX' =
+    operator === 'CONTAINS'
+      ? 'CONTAINS'
+      : operator === 'REGEX'
+      ? 'REGEX'
       : 'EXACT';
 
   return {
@@ -343,6 +725,7 @@ function buildGraphConditionFromBuilder(
     label: label || match,
     match,
     matchMode,
+    operator,
     targetId: condition.targetId ?? null,
   };
 }
@@ -419,13 +802,18 @@ function sanitizeCondition(raw: unknown): GraphCondition | null {
 
   const match =
     typeof condition.match === 'string' ? condition.match.trim() : '';
-  const matchModeRaw =
-    typeof condition.matchMode === 'string'
-      ? condition.matchMode.trim().toUpperCase()
-      : '';
+  const operator = normalizeConditionOperator(
+    typeof condition.operator === 'string'
+      ? condition.operator
+      : typeof condition.matchMode === 'string'
+      ? condition.matchMode
+      : undefined
+  );
   const matchMode: 'EXACT' | 'CONTAINS' | 'REGEX' =
-    matchModeRaw === 'CONTAINS' || matchModeRaw === 'REGEX'
-      ? (matchModeRaw as 'CONTAINS' | 'REGEX')
+    operator === 'CONTAINS'
+      ? 'CONTAINS'
+      : operator === 'REGEX'
+      ? 'REGEX'
       : 'EXACT';
 
   return {
@@ -433,6 +821,7 @@ function sanitizeCondition(raw: unknown): GraphCondition | null {
     label: typeof condition.label === 'string' ? condition.label.trim() : '',
     match,
     matchMode,
+    operator,
     targetId:
       typeof condition.targetId === 'string'
         ? condition.targetId
@@ -469,6 +858,21 @@ export async function saveFlowGraph(req: Request, res: Response) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
+  const payloadBotId = parseNumericValue(req.body?.botId);
+  if (!payloadBotId) {
+    return res
+      .status(400)
+      .json({ message: 'botId is required to save the flow graph.' });
+  }
+
+  const botRecord = await prisma.bot.findUnique({
+    where: { id: payloadBotId },
+  });
+
+  if (!botRecord) {
+    return res.status(404).json({ message: 'Bot not found.' });
+  }
+
   const nodesPayload = Array.isArray(req.body?.nodes)
     ? (req.body.nodes as unknown[])
     : [];
@@ -481,11 +885,35 @@ export async function saveFlowGraph(req: Request, res: Response) {
     return res.status(400).json({ message: 'Graph payload is required.' });
   }
 
+  console.error('[saveFlowGraph] payload', {
+    userId: req.user.id,
+    botId: payloadBotId,
+    nodes: nodesPayload.length,
+    edges: edgesPayload.length,
+    deleteMissing,
+  });
+
+  // Log detallado de nodos recibidos
+  console.log('[saveFlowGraph] NODOS RECIBIDOS DEL FRONTEND:');
+  nodesPayload.forEach((node: any, idx: number) => {
+    console.log(
+      `  [${idx}] id="${node.id}" type="${node.type}" flowId=${
+        node.data?.flowId ?? 'undefined'
+      }`
+    );
+  });
+
   try {
-    const transactionResult = await prisma.$transaction(async (tx) => {
+    const persistGraph = async (
+      client: Prisma.TransactionClient | typeof prisma
+    ) => {
       const nodeIdToFlowId = new Map<string, number>();
       const sanitizedOptionsByNode = new Map<string, GraphOption[]>();
       const sanitizedConditionsByNode = new Map<string, GraphCondition[]>();
+      const sanitizedDefaultConditionsByNode = new Map<
+        string,
+        GraphCondition
+      >();
       const touchedFlowIds = new Set<number>();
       const responseNodes: Array<{ reactId: string; flowId: number }> = [];
       const incomingTriggerMap = new Map<string, Set<string>>();
@@ -496,6 +924,49 @@ export async function saveFlowGraph(req: Request, res: Response) {
 
         const nodeId = normalized.id;
         const data = normalized.data ?? {};
+        const dataRecord = data as Record<string, unknown>;
+
+        // DEBUG: Log de todos los datos recibidos para CAPTURE
+        if (dataRecord.type === 'CAPTURE') {
+          console.log(
+            `[DEBUG] CAPTURE node "${nodeId}": data keys = ${Object.keys(
+              dataRecord
+            ).join(', ')}`
+          );
+          console.log(
+            `[DEBUG]   responseVariableName = "${dataRecord.responseVariableName}"`
+          );
+          console.log(`[DEBUG]   message = "${dataRecord.message}"`);
+        }
+
+        // DEBUG: Log para CONDITIONAL
+        if (dataRecord.type === 'CONDITIONAL') {
+          console.log(
+            `[DEBUG] CONDITIONAL node "${nodeId}": data keys = ${Object.keys(
+              dataRecord
+            ).join(', ')}`
+          );
+          console.log(
+            `[DEBUG]   sourceVariable = "${dataRecord.sourceVariable}"`
+          );
+          console.log(
+            `[DEBUG]   evaluations count = ${
+              Array.isArray(dataRecord.evaluations)
+                ? dataRecord.evaluations.length
+                : 0
+            }`
+          );
+          if (
+            Array.isArray(dataRecord.evaluations) &&
+            dataRecord.evaluations.length > 0
+          ) {
+            console.log(
+              `[DEBUG]   first evaluation = ${JSON.stringify(
+                dataRecord.evaluations[0]
+              )}`
+            );
+          }
+        }
 
         const options = Array.isArray(data.options)
           ? (data.options as unknown[])
@@ -503,17 +974,58 @@ export async function saveFlowGraph(req: Request, res: Response) {
               .filter((value): value is GraphOption => Boolean(value))
           : [];
 
-        const conditions = Array.isArray(data.conditions)
-          ? (data.conditions as unknown[])
-              .map(sanitizeCondition)
+        const conditionalEvaluations = Array.isArray(dataRecord.evaluations)
+          ? (dataRecord.evaluations as unknown[])
+              .map((entry) => {
+                if (!entry || typeof entry !== 'object') return null;
+                const evaluation = entry as Record<string, unknown>;
+                const id =
+                  typeof evaluation.id === 'string'
+                    ? evaluation.id
+                    : evaluation.id !== undefined
+                    ? String(evaluation.id)
+                    : crypto.randomUUID();
+                const operatorRaw =
+                  typeof evaluation.operator === 'string'
+                    ? evaluation.operator.toUpperCase()
+                    : 'EQUALS';
+                const operator = CONDITIONAL_OPERATOR_SET.has(
+                  operatorRaw as ConditionOperator
+                )
+                  ? (operatorRaw as ConditionOperator)
+                  : 'EQUALS';
+                const matchMode: 'EXACT' | 'CONTAINS' | 'REGEX' =
+                  operator === 'CONTAINS'
+                    ? 'CONTAINS'
+                    : operator === 'REGEX'
+                    ? 'REGEX'
+                    : 'EXACT';
+                return {
+                  id,
+                  label:
+                    typeof evaluation.label === 'string'
+                      ? evaluation.label
+                      : 'Condici��n',
+                  match:
+                    typeof evaluation.value === 'string'
+                      ? evaluation.value
+                      : '',
+                  matchMode,
+                  operator,
+                  targetId:
+                    typeof evaluation.targetId === 'string'
+                      ? evaluation.targetId
+                      : null,
+                };
+              })
               .filter((value): value is GraphCondition => Boolean(value))
           : [];
 
         const areaIdRaw =
-          typeof (data as Record<string, unknown>).areaId === 'number'
-            ? (data as Record<string, unknown>).areaId
-            : typeof (data as Record<string, unknown>).areaId === 'string'
-            ? Number((data as Record<string, unknown>).areaId)
+          typeof dataRecord.areaId === 'number'
+            ? dataRecord.areaId
+            : typeof dataRecord.areaId === 'string'
+            ? Number(dataRecord.areaId)
             : null;
         const areaId =
           typeof areaIdRaw === 'number' && Number.isFinite(areaIdRaw)
@@ -522,10 +1034,14 @@ export async function saveFlowGraph(req: Request, res: Response) {
 
         const triggerValue = null;
 
+        // Usar el type recibido directamente como string para Prisma
         const flowType =
-          parseFlowType(data.type) ??
-          parseFlowType((normalized.type as string) ?? '') ??
-          'MENU';
+          typeof data.type === 'string' && data.type.trim().length
+            ? data.type.trim()
+            : typeof normalized.type === 'string' &&
+              normalized.type.trim().length
+            ? normalized.type.trim()
+            : 'MENU';
 
         const label =
           typeof data.label === 'string' && data.label.trim().length
@@ -543,6 +1059,21 @@ export async function saveFlowGraph(req: Request, res: Response) {
           messageKindRaw === 'BUTTONS' || messageKindRaw === 'LIST'
             ? messageKindRaw
             : 'TEXT';
+
+        const sourceVariableValue = sanitizeStringValue(
+          dataRecord.sourceVariable
+        );
+        const defaultLabelValue = sanitizeStringValue(dataRecord.defaultLabel);
+        const defaultTargetId =
+          typeof dataRecord.defaultTargetId === 'string' &&
+          dataRecord.defaultTargetId.length
+            ? dataRecord.defaultTargetId
+            : null;
+        const defaultConditionId =
+          typeof dataRecord.defaultConditionId === 'string' &&
+          dataRecord.defaultConditionId.length
+            ? dataRecord.defaultConditionId
+            : crypto.randomUUID();
 
         const buttonSettingsRecord = asRecord(data.buttonSettings);
         const buttonTitle = sanitizeStringValue(
@@ -563,23 +1094,118 @@ export async function saveFlowGraph(req: Request, res: Response) {
           listSettingsRecord ? listSettingsRecord['description'] : undefined
         );
 
+        const waitForResponse =
+          typeof dataRecord.waitForResponse === 'boolean'
+            ? dataRecord.waitForResponse
+            : Boolean(
+                sanitizeStringValue(
+                  dataRecord.responseVariableName ??
+                    dataRecord.saveResponseToVariable
+                )
+              );
+        const responseVariableName = waitForResponse
+          ? sanitizeStringValue(
+              dataRecord.responseVariableName ??
+                dataRecord.saveResponseToVariable
+            )
+          : null;
+
+        // DEBUG: Log responseVariableName
+        if (flowType === 'CAPTURE') {
+          console.log(
+            `[saveFlowGraph] CAPTURE Node "${nodeId}": responseVariableName="${dataRecord.responseVariableName}" → sanitized="${responseVariableName}"`
+          );
+        }
+
+        const rawVariableType =
+          typeof dataRecord.responseVariableType === 'string'
+            ? dataRecord.responseVariableType.toUpperCase()
+            : undefined;
+        const responseVariableType =
+          rawVariableType && VARIABLE_TYPE_SET.has(rawVariableType)
+            ? rawVariableType
+            : undefined;
+        const audioModelValue = sanitizeStringValue(dataRecord.audioModel);
+        const imageModelValue = sanitizeStringValue(dataRecord.imageModel);
+
+        // Campos para DELAY
+        const secondsValue =
+          typeof dataRecord.seconds === 'number' ? dataRecord.seconds : 1;
+
+        // Campos para SCHEDULE
+        const weekValue =
+          typeof dataRecord.week === 'object' && dataRecord.week !== null
+            ? dataRecord.week
+            : undefined;
+
+        // Campos para REDIRECT_BOT
+        const targetBotIdValue = sanitizeStringValue(dataRecord.targetBotId);
+
+        // Campos para REDIRECT_AGENT
+        const agentIdValue = sanitizeStringValue(dataRecord.agentId);
+
+        // Campos para AI
+        const promptValue = sanitizeStringValue(dataRecord.prompt);
+        const modelValue = sanitizeStringValue(dataRecord.model);
+
+        // Campos para SET_VARIABLE
+        const variableValue = sanitizeStringValue(dataRecord.variable);
+        const valueValue = sanitizeStringValue(dataRecord.value);
+
         const metadataPayload: Prisma.InputJsonValue = {
           builder: {
-            reactId: nodeId,
+            reactId: nodeId ?? undefined, // Usar nodeId tal cual, sin conversión
             position: normalized.position ?? null,
-            type: normalized.type ?? 'default',
+            type: flowType ?? 'default', // Usar flowType (CONDITIONAL, TEXT, etc) no normalized.type
             width: normalized.width ?? null,
             height: normalized.height ?? null,
             options,
-            conditions,
+            conditions: conditionalEvaluations,
+            sourceVariable: sourceVariableValue ?? undefined,
+            defaultLabel: defaultLabelValue ?? undefined,
+            defaultTargetId: defaultTargetId ?? undefined,
+            defaultConditionId:
+              flowType === 'CONDITIONAL' ? defaultConditionId : undefined,
             messageType,
             buttonTitle: buttonTitle ?? null,
             buttonFooter: buttonFooter ?? null,
             listButtonText: listButtonText ?? null,
             listTitle: listTitle ?? null,
             listDescription: listDescription ?? null,
+            waitForResponse: waitForResponse || undefined,
+            responseVariableName: responseVariableName ?? undefined,
+            responseVariableType,
+            audioModel: audioModelValue ?? undefined,
+            imageModel: imageModelValue ?? undefined,
+            saveResponseToVariable: responseVariableName ?? undefined,
+            // Campos para DELAY
+            seconds: flowType === 'DELAY' ? secondsValue : undefined,
+            // Campos para SCHEDULE
+            week: flowType === 'SCHEDULE' ? weekValue : undefined,
+            // Campos para REDIRECT_BOT
+            targetBotId:
+              flowType === 'REDIRECT_BOT' ? targetBotIdValue : undefined,
+            // Campos para REDIRECT_AGENT
+            agentId: flowType === 'REDIRECT_AGENT' ? agentIdValue : undefined,
+            // Campos para AI
+            prompt: flowType === 'AI' ? promptValue : undefined,
+            model: flowType === 'AI' ? modelValue : undefined,
+            // Campos para SET_VARIABLE
+            variable: flowType === 'SET_VARIABLE' ? variableValue : undefined,
+            value: flowType === 'SET_VARIABLE' ? valueValue : undefined,
           },
         };
+
+        if (flowType === 'CONDITIONAL') {
+          sanitizedDefaultConditionsByNode.set(nodeId, {
+            id: defaultConditionId,
+            label: defaultLabelValue ?? 'Otro...',
+            match: '',
+            matchMode: 'EXACT',
+            operator: 'EQUALS',
+            targetId: defaultTargetId,
+          });
+        }
 
         const flowId =
           typeof data.flowId === 'number' && Number.isInteger(data.flowId)
@@ -594,60 +1220,120 @@ export async function saveFlowGraph(req: Request, res: Response) {
 
         let recordId: number;
 
-        if (flowId) {
-          const existing = await tx.flow.findFirst({
+        // Primero intentar buscar por flowId si existe
+        let existing = flowId
+          ? await client.flow.findFirst({
+              where: {
+                id: flowId,
+                createdBy: req.user!.id,
+              },
+              select: { id: true, botId: true },
+            })
+          : null;
+
+        console.log(
+          `[saveFlowGraph] Node "${nodeId}": flowId=${flowId}, found by flowId=${!!existing}`
+        );
+
+        // Si no encuentra por flowId, buscar por reactId en metadata
+        if (!existing && nodeId) {
+          const candidates: Array<{
+            id: number;
+            botId: number;
+            metadata: Prisma.JsonValue;
+          }> = await client.flow.findMany({
             where: {
-              id: flowId,
               createdBy: req.user!.id,
+              botId: payloadBotId,
             },
-            select: { id: true },
+            select: { id: true, botId: true, metadata: true },
           });
 
+          console.log(
+            `[saveFlowGraph] Searching for reactId="${nodeId}" among ${candidates.length} existing flows`
+          );
+
+          for (const candidate of candidates) {
+            const builderMeta = extractBuilderMetadata(
+              candidate.metadata ?? null
+            );
+            console.log(
+              `  Candidate id=${candidate.id}: reactId="${builderMeta?.reactId}"`
+            );
+
+            if (builderMeta?.reactId === nodeId) {
+              console.log(
+                `  ✓ FOUND MATCH! Using existing flow id=${candidate.id}`
+              );
+              existing = { id: candidate.id, botId: candidate.botId };
+              break;
+            }
+          }
+
           if (!existing) {
+            console.log(
+              `  ✗ NO MATCH FOUND for reactId="${nodeId}" - will CREATE new`
+            );
+          }
+        }
+
+        if (existing) {
+          // ACTUALIZAR flow existente
+          console.log(
+            `[saveFlowGraph] UPDATING existing flow id=${existing.id} for node="${nodeId}"`
+          );
+
+          if (existing.botId !== payloadBotId) {
             const error = new Error(GRAPH_UNAUTHORIZED_ERROR);
             throw error;
           }
 
-          const updated = await tx.flow.update({
+          const updated = await client.flow.update({
             where: { id: existing.id },
             data: {
               name: label,
               message,
               trigger: triggerValue,
-              type: flowType,
+              type: flowType as any,
               orderIndex: 0,
               isActive,
               areaId: areaId ?? null,
               metadata: metadataPayload,
               parentId,
+              botId: payloadBotId,
             },
             select: { id: true },
           });
 
           recordId = updated.id;
+          console.log(`[saveFlowGraph] ✓ UPDATED flow id=${recordId}`);
         } else {
-          const created = await tx.flow.create({
+          // CREAR nuevo flow
+          console.log(`[saveFlowGraph] CREATING new flow for node="${nodeId}"`);
+
+          const created = await client.flow.create({
             data: {
               name: label,
               message,
               trigger: triggerValue,
-              type: flowType,
+              type: flowType as any,
               orderIndex: 0,
               metadata: metadataPayload,
               areaId: areaId ?? null,
               isActive,
               createdBy: req.user!.id,
               parentId,
-              botId: 1, // TODO: Make this dynamic based on user selection
+              botId: payloadBotId,
             },
             select: { id: true },
           });
           recordId = created.id;
+          console.log(`[saveFlowGraph] ✓ CREATED new flow id=${recordId}`);
         }
 
         nodeIdToFlowId.set(nodeId, recordId);
         sanitizedOptionsByNode.set(nodeId, options);
-        sanitizedConditionsByNode.set(nodeId, conditions);
+        sanitizedConditionsByNode.set(nodeId, conditionalEvaluations);
         touchedFlowIds.add(recordId);
         responseNodes.push({ reactId: nodeId, flowId: recordId });
         if (!incomingTriggerMap.has(nodeId)) {
@@ -656,7 +1342,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
       }
 
       if (touchedFlowIds.size) {
-        await tx.flowConnection.deleteMany({
+        await client.flowConnection.deleteMany({
           where: {
             fromId: {
               in: Array.from(touchedFlowIds),
@@ -678,6 +1364,9 @@ export async function saveFlowGraph(req: Request, res: Response) {
         conditions.forEach((condition) => {
           connectionLookup.set(condition.id, { condition, nodeId });
         });
+      });
+      sanitizedDefaultConditionsByNode.forEach((condition, nodeId) => {
+        connectionLookup.set(condition.id, { condition, nodeId });
       });
 
       const uniqueConnections = new Map<
@@ -705,14 +1394,12 @@ export async function saveFlowGraph(req: Request, res: Response) {
               : null;
           if (connectionId) {
             const lookup = connectionLookup.get(connectionId);
-            if (lookup?.option?.trigger) {
+            if (lookup?.condition) {
+              trigger = `cond:${lookup.condition.id}`;
+            } else if (lookup?.option?.trigger) {
               trigger = lookup.option.trigger.trim();
             } else if (lookup?.option?.label) {
               trigger = lookup.option.label.trim();
-            } else if (lookup?.condition?.match) {
-              trigger = lookup.condition.match.trim();
-            } else if (lookup?.condition?.label) {
-              trigger = lookup.condition.label.trim();
             }
           }
         }
@@ -735,7 +1422,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
       }
 
       if (uniqueConnections.size) {
-        await tx.flowConnection.createMany({
+        await client.flowConnection.createMany({
           data: Array.from(uniqueConnections.values()),
           skipDuplicates: true,
         });
@@ -751,7 +1438,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
             .filter((value) => value.length > 0);
           const uniqueTriggers = Array.from(new Set(triggers));
 
-          await tx.flow.update({
+          await client.flow.update({
             where: { id: flowId },
             data: {
               trigger: uniqueTriggers.length ? uniqueTriggers.join(',') : null,
@@ -763,8 +1450,8 @@ export async function saveFlowGraph(req: Request, res: Response) {
       let deletedFlowIds: number[] = [];
 
       if (deleteMissing) {
-        const existingFlows = await tx.flow.findMany({
-          where: { createdBy: req.user!.id },
+        const existingFlows = await client.flow.findMany({
+          where: { createdBy: req.user!.id, botId: payloadBotId },
           select: {
             id: true,
             metadata: true,
@@ -776,19 +1463,19 @@ export async function saveFlowGraph(req: Request, res: Response) {
         );
 
         const flowsToDelete = existingFlows.filter((flow) => {
-          const builderMeta = extractBuilderMetadata(flow.metadata);
+          const builderMeta = extractBuilderMetadata(flow.metadata ?? null);
           if (!builderMeta?.reactId) return false;
           return !payloadReactIds.has(builderMeta.reactId);
         });
 
         if (flowsToDelete.length) {
           const ids = flowsToDelete.map((flow) => flow.id);
-          await tx.flowConnection.deleteMany({
+          await client.flowConnection.deleteMany({
             where: {
               OR: [{ fromId: { in: ids } }, { toId: { in: ids } }],
             },
           });
-          await tx.flow.deleteMany({
+          await client.flow.deleteMany({
             where: { id: { in: ids } },
           });
           deletedFlowIds = ids;
@@ -796,7 +1483,24 @@ export async function saveFlowGraph(req: Request, res: Response) {
       }
 
       return { nodes: responseNodes, deletedFlowIds };
-    });
+    };
+
+    const useTransaction =
+      nodesPayload.length <= env.flowGraphTransactionNodeLimit;
+
+    if (!useTransaction) {
+      console.warn(
+        '[saveFlowGraph] Persisting without transaction due to graph size',
+        nodesPayload.length
+      );
+    }
+
+    const transactionResult = useTransaction
+      ? await prisma.$transaction((tx) => persistGraph(tx), {
+          timeout: env.prismaTransactionTimeoutMs,
+          maxWait: env.prismaTransactionMaxWaitMs,
+        })
+      : await persistGraph(prisma);
 
     return res.json({
       success: true,
@@ -810,7 +1514,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
       });
     }
 
-    console.error('Failed to save flow graph', error);
+    console.error('[saveFlowGraph] Failed to persist flow graph', error);
     return res
       .status(500)
       .json({ message: 'Failed to persist flow graph', error: String(error) });
@@ -818,223 +1522,244 @@ export async function saveFlowGraph(req: Request, res: Response) {
 }
 
 export async function getFlowGraph(req: Request, res: Response) {
-  if (!req.user) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
   try {
+    const botIdFilter = req.query.botId ? Number(req.query.botId) : null;
+
+    if (!req.user) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
     const flows = await prisma.flow.findMany({
-      where: { createdBy: req.user.id },
-      include: {
-        outgoingConnections: {
-          select: {
-            id: true,
-            toId: true,
-            trigger: true,
-          },
-        },
+      where: {
+        createdBy: req.user.id,
+        ...(botIdFilter ? { botId: botIdFilter } : {}),
       },
       orderBy: [{ id: 'asc' }],
     });
 
-    const nodes: Array<{
-      id: string;
-      type: string;
-      position: { x: number; y: number };
-      data: {
-        label: string;
-        message: string;
-        type: FlowType;
-        options: GraphOption[];
-        conditions: GraphCondition[];
-        areaId: number | null;
-        flowId: number;
-        messageKind: 'TEXT' | 'BUTTONS' | 'LIST';
-        buttonSettings?: { title?: string; footer?: string };
-        listSettings?: {
-          buttonText?: string;
-          title?: string;
-          description?: string;
-        };
-      };
-    }> = [];
-    const edges: Array<{
+    if (!flows.length) {
+      return res.status(200).json({ nodes: [], edges: [] });
+    }
+
+    // Deduplicar flows por reactId, manteniendo el más reciente (por id mayor)
+    const reactIdToFlow = new Map<string, (typeof flows)[0]>();
+    for (const flow of flows) {
+      const builderMeta = extractBuilderMetadata(flow.metadata ?? null);
+      const reactId = builderMeta?.reactId ?? `flow-${flow.id}`;
+
+      const existing = reactIdToFlow.get(reactId);
+      // Mantener el flow con ID más alto (más reciente)
+      if (!existing || flow.id > existing.id) {
+        reactIdToFlow.set(reactId, flow);
+      }
+    }
+
+    const uniqueFlows = Array.from(reactIdToFlow.values());
+    const flowIds = uniqueFlows.map((flow) => flow.id);
+    const connections = await prisma.flowConnection.findMany({
+      where: {
+        fromId: { in: flowIds },
+      },
+    });
+
+    type SerializedEdgeResponse = {
       id: string;
       source: string;
       target: string;
-      label: string;
+      label?: string;
       data?: { optionId?: string; conditionId?: string };
+    };
+
+    const nodes: Array<{
+      id: string;
+      type?: string;
+      position: { x: number; y: number };
+      data: Record<string, unknown>;
     }> = [];
 
     const flowIdToReactId = new Map<number, string>();
-    const flowIdToNodeIndex = new Map<number, number>();
 
-    flows.forEach((flow, index) => {
-      const builderMeta = extractBuilderMetadata(flow.metadata);
-      const reactId =
-        builderMeta?.reactId && builderMeta.reactId.length > 0
-          ? builderMeta.reactId
-          : `flow-${flow.id}`;
+    for (const flow of uniqueFlows) {
+      const builderMeta = extractBuilderMetadata(flow.metadata ?? null);
+      const reactId = builderMeta?.reactId ?? `flow-${flow.id}`;
+      flowIdToReactId.set(flow.id, reactId);
 
-      const fallbackPosition = {
-        x: DEFAULT_POSITION.x + (index % 4) * 180,
-        y: DEFAULT_POSITION.y + Math.floor(index / 4) * 140,
-      };
+      const nodeType = normalizeFlowNodeType(flow.type);
 
-      let position = fallbackPosition;
-      if (builderMeta?.position) {
-        const positionRecord = builderMeta.position as Record<string, unknown>;
-        const xValue = Number(positionRecord.x);
-        const yValue = Number(positionRecord.y);
-        if (Number.isFinite(xValue) && Number.isFinite(yValue)) {
-          position = { x: xValue, y: yValue };
-        }
+      // DEBUG: Log para CONDITIONAL
+      if (nodeType === 'CONDITIONAL') {
+        console.log(
+          `[getFlowGraph] Reading flow id=${flow.id} (${reactId}): type="${nodeType}", builderMeta.sourceVariable="${builderMeta?.sourceVariable}"`
+        );
       }
 
-      const options =
+      const buttonSettings = buildButtonSettingsFromMetadata(builderMeta);
+      const listSettings = buildListSettingsFromMetadata(builderMeta);
+      const sanitizedOptions =
         builderMeta?.options?.map((option) =>
           buildGraphOptionFromBuilder(option)
         ) ?? [];
+      const sanitizedConditions =
+        builderMeta?.conditions?.map((condition) => ({
+          id:
+            typeof condition?.id === 'string' && condition.id.length > 0
+              ? condition.id
+              : crypto.randomUUID(),
+          label:
+            typeof condition?.label === 'string'
+              ? condition.label
+              : 'Condición',
+          operator:
+            typeof condition?.operator === 'string'
+              ? condition.operator
+              : typeof condition?.matchMode === 'string'
+              ? condition.matchMode
+              : 'EQUALS',
+          value: typeof condition?.match === 'string' ? condition.match : '',
+          targetId:
+            typeof condition?.targetId === 'string' ? condition.targetId : null,
+        })) ?? [];
 
-      const conditions =
-        builderMeta?.conditions?.map((condition) =>
-          buildGraphConditionFromBuilder(condition)
-        ) ?? [];
+      const nodeData: Record<string, unknown> = {
+        // Propiedades principales del nodo
+        label: typeof flow.name === 'string' ? flow.name : undefined,
+        message: typeof flow.message === 'string' ? flow.message : undefined,
+        trigger: typeof flow.trigger === 'string' ? flow.trigger : undefined,
+        type: builderMeta?.type ?? flow.type ?? 'default',
+        position: builderMeta?.position ?? null,
+        // Configuraciones adicionales
+        buttonSettings: buttonSettings ?? undefined,
+        listSettings: listSettings ?? undefined,
+        options: sanitizedOptions,
+        evaluations: sanitizedConditions,
+        // Campos para CAPTURE
+        responseVariableName:
+          typeof builderMeta?.responseVariableName === 'string'
+            ? builderMeta.responseVariableName
+            : undefined,
+        responseVariableType:
+          typeof builderMeta?.responseVariableType === 'string'
+            ? builderMeta.responseVariableType
+            : undefined,
+        audioModel:
+          typeof builderMeta?.audioModel === 'string'
+            ? builderMeta.audioModel
+            : undefined,
+        imageModel:
+          typeof builderMeta?.imageModel === 'string'
+            ? builderMeta.imageModel
+            : undefined,
+        waitForResponse:
+          typeof builderMeta?.waitForResponse === 'boolean'
+            ? builderMeta.waitForResponse
+            : undefined,
+        // Campo para CONDITIONAL
+        sourceVariable:
+          typeof builderMeta?.sourceVariable === 'string'
+            ? builderMeta.sourceVariable
+            : undefined,
+      };
 
-      const messageTypeRaw =
-        typeof builderMeta?.messageType === 'string'
-          ? builderMeta.messageType.toUpperCase()
-          : 'TEXT';
-      const messageKind =
-        messageTypeRaw === 'BUTTONS' || messageTypeRaw === 'LIST'
-          ? messageTypeRaw
-          : 'TEXT';
-
-      const buttonSettings =
-        (builderMeta?.buttonTitle && builderMeta.buttonTitle.length > 0) ||
-        (builderMeta?.buttonFooter && builderMeta.buttonFooter.length > 0)
-          ? {
-              title: builderMeta?.buttonTitle ?? undefined,
-              footer: builderMeta?.buttonFooter ?? undefined,
-            }
-          : undefined;
-
-      const listSettings =
-        (builderMeta?.listButtonText &&
-          builderMeta.listButtonText.length > 0) ||
-        (builderMeta?.listTitle && builderMeta.listTitle.length > 0) ||
-        (builderMeta?.listDescription && builderMeta.listDescription.length > 0)
-          ? {
-              buttonText: builderMeta?.listButtonText ?? undefined,
-              title: builderMeta?.listTitle ?? undefined,
-              description: builderMeta?.listDescription ?? undefined,
-            }
-          : undefined;
-
-      const nodeIndex =
-        nodes.push({
-          id: reactId,
-          type: DEFAULT_NODE_TYPE,
-          position,
-          data: {
-            label: flow.name,
-            message: flow.message,
-            type: flow.type,
-            options,
-            conditions,
-            areaId: flow.areaId ?? null,
-            flowId: flow.id,
-            messageKind,
-            ...(buttonSettings ? { buttonSettings } : {}),
-            ...(listSettings ? { listSettings } : {}),
-          },
-        }) - 1;
-
-      flowIdToReactId.set(flow.id, reactId);
-      flowIdToNodeIndex.set(flow.id, nodeIndex);
-    });
-
-    flows.forEach((flow) => {
-      const sourceReactId = flowIdToReactId.get(flow.id);
-      const nodeIndex = flowIdToNodeIndex.get(flow.id);
-      if (!sourceReactId || nodeIndex === undefined) {
-        return;
+      if (nodeType === 'CONDITIONAL') {
+        nodeData.defaultLabel =
+          typeof builderMeta?.defaultLabel === 'string'
+            ? builderMeta.defaultLabel
+            : 'Otro';
+        nodeData.defaultTargetId =
+          typeof builderMeta?.defaultTargetId === 'string'
+            ? builderMeta.defaultTargetId
+            : null;
+        nodeData.defaultConditionId =
+          typeof builderMeta?.defaultConditionId === 'string' &&
+          builderMeta.defaultConditionId.length
+            ? builderMeta.defaultConditionId
+            : crypto.randomUUID();
+        // Asegurar que sourceVariable se incluye también
+        if (
+          !nodeData.sourceVariable &&
+          typeof builderMeta?.sourceVariable === 'string'
+        ) {
+          nodeData.sourceVariable = builderMeta.sourceVariable;
+        }
+        console.log(
+          `[getFlowGraph] CONDITIONAL node "${reactId}": sourceVariable in nodeData="${nodeData.sourceVariable}", from builderMeta="${builderMeta?.sourceVariable}"`
+        );
       }
 
-      const optionMap = new Map(
-        nodes[nodeIndex].data.options.map((option) => [
-          normalizeTriggerValue(option.trigger),
-          option,
-        ])
-      );
-      const conditionMap = new Map(
-        nodes[nodeIndex].data.conditions.map((condition) => [
-          normalizeTriggerValue(condition.match),
-          condition,
-        ])
-      );
+      // Campos para DELAY
+      if (nodeType === 'DELAY') {
+        nodeData.seconds =
+          typeof builderMeta?.seconds === 'number' ? builderMeta.seconds : 1;
+      }
 
-      flow.outgoingConnections.forEach((connection) => {
-        const targetReactId = flowIdToReactId.get(connection.toId);
-        if (!targetReactId) return;
+      // Campos para SCHEDULE
+      if (nodeType === 'SCHEDULE') {
+        nodeData.week = builderMeta?.week ?? {
+          monday: [],
+          tuesday: [],
+          wednesday: [],
+          thursday: [],
+          friday: [],
+          saturday: [],
+          sunday: [],
+        };
+      }
 
-        const normalizedTrigger = normalizeTriggerValue(connection.trigger);
-        let option = optionMap.get(normalizedTrigger);
-        let condition = conditionMap.get(normalizedTrigger);
+      // Campos para REDIRECT_BOT
+      if (nodeType === 'REDIRECT_BOT') {
+        nodeData.targetBotId = builderMeta?.targetBotId ?? '';
+      }
 
-        if (option) {
-          option.targetId = targetReactId;
-          if (!option.label) {
-            option.label = connection.trigger ?? '';
-          }
-          if (!option.trigger) {
-            option.trigger = connection.trigger ?? '';
-          }
-        } else if (condition) {
-          condition.targetId = targetReactId;
-          if (!condition.label) {
-            condition.label = connection.trigger ?? '';
-          }
-          if (!condition.match) {
-            condition.match = connection.trigger ?? '';
-          }
-        } else {
-          condition = {
-            id: crypto.randomUUID(),
-            label: connection.trigger ?? '',
-            match: connection.trigger ?? '',
-            matchMode: 'EXACT',
-            targetId: targetReactId,
-          };
-          nodes[nodeIndex].data.conditions.push(condition);
-          conditionMap.set(normalizedTrigger, condition);
+      // Campos para REDIRECT_AGENT
+      if (nodeType === 'REDIRECT_AGENT') {
+        nodeData.agentId = builderMeta?.agentId ?? '';
+      }
+
+      // Campos para AI
+      if (nodeType === 'AI') {
+        nodeData.prompt = builderMeta?.prompt ?? '';
+        nodeData.model = builderMeta?.model ?? '';
+      }
+
+      // Campos para SET_VARIABLE
+      if (nodeType === 'SET_VARIABLE') {
+        nodeData.variable = builderMeta?.variable ?? '';
+        nodeData.value = builderMeta?.value ?? '';
+      }
+
+      const serializedNode = {
+        id: reactId,
+        type: builderMeta?.type ?? DEFAULT_NODE_TYPE,
+        position: normalizePositionValue(builderMeta?.position ?? null),
+        data: nodeData,
+      };
+
+      nodes.push(serializedNode);
+    }
+
+    const edges = connections
+      .map((conn): SerializedEdgeResponse | null => {
+        const sourceId = flowIdToReactId.get(conn.fromId);
+        const targetId = flowIdToReactId.get(conn.toId);
+
+        if (!sourceId || !targetId) {
+          return null;
         }
 
-        const edgeData =
-          option && option.id
-            ? { optionId: option.id }
-            : condition && condition.id
-            ? { conditionId: condition.id }
-            : undefined;
+        return {
+          id: `edge-${conn.id}`,
+          source: sourceId,
+          target: targetId,
+          label: conn.trigger ?? undefined,
+          data: {},
+        };
+      })
+      .filter((edge): edge is SerializedEdgeResponse => edge !== null);
 
-        edges.push({
-          id: `edge-${flow.id}-${connection.toId}-${connection.id}`,
-          source: sourceReactId,
-          target: targetReactId,
-          label: connection.trigger ?? '',
-          data: edgeData,
-        });
-      });
-    });
-
-    return res.json({
-      nodes,
-      edges,
-    });
+    return res.status(200).json({ nodes, edges });
   } catch (error) {
-    console.error('Failed to load flow graph', error);
+    console.error('[getFlowGraph] Error general:', error);
     return res
-      .status(500)
+      .status(400)
       .json({ message: 'Failed to load flow graph', error: String(error) });
   }
 }

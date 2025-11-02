@@ -13,12 +13,8 @@ type NavigationLink = {
 const NAVIGATION_LINKS: NavigationLink[] = [
   { to: '/dashboard', label: 'Estado' },
   { to: '/dashboard/chat', label: 'Chat' },
-  { to: '/dashboard/flows', label: 'Flujos', roles: ['ADMIN', 'SUPERVISOR'] },
-  {
-    to: '/dashboard/flow-builder',
-    label: 'Flow Builder',
-    roles: ['ADMIN', 'SUPERVISOR'],
-  },
+  // Flujos y Flow Builder eliminados del menú lateral
+  { to: '/dashboard/classic-flow', label: 'Classic Flow' },
   { to: '/dashboard/bots', label: 'Bots', roles: ['ADMIN', 'SUPERVISOR'] },
   { to: '/dashboard/users', label: 'Usuarios', roles: ['ADMIN'] },
   { to: '/dashboard/areas', label: 'Areas', roles: ['ADMIN'] },

@@ -1,256 +1,281 @@
-import React, { useMemo } from 'react';
-import { v4 as uuidv4 } from 'uuid';
-import type {
-  FlowBuilderNode,
-  FlowMessageKind,
-  FlowNodeData,
-  FlowOption,
-  FlowCondition,
-  ButtonSettings,
-  ListSettings,
-} from './types';
-import {
-  FLOW_NODE_TYPES,
-  FLOW_NODE_TYPE_LABELS,
-  FLOW_NODE_TYPE_DESCRIPTIONS,
-} from './types';
+import React from 'react';
+import type { FlowBuilderNode, FlowNodeData } from './types';
 
-type AreaOption = {
-  id: number;
-  name: string;
-};
+// Formularios visuales y tipados para cada tipo de nodo
+import { StartNodeForm } from '../../components/flow-nodes/StartNodeForm';
+import { TextNodeForm } from '../../components/flow-nodes/TextNodeForm';
+import { CaptureNodeForm } from '../../components/flow-nodes/CaptureNodeForm';
+import { ConditionalNodeForm } from '../../components/flow-nodes/ConditionalNodeForm';
+import { DelayNodeForm } from '../../components/flow-nodes/DelayNodeForm';
+import { ScheduleNodeForm } from '../../components/flow-nodes/ScheduleNodeForm';
+import { RedirectBotNodeForm } from '../../components/flow-nodes/RedirectBotNodeForm';
+import { RedirectAgentNodeForm } from '../../components/flow-nodes/RedirectAgentNodeForm';
+import { AINodeForm } from '../../components/flow-nodes/AINodeForm';
+import { SetVariableNodeForm } from '../../components/flow-nodes/SetVariableNodeForm';
+import { EndNodeForm } from '../../components/flow-nodes/EndNodeForm';
+//
 
 interface NodeEditorProps {
   node: FlowBuilderNode;
-  allNodes: FlowBuilderNode[];
-  areas: AreaOption[];
-  areasLoading: boolean;
   onChange: (updated: FlowBuilderNode) => void;
   onDeleteNode: (nodeId: string) => void;
   onDuplicateNode: (nodeId: string) => void;
 }
 
-function updateNodeData(
+function updateNodeData<T extends FlowNodeData>(
   node: FlowBuilderNode,
-  patch: Partial<FlowNodeData>
+  patch: Partial<T>
 ): FlowBuilderNode {
   return {
     ...node,
     data: {
       ...node.data,
       ...patch,
-    },
+    } as FlowNodeData,
   };
 }
 
 const NodeEditor: React.FC<NodeEditorProps> = ({
   node,
-  allNodes,
-  areas,
-  areasLoading,
   onChange,
   onDeleteNode,
   onDuplicateNode,
 }) => {
-  const options = node.data.options ?? [];
-  const conditions = node.data.conditions ?? [];
-  const messageKind = (
-    node.data.messageKind ? node.data.messageKind.toUpperCase() : 'TEXT'
-  ) as FlowMessageKind;
-  const buttonSettings = node.data.buttonSettings ?? {};
-  const listSettings = node.data.listSettings ?? {};
-  const availableTargets = useMemo(
-    () => allNodes.filter((candidate) => candidate.id !== node.id),
-    [allNodes, node.id]
-  );
-  const isRedirect = node.data.type === 'REDIRECT';
-  const canUseConditions = node.data.type !== 'END';
-
   const handleUpdate = (patch: Partial<FlowNodeData>) => {
     onChange(updateNodeData(node, patch));
   };
 
-  const handleTypeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const nextType = event.target.value as FlowNodeData['type'];
-    const patch: Partial<FlowNodeData> = { type: nextType };
+  // handleTypeChange eliminado: no se usa
 
-    if (nextType === 'END') {
-      patch.options = [];
-      patch.conditions = [];
-      patch.areaId = null;
-    } else if (nextType !== 'REDIRECT') {
-      patch.areaId = null;
-    }
+  // Eliminado: areaId ya no es parte de los tipos
 
-    handleUpdate(patch);
-  };
+  // Funciones de opciones solo para nodos tipo TEXT
+  // Funciones de opciones eliminadas: no se usan en este componente
 
-  const handleAreaChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const { value } = event.target;
-    if (!value) {
-      handleUpdate({ areaId: null });
-      return;
-    }
-    const nextAreaId = Number(value);
-    if (Number.isFinite(nextAreaId)) {
-      handleUpdate({ areaId: nextAreaId });
-    }
-  };
+  // Eliminado: lógica de condiciones, ya que ningún nodo tiene 'conditions'
 
-  const updateOption = (optionId: string, patch: Partial<FlowOption>) => {
-    const nextOptions = options.map((option) =>
-      option.id === optionId ? { ...option, ...patch } : option
-    );
-    handleUpdate({ options: nextOptions });
-  };
-
-  const addOption = () => {
-    const nextOptions = [
-      ...options,
-      { id: uuidv4(), label: '', trigger: '', targetId: null },
-    ];
-    handleUpdate({ options: nextOptions });
-  };
-
-  const removeOption = (optionId: string) => {
-    const nextOptions = options.filter((option) => option.id !== optionId);
-    handleUpdate({ options: nextOptions });
-  };
-
-  const updateCondition = (
-    conditionId: string,
-    patch: Partial<FlowCondition>
-  ) => {
-    const nextConditions = conditions.map((condition) =>
-      condition.id === conditionId ? { ...condition, ...patch } : condition
-    );
-    handleUpdate({ conditions: nextConditions });
-  };
-
-  const addCondition = () => {
-    const nextConditions = [
-      ...conditions,
-      {
-        id: uuidv4(),
-        label: '',
-        match: '',
-        matchMode: 'EXACT' as FlowCondition['matchMode'],
-        targetId: null,
-      },
-    ];
-    handleUpdate({ conditions: nextConditions });
-  };
-
-  const removeCondition = (conditionId: string) => {
-    const nextConditions = conditions.filter(
-      (condition) => condition.id !== conditionId
-    );
-    handleUpdate({ conditions: nextConditions });
-  };
-
-  const isButtons = messageKind === 'BUTTONS';
-  const isList = messageKind === 'LIST';
-
-  const optionsTitle = isButtons
-    ? 'Botones'
-    : isList
-    ? 'Ítems de la lista'
-    : 'Opciones';
-
-  const renderSettings = () => {
-    if (isButtons) {
-      return (
-        <>
-          <label className="node-editor__label">
-            Título de botones (opcional)
-          </label>
-          <input
-            type="text"
-            value={buttonSettings.title ?? ''}
-            onChange={(event) =>
-              handleUpdate({
-                buttonSettings: {
-                  ...buttonSettings,
-                  title: event.target.value,
-                },
-              })
-            }
-            className="node-editor__input"
-            placeholder="Ej: Menú principal"
-          />
-          <label className="node-editor__label">Pie de página (opcional)</label>
-          <input
-            type="text"
-            value={buttonSettings.footer ?? ''}
-            onChange={(event) =>
-              handleUpdate({
-                buttonSettings: {
-                  ...buttonSettings,
-                  footer: event.target.value,
-                },
-              })
-            }
-            className="node-editor__input"
-            placeholder="Ej: Ecofarma Villa Nueva"
-          />
-        </>
-      );
-    }
-    if (isList) {
-      return (
-        <>
-          <label className="node-editor__label">Texto del botón de lista</label>
-          <input
-            type="text"
-            value={listSettings.buttonText ?? ''}
-            onChange={(event) =>
-              handleUpdate({
-                listSettings: {
-                  ...listSettings,
-                  buttonText: event.target.value,
-                },
-              })
-            }
-            className="node-editor__input"
-            placeholder="Ej: Ver opciones"
-          />
-          <label className="node-editor__label">Título de la sección</label>
-          <input
-            type="text"
-            value={listSettings.title ?? ''}
-            onChange={(event) =>
-              handleUpdate({
-                listSettings: { ...listSettings, title: event.target.value },
-              })
-            }
-            className="node-editor__input"
-            placeholder="Ej: Opciones disponibles"
-          />
-          <label className="node-editor__label">Descripción (opcional)</label>
-          <textarea
-            value={listSettings.description ?? ''}
-            onChange={(event) =>
-              handleUpdate({
-                listSettings: {
-                  ...listSettings,
-                  description: event.target.value,
-                },
-              })
-            }
-            className="node-editor__textarea"
-            placeholder="Ej: Selecciona una opción para continuar"
-          />
-        </>
-      );
-    }
-    return null;
-  };
+  // isButtons, isList, optionsTitle, renderSettings eliminados: no se usan
 
   const nodeTypeClass = `flow-node-type-${(
     node.data.type ||
     node.type ||
     ''
   ).toLowerCase()}`;
+  // Renderizado modular según el tipo de nodo
+  let nodeForm: React.ReactNode = null;
+
+  // Detectar si es un nodo capturador (nodo TEXT con isCaptureNode flag)
+  const isCaptureNode =
+    node.data.type === 'TEXT' && (node.data as any)?.isCaptureNode === true;
+
+  switch (node.data.type) {
+    case 'START':
+      nodeForm = <StartNodeForm />;
+      break;
+    case 'TEXT': {
+      const data = node.data;
+
+      // Renderizar CaptureNodeForm si es un nodo capturador
+      if (isCaptureNode) {
+        const derivedVariableName = (
+          data.responseVariableName ??
+          data.saveResponseToVariable ??
+          ''
+        ).toString();
+        nodeForm = (
+          <CaptureNodeForm
+            message={data.message}
+            variableName={derivedVariableName}
+            variableType={data.responseVariableType ?? 'STRING'}
+            audioModel={data.audioModel ?? null}
+            imageModel={data.imageModel ?? null}
+            onChange={({
+              message,
+              variableName,
+              variableType,
+              audioModel,
+              imageModel,
+            }) => {
+              const normalizedVariable = (variableName ?? '').trim() || null;
+              handleUpdate({
+                message,
+                waitForResponse: true,
+                responseVariableName: normalizedVariable,
+                responseVariableType: variableType ?? 'STRING',
+                audioModel: audioModel ?? null,
+                imageModel: imageModel ?? null,
+                // Legacy compatibility
+                saveResponseToVariable: normalizedVariable,
+              });
+            }}
+          />
+        );
+      } else {
+        // Renderizar TextNodeForm normal
+        const derivedWait =
+          typeof data.waitForResponse === 'boolean'
+            ? data.waitForResponse
+            : Boolean(data.responseVariableName || data.saveResponseToVariable);
+        const derivedVariableName = (
+          data.responseVariableName ??
+          data.saveResponseToVariable ??
+          ''
+        ).toString();
+        nodeForm = (
+          <TextNodeForm
+            value={data.message}
+            waitForResponse={derivedWait}
+            variableName={derivedVariableName}
+            variableType={data.responseVariableType ?? 'STRING'}
+            audioModel={data.audioModel ?? null}
+            imageModel={data.imageModel ?? null}
+            onChange={({
+              value,
+              waitForResponse,
+              variableName,
+              variableType,
+              audioModel,
+              imageModel,
+            }) => {
+              const normalizedVariable = (variableName ?? '').trim() || null;
+              handleUpdate({
+                message: value,
+                waitForResponse,
+                responseVariableName: waitForResponse
+                  ? normalizedVariable
+                  : null,
+                responseVariableType: waitForResponse
+                  ? variableType ?? 'STRING'
+                  : undefined,
+                audioModel: waitForResponse ? audioModel ?? null : null,
+                imageModel: waitForResponse ? imageModel ?? null : null,
+                // Legacy compatibility
+                saveResponseToVariable: waitForResponse
+                  ? normalizedVariable
+                  : null,
+              });
+            }}
+          />
+        );
+      }
+      break;
+    }
+    case 'CAPTURE': {
+      const data = node.data;
+      nodeForm = (
+        <CaptureNodeForm
+          message={data.message}
+          variableName={data.responseVariableName}
+          variableType={data.responseVariableType ?? 'STRING'}
+          audioModel={data.audioModel ?? null}
+          imageModel={data.imageModel ?? null}
+          onChange={({
+            message,
+            variableName,
+            variableType,
+            audioModel,
+            imageModel,
+          }) => {
+            const normalizedVariable = (variableName ?? '').trim() || '';
+            handleUpdate({
+              message,
+              responseVariableName: normalizedVariable,
+              responseVariableType: variableType ?? 'STRING',
+              audioModel: audioModel ?? null,
+              imageModel: imageModel ?? null,
+              waitForResponse: true,
+            });
+          }}
+        />
+      );
+      break;
+    }
+    case 'CONDITIONAL': {
+      const data = node.data;
+      nodeForm = (
+        <ConditionalNodeForm
+          sourceVariable={data.sourceVariable}
+          evaluations={data.evaluations}
+          defaultLabel={data.defaultLabel}
+          onChange={({ sourceVariable, evaluations, defaultLabel }) =>
+            handleUpdate({ sourceVariable, evaluations, defaultLabel })
+          }
+        />
+      );
+      break;
+    }
+    case 'DELAY': {
+      const data = node.data;
+      nodeForm = (
+        <DelayNodeForm
+          seconds={data.seconds}
+          onChange={({ seconds }) => handleUpdate({ seconds })}
+        />
+      );
+      break;
+    }
+    case 'SCHEDULE': {
+      const data = node.data;
+      nodeForm = (
+        <ScheduleNodeForm
+          week={data.week}
+          onChange={(week) => handleUpdate({ week })}
+        />
+      );
+      break;
+    }
+    case 'REDIRECT_BOT': {
+      const data = node.data;
+      nodeForm = (
+        <RedirectBotNodeForm
+          targetBotId={data.targetBotId}
+          botOptions={[]}
+          onChange={({ targetBotId }) => handleUpdate({ targetBotId })}
+        />
+      );
+      break;
+    }
+    case 'REDIRECT_AGENT': {
+      const data = node.data;
+      nodeForm = (
+        <RedirectAgentNodeForm
+          agentId={data.agentId}
+          agentOptions={[]}
+          onChange={({ agentId }) => handleUpdate({ agentId })}
+        />
+      );
+      break;
+    }
+    case 'AI': {
+      const data = node.data;
+      nodeForm = (
+        <AINodeForm
+          prompt={data.prompt}
+          model={data.model}
+          modelOptions={['gpt-3.5', 'gpt-4']}
+          onChange={({ prompt, model }) => handleUpdate({ prompt, model })}
+        />
+      );
+      break;
+    }
+    case 'SET_VARIABLE': {
+      const data = node.data;
+      nodeForm = (
+        <SetVariableNodeForm
+          variable={data.variable}
+          value={data.value}
+          onChange={({ variable, value }) => handleUpdate({ variable, value })}
+        />
+      );
+      break;
+    }
+    case 'END':
+      nodeForm = <EndNodeForm />;
+      break;
+    default:
+      nodeForm = <div>Tipo de nodo no soportado.</div>;
+  }
+
   return (
     <aside className="node-editor">
       <div
@@ -262,185 +287,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
           <span className="node-editor__badge">ID: {node.data.flowId}</span>
         )}
       </div>
-
-      <div className="node-editor__content">
-        <div className="node-editor__section">
-          <label className="node-editor__label">Nombre del Nodo</label>
-          <input
-            type="text"
-            value={node.data.label}
-            onChange={(event) => handleUpdate({ label: event.target.value })}
-            className="node-editor__input"
-            placeholder="Nombre interno del menú"
-          />
-
-          <label className="node-editor__label">Tipo de Nodo</label>
-          <select
-            value={node.data.type}
-            onChange={handleTypeChange}
-            className="node-editor__select"
-          >
-            {FLOW_NODE_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {FLOW_NODE_TYPE_LABELS[type]}
-              </option>
-            ))}
-            <option value="PREGUNTA_GUARDAR">Pregunta y Guarda</option>
-          </select>
-          <p className="node-editor__note">
-            {node.data.type === 'PREGUNTA_GUARDAR'
-              ? 'Este nodo preguntará al usuario y guardará la respuesta en una variable de contexto.'
-              : FLOW_NODE_TYPE_DESCRIPTIONS[node.data.type]}
-          </p>
-          {node.data.type === 'PREGUNTA_GUARDAR' && (
-            <>
-              <label className="node-editor__label">
-                Nombre de la variable a guardar
-              </label>
-              <input
-                type="text"
-                value={node.data.saveResponseToVariable || ''}
-                onChange={(e) =>
-                  handleUpdate({ saveResponseToVariable: e.target.value })
-                }
-                className="node-editor__input"
-                placeholder="Ej: dni, nombre, email"
-              />
-              <p className="node-editor__note">
-                La respuesta del usuario se guardará en esta variable y podrá
-                usarse en otros mensajes como {'{dni}'}, {'{nombre}'}, etc.
-              </p>
-            </>
-          )}
-        </div>
-
-        <div className="node-editor__section">
-          <label className="node-editor__label">Tipo de Mensaje</label>
-          <select
-            value={messageKind}
-            onChange={(event) =>
-              handleUpdate({
-                messageKind: event.target.value as FlowMessageKind,
-              })
-            }
-            className="node-editor__select"
-          >
-            <option value="TEXT">Texto Simple</option>
-            <option value="BUTTONS">Botones Interactivos</option>
-            <option value="LIST">Lista Interactiva</option>
-          </select>
-
-          <label className="node-editor__label">Mensaje Principal</label>
-          <textarea
-            value={node.data.message}
-            onChange={(event) => handleUpdate({ message: event.target.value })}
-            className="node-editor__textarea"
-            placeholder="Contenido que verá el usuario"
-            rows={4}
-          />
-          {renderSettings()}
-        </div>
-
-        {isRedirect && (
-          <div className="node-editor__section">
-            <label className="node-editor__label">Area destino</label>
-            {areasLoading ? (
-              <p className="node-editor__note">Cargando areas disponibles...</p>
-            ) : areas.length ? (
-              <select
-                value={node.data.areaId ?? ''}
-                onChange={handleAreaChange}
-                className="node-editor__select"
-              >
-                <option value="">Seleccionar area</option>
-                {areas.map((area: AreaOption) => (
-                  <option key={area.id} value={area.id}>
-                    {area.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <p className="node-editor__note">
-                No hay areas activas. Crea una desde el panel de areas para
-                derivar la conversacion.
-              </p>
-            )}
-          </div>
-        )}
-
-        {canUseConditions && (
-          <div className="node-editor__section">
-            <div className="node-editor__options-header">
-              <h4 className="node-editor__title">Condiciones</h4>
-              <button
-                type="button"
-                onClick={addCondition}
-                className="node-editor__add-option"
-              >
-                Agregar condicion
-              </button>
-            </div>
-            <p className="node-editor__note">
-              Se evaluan antes de los triggers y permiten redirigir segun el
-              texto recibido.
-            </p>
-
-            {conditions.length === 0 ? (
-              <p className="node-editor__empty">
-                No hay condiciones configuradas.
-              </p>
-            ) : (
-              conditions.map((condition) => (
-                <ConditionCard
-                  key={condition.id}
-                  condition={condition}
-                  availableTargets={availableTargets}
-                  onUpdate={updateCondition}
-                  onRemove={removeCondition}
-                />
-              ))
-            )}
-          </div>
-        )}
-
-        {(isButtons || isList) && (
-          <div className="node-editor__section">
-            <div className="node-editor__options-header">
-              <h4 className="node-editor__title">{optionsTitle}</h4>
-              <button
-                type="button"
-                onClick={addOption}
-                className="node-editor__add-option"
-              >
-                Agregar
-              </button>
-            </div>
-            <p className="node-editor__note">
-              {isButtons
-                ? 'Cada opción será un botón. WhatsApp permite hasta 3 botones.'
-                : 'Cada opción será un ítem en la lista.'}
-            </p>
-
-            {options.length === 0 ? (
-              <p className="node-editor__empty">
-                No hay {optionsTitle.toLowerCase()} configurados.
-              </p>
-            ) : (
-              options.map((option) => (
-                <OptionCard
-                  key={option.id}
-                  option={option}
-                  isButton={isButtons}
-                  availableTargets={availableTargets}
-                  onUpdate={updateOption}
-                  onRemove={removeOption}
-                />
-              ))
-            )}
-          </div>
-        )}
-      </div>
-
+      <div className="node-editor__content">{nodeForm}</div>
       <div className="node-editor__footer">
         <button
           type="button"
@@ -461,157 +308,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
   );
 };
 
-interface OptionCardProps {
-  option: FlowOption;
-  isButton: boolean;
-  availableTargets: FlowBuilderNode[];
-  onUpdate: (optionId: string, patch: Partial<FlowOption>) => void;
-  onRemove: (optionId: string) => void;
-}
-
-const OptionCard: React.FC<OptionCardProps> = ({
-  option,
-  isButton,
-  availableTargets,
-  onUpdate,
-  onRemove,
-}) => {
-  return (
-    <div className="node-editor__option-card">
-      <div className="node-editor__option-header">
-        <span className="node-editor__option-title">
-          {isButton ? 'Botón' : 'Ítem'}
-        </span>
-        <button
-          type="button"
-          onClick={() => onRemove(option.id)}
-          className="node-editor__remove-option"
-        >
-          &times;
-        </button>
-      </div>
-
-      <label className="node-editor__label">Texto a mostrar</label>
-      <input
-        type="text"
-        value={option.label}
-        onChange={(event) => onUpdate(option.id, { label: event.target.value })}
-        className="node-editor__input"
-        placeholder={isButton ? 'Texto del botón' : 'Título del ítem'}
-      />
-
-      <label className="node-editor__label">Trigger (identificador)</label>
-      <input
-        type="text"
-        value={option.trigger}
-        onChange={(event) =>
-          onUpdate(option.id, { trigger: event.target.value })
-        }
-        className="node-editor__input"
-        placeholder="Si se deja vacío, se auto-genera"
-      />
-
-      <label className="node-editor__label">Conectar con el nodo</label>
-      <select
-        value={option.targetId ?? ''}
-        onChange={(event) =>
-          onUpdate(option.id, { targetId: event.target.value || null })
-        }
-        className="node-editor__select"
-      >
-        <option value="">No redirigir</option>
-        {availableTargets.map((candidate) => (
-          <option key={candidate.id} value={candidate.id}>
-            {candidate.data.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-};
-
-interface ConditionCardProps {
-  condition: FlowCondition;
-  availableTargets: FlowBuilderNode[];
-  onUpdate: (conditionId: string, patch: Partial<FlowCondition>) => void;
-  onRemove: (conditionId: string) => void;
-}
-
-const ConditionCard: React.FC<ConditionCardProps> = ({
-  condition,
-  availableTargets,
-  onUpdate,
-  onRemove,
-}) => {
-  return (
-    <div className="node-editor__option-card">
-      <div className="node-editor__option-header">
-        <span className="node-editor__option-title">Condicion</span>
-        <button
-          type="button"
-          onClick={() => onRemove(condition.id)}
-          className="node-editor__remove-option"
-        >
-          &times;
-        </button>
-      </div>
-
-      <label className="node-editor__label">Etiqueta (opcional)</label>
-      <input
-        type="text"
-        value={condition.label ?? ''}
-        onChange={(event) =>
-          onUpdate(condition.id, { label: event.target.value })
-        }
-        className="node-editor__input"
-        placeholder="Texto interno para identificarla"
-      />
-
-      <label className="node-editor__label">Coincidencia</label>
-      <input
-        type="text"
-        value={condition.match ?? ''}
-        onChange={(event) =>
-          onUpdate(condition.id, { match: event.target.value })
-        }
-        className="node-editor__input"
-        placeholder="Ej: pagos, soporte o una expresion regular"
-      />
-
-      <label className="node-editor__label">Modo de coincidencia</label>
-      <select
-        value={condition.matchMode ?? 'EXACT'}
-        onChange={(event) =>
-          onUpdate(condition.id, {
-            matchMode: event.target.value as FlowCondition['matchMode'],
-          })
-        }
-        className="node-editor__select"
-      >
-        <option value="EXACT">Exacta / triggers</option>
-        <option value="CONTAINS">Contiene</option>
-        <option value="REGEX">Expresion regular</option>
-      </select>
-
-      <label className="node-editor__label">Redirigir al nodo</label>
-      <select
-        value={condition.targetId ?? ''}
-        onChange={(event) =>
-          onUpdate(condition.id, {
-            targetId: event.target.value || null,
-          })
-        }
-        className="node-editor__select"
-      >
-        <option value="">Mantener en el nodo actual</option>
-        {availableTargets.map((candidate) => (
-          <option key={candidate.id} value={candidate.id}>
-            {candidate.data.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-};
+// OptionCard eliminado: no se usa en este componente
 
 export default NodeEditor;

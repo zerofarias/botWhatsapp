@@ -98,6 +98,8 @@ import {
 } from './message.service.js';
 import { findOrCreateContactByPhone } from './contact.service.js';
 import { listFlowTree, type FlowNode } from './flow.service.js';
+import { executeNodeChain } from './node-execution.service.js';
+
 import {
   checkIfWithinWorkingHours,
   formatAfterHoursMessage,
@@ -843,6 +845,7 @@ async function getContactInfoFromWhatsApp(
 }
 
 async function ensureConversation(
+  ownerUserId: number,
   contactNumber: string,
   io: SocketIOServer | undefined,
   client?: Whatsapp
@@ -893,12 +896,18 @@ async function ensureConversation(
     };
   }
 
+  // Obtener el bot por defecto o el primero disponible
+  const { getDefaultBot } = await import('./default-bot.service.js');
+  const defaultBot = await getDefaultBot();
+  const botId = defaultBot?.id ?? 1;
+
   const created = await createConversation({
     userPhone: cleanNumber,
     contactName: contact.name,
     contactId: contact.id,
     status: 'PENDING',
     botActive: true,
+    botId,
   });
 
   await broadcastConversationUpdate(io, created.id);
@@ -1078,7 +1087,12 @@ async function handleIncomingMessage(
 
   const normalizedBody = normalizeText(body);
 
-  const ensureResult = await ensureConversation(message.from, io, client);
+  const ensureResult = await ensureConversation(
+    ownerUserId,
+    message.from,
+    io,
+    client
+  );
   let conversation = ensureResult.conversation;
   const contact = ensureResult.contact;
   const conversationId = BigInt(conversation.id);
@@ -1265,7 +1279,57 @@ async function handleIncomingMessage(
   }
 
   if (ensureResult.created) {
+    const allNodes = flattenFlowTree(flows);
+    const startNode = allNodes.find(
+      (node) => node.type === 'START' && node.isActive
+    );
+
+    if (startNode) {
+      console.log('[FLOW] Found START node:', startNode.id);
+      const connection = await prisma.flowConnection.findFirst({
+        where: { fromId: startNode.id },
+      });
+
+      if (connection && connection.toId) {
+        console.log(
+          '[FLOW] Found connection from START to node:',
+          connection.toId
+        );
+        const firstNode = allNodes.find((n) => n.id === connection.toId);
+
+        if (firstNode && firstNode.isActive) {
+          console.log(
+            '[FLOW] Executing first node:',
+            firstNode.id,
+            firstNode.name
+          );
+          const evaluation: FlowExecutionResult = {
+            reply: firstNode.message,
+            matchedNode: firstNode,
+          };
+
+          await touchConversation(conversationId, {
+            currentFlowNodeId: evaluation.matchedNode.id,
+          });
+
+          await sendReply(
+            ownerUserId,
+            client,
+            conversationId,
+            message,
+            evaluation,
+            io
+          );
+          return; // Exit after handling the start node
+        }
+      }
+    }
+
+    // Fallback to primary menu if START node logic fails
     if (primaryMenu) {
+      console.log(
+        '[FLOW] No START node flow found, falling back to primary menu.'
+      );
       await sendReply(
         ownerUserId,
         client,
@@ -1296,15 +1360,17 @@ async function handleIncomingMessage(
       previousNode?.metadata && typeof previousNode.metadata === 'object'
         ? (previousNode.metadata as any).builder
         : null;
-    const variableName = builderMeta?.saveResponseToVariable;
+    const variableName =
+      builderMeta?.responseVariableName ?? builderMeta?.saveResponseToVariable;
 
     if (variableName && typeof variableName === 'string') {
       console.log(`[CONTEXT] Saving response to variable '${variableName}'`);
 
       const currentContext =
-        convState?.context &&
-        typeof convState.context === 'object' &&
-        !Array.isArray(convState.context)
+        convState?.context && typeof convState.context === 'string'
+          ? JSON.parse(convState.context)
+          : typeof convState.context === 'object' &&
+            !Array.isArray(convState.context)
           ? convState.context
           : {};
 
@@ -1313,7 +1379,68 @@ async function handleIncomingMessage(
         [variableName]: body,
       };
 
-      await touchConversation(conversationId, { context: newContext });
+      await touchConversation(conversationId, {
+        context: JSON.stringify(newContext),
+      });
+
+      // Después de capturar la respuesta, buscar y ejecutar el siguiente nodo automáticamente
+      const nextConnection = await prisma.flowConnection.findFirst({
+        where: { fromId: previousNodeId },
+      });
+
+      if (nextConnection && nextConnection.toId) {
+        console.log(
+          `[FLOW] Auto-executing next node after response capture: ${nextConnection.toId}`
+        );
+
+        // Usar executeNodeChain para ejecutar nodos en cadena con soporte para delays
+        if (!conversation.botId) {
+          console.log(`[FLOW] Invalid botId`);
+          return;
+        }
+
+        const chainResult = await executeNodeChain({
+          botId: conversation.botId,
+          nodeId: nextConnection.toId,
+          startNodeId: nextConnection.toId,
+          context:
+            newContext as unknown as import('../services/flow.service').ConversationContext,
+        });
+
+        // Si hay acciones (mensajes), enviarlas
+        if (chainResult.actions && chainResult.actions.length > 0) {
+          const sendMessageAction = chainResult.actions.find(
+            (a) => a.type === 'send_message'
+          );
+          if (
+            sendMessageAction &&
+            sendMessageAction.payload &&
+            typeof sendMessageAction.payload === 'object'
+          ) {
+            const payload = sendMessageAction.payload as Record<
+              string,
+              unknown
+            >;
+            const messageText = (payload.message as string) ?? '';
+            await sendReply(
+              ownerUserId,
+              client,
+              conversationId,
+              message,
+              messageText,
+              io
+            );
+          }
+        }
+
+        // Guardar contexto final
+        await touchConversation(conversationId, {
+          currentFlowNodeId: chainResult.nextNodeId,
+          context: JSON.stringify(chainResult.updatedContext),
+        });
+
+        return;
+      }
     }
   }
 

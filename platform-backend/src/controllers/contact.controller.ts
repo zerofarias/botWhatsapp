@@ -1,3 +1,64 @@
+/**
+ * @swagger
+ * /contacts:
+ *   get:
+ *     summary: Listar todos los contactos
+ *     tags:
+ *       - Contactos
+ *     responses:
+ *       200:
+ *         description: Lista de contactos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   name:
+ *                     type: string
+ *                   phone:
+ *                     type: string
+ *                   dni:
+ *                     type: string
+ *   post:
+ *     summary: Crear contacto
+ *     tags:
+ *       - Contactos
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               dni:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Contacto creado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 name:
+ *                   type: string
+ *                 phone:
+ *                   type: string
+ *                 dni:
+ *                   type: string
+ *       500:
+ *         description: Error al crear contacto
+ */
 import type { Request, Response } from 'express';
 import {
   createContact,

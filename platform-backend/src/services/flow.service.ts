@@ -1,4 +1,102 @@
-import { FlowType, Prisma } from '@prisma/client';
+// Tipado estricto y flexible para el contexto conversacional
+export interface ConversationContext {
+  lastMessage: string;
+  previousNode: number | null;
+  updatedAt: string;
+  flowTransition?: 'advanced' | 'no_change';
+  variables?: {
+    [key: string]: string | number | boolean | object | null;
+  };
+  /** Indica si el sistema espera una respuesta del usuario en el nodo actual */
+  waitingForInput?: boolean;
+  /** Nombre de la variable donde se almacenará la respuesta del usuario (si aplica) */
+  waitingVariable?: string | null;
+}
+// --- Lógica de transición de flujo conversacional ---
+interface GetNextNodeAndContextInput {
+  currentNodeId: number | null;
+  message: string;
+  context: any;
+  botId: number | null;
+  conversationId: bigint | string | number;
+}
+
+interface GetNextNodeAndContextOutput {
+  nextNodeId: number | null;
+  newContext: any;
+}
+
+/**
+ * Determina el siguiente nodo y contexto según el mensaje recibido y el estado actual.
+ * Implementa la lógica real de transición de flujo.
+ */
+export async function getNextNodeAndContext(
+  input: GetNextNodeAndContextInput
+): Promise<GetNextNodeAndContextOutput> {
+  // Buscar el nodo actual y sus hijos
+  let currentNode: FlowNode | null = null;
+  if (input.currentNodeId) {
+    // Obtener el árbol completo de nodos para el área/bot
+    // (puedes ajustar el filtro según tu modelo de negocio)
+    const flowTree = await listFlowTree({
+      createdBy: typeof input.botId === 'number' ? input.botId : 1,
+      areaId: undefined,
+      includeInactive: false,
+    });
+    // Buscar el nodo actual en el árbol
+    currentNode =
+      flowTree
+        .flatMap(flattenFlowTree)
+        .find((node) => node.id === Number(input.currentNodeId)) ?? null;
+  }
+
+  // Buscar hijos del nodo actual (posibles siguientes nodos)
+  let nextNode: FlowNode | null = null;
+  if (currentNode && currentNode.children && currentNode.children.length > 0) {
+    nextNode =
+      currentNode.children.find((child: FlowNode) => {
+        // Si el trigger es vacío o null, acepta cualquier mensaje
+        if (!child.trigger || child.trigger.trim() === '') {
+          return true;
+        }
+        return (
+          typeof child.trigger === 'string' &&
+          child.trigger.toLowerCase() === input.message.toLowerCase()
+        );
+      }) ?? null;
+  }
+
+  // Si no hay coincidencia, mantener el nodo actual
+  const nextNodeId = nextNode ? nextNode.id : input.currentNodeId;
+
+  // Actualizar el contexto con el mensaje y el nodo anterior
+  const prevContext: ConversationContext = input.context ?? {};
+  const newContext: ConversationContext = {
+    ...prevContext,
+    lastMessage: input.message,
+    previousNode: input.currentNodeId,
+    updatedAt: new Date().toISOString(),
+    flowTransition:
+      nextNodeId !== input.currentNodeId ? 'advanced' : 'no_change',
+    variables: {
+      ...prevContext.variables,
+      // Aquí puedes agregar lógica para modificar variables según el mensaje
+      // Ejemplo: sumar, validar texto, guardar flags, etc.
+    },
+  };
+
+  return {
+    nextNodeId,
+    newContext,
+  };
+}
+
+// Utilidad para aplanar el árbol de nodos
+function flattenFlowTree(node: FlowNode): FlowNode[] {
+  return [node, ...node.children.flatMap(flattenFlowTree)];
+}
+import { Prisma } from '@prisma/client';
+import type { NodeType } from '../types/node-type.js';
 import { prisma } from '../config/prisma.js';
 
 const flowSelect = {
@@ -31,7 +129,7 @@ type FlowInput = {
   id?: number;
   name: string;
   message: string;
-  type: FlowType;
+  type: NodeType;
   trigger?: string | null;
   parentId?: number | null;
   areaId?: number | null;

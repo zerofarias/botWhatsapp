@@ -66,3 +66,11 @@ export async function getCombinedHistory(phone: string) {
   const res = await api.get(`/conversations/history/${phone}`);
   return res.data;
 }
+
+/**
+ * Inicia el flujo de una conversación ejecutando el nodo START
+ */
+export async function startConversationFlow(conversationId: string | number) {
+  const res = await api.post(`/conversations/${conversationId}/start-flow`);
+  return res.data;
+}

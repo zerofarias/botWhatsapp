@@ -1,3 +1,52 @@
+/**
+ * @swagger
+ * /areas:
+ *   get:
+ *     summary: Listar todas las áreas
+ *     tags:
+ *       - Áreas
+ *     responses:
+ *       200:
+ *         description: Lista de áreas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   name:
+ *                     type: string
+ *   post:
+ *     summary: Crear área
+ *     tags:
+ *       - Áreas
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Área creada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 name:
+ *                   type: string
+ *       500:
+ *         description: Error al crear área
+ */
 import type { Request, Response } from 'express';
 import { createArea, listAreas, updateArea } from '../services/area.service.js';
 

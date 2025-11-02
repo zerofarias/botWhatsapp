@@ -1,6 +1,184 @@
-// Endpoint para listar todas las conversaciones del sistema (todas las personas)
+import { getNextNodeAndContext } from '../services/flow.service';
+/**
+ * @swagger
+ * /conversations:
+ *   get:
+ *     summary: Listar todas las conversaciones
+ *     tags:
+ *       - Conversaciones
+ *     responses:
+ *       200:
+ *         description: Lista de conversaciones
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                   userPhone:
+ *                     type: string
+ *                   contactName:
+ *                     type: string
+ *                   status:
+ *                     type: string
+ *                   botActive:
+ *                     type: boolean
+ *                   lastActivity:
+ *                     type: string
+ *                   updatedAt:
+ *                     type: string
+ *                   contact:
+ *                     type: object
+ *                   area:
+ *                     type: object
+ *                   assignedTo:
+ *                     type: object
+ *                   lastMessage:
+ *                     type: object
+ *   post:
+ *     summary: Crear una conversación
+ *     tags:
+ *       - Conversaciones
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               userPhone:
+ *                 type: string
+ *               contactName:
+ *                 type: string
+ *               areaId:
+ *                 type: integer
+ *               botId:
+ *                 type: integer
+ *     responses:
+ *       201:
+ *         description: Conversación creada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *                 botActive:
+ *                   type: boolean
+ *                 createdAt:
+ *                   type: string
+ *       500:
+ *         description: Error al crear conversación
+ */
+
+import { ConversationStatus } from '@prisma/client';
+import type { Request, Response } from 'express';
 import { prisma } from '../config/prisma.js';
-import { conversationSelect } from '../services/conversation.service.js';
+import { getSocketServer } from '../lib/socket.js';
+import {
+  conversationSelect,
+  getCombinedChatHistoryByPhone,
+  addConversationEvent,
+  closeConversationRecord,
+  ensureConversationAccess,
+  listConversationsForUser,
+  touchConversation,
+  addConversationNote,
+  listConversationNotes,
+} from '../services/conversation.service.js';
+import {
+  createConversationMessage,
+  listConversationMessages,
+} from '../services/message.service.js';
+import {
+  broadcastMessageRecord,
+  sendTextFromSession,
+  extractMessageExternalId,
+  resolveMessageDate,
+  broadcastConversationEvent,
+  broadcastConversationUpdate,
+} from '../services/wpp.service.js';
+import { executeNode } from '../services/node-execution.service.js';
+
+// Controladores de conversación
+export async function takeConversationHandler(req: Request, res: Response) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  const conversationIdParam = req.params.id;
+  let conversationId: bigint;
+  try {
+    conversationId = BigInt(conversationIdParam);
+  } catch {
+    return res.status(400).json({ message: 'Invalid conversation id.' });
+  }
+  // Verifica permisos y estado actual
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+  });
+  if (!conversation) {
+    return res.status(404).json({ message: 'Conversation not found.' });
+  }
+  if (conversation.assignedToId) {
+    return res.status(409).json({ message: 'Conversation already taken.' });
+  }
+  // Asigna al operador y desactiva el bot
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: {
+      assignedTo: { connect: { id: req.user.id } },
+      botActive: false,
+    },
+  });
+  // Notificación en tiempo real
+  const io = getSocketServer();
+  io?.emit('conversation:take', {
+    conversationId: conversationId.toString(),
+    assignedTo: req.user.id,
+    botActive: false,
+  });
+  res.json({ success: true, assignedTo: req.user.id, botActive: false });
+}
+
+export async function finishConversationHandler(req: Request, res: Response) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  const conversationIdParam = req.params.id;
+  let conversationId: bigint;
+  try {
+    conversationId = BigInt(conversationIdParam);
+  } catch {
+    return res.status(400).json({ message: 'Invalid conversation id.' });
+  }
+  const { reason } = req.body ?? {};
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: {
+      status: 'CLOSED',
+      botActive: false,
+      assignedTo: { disconnect: true },
+    },
+  });
+  // Notificación en tiempo real
+  const io = getSocketServer();
+  io?.emit('conversation:finish', {
+    conversationId: conversationId.toString(),
+    status: 'CLOSED',
+    reason: reason ?? 'manual_close',
+  });
+  res.json({
+    success: true,
+    status: 'CLOSED',
+    reason: reason ?? 'manual_close',
+  });
+}
 
 export async function listAllChatsHandler(req: Request, res: Response) {
   if (!req.user) {
@@ -18,27 +196,50 @@ export async function listAllChatsHandler(req: Request, res: Response) {
     }));
     res.json(mapped);
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: 'Error al obtener todas las conversaciones',
-        error: String(error),
-      });
+    res.status(500).json({
+      message: 'Error al obtener todas las conversaciones',
+      error: String(error),
+    });
   }
 }
 // Endpoint para listar todos los chats de un número, separados por estado
 
-function mapConversationForResponse(conversation: any) {
+interface Contact {
+  id: string | number;
+  name?: string;
+  phone?: string;
+  dni?: string | null;
+}
+
+interface Conversation {
+  id: bigint | string | number;
+  contact?: Contact | null;
+  userPhone?: string;
+  contactName?: string | null;
+  contactId?: number | null;
+  areaId?: number | null;
+  assignedToId?: number | null;
+  status?: ConversationStatus;
+  area?: { id: number; name: string } | null;
+  assignedTo?: { id: number; name: string } | null;
+  botActive?: boolean;
+  lastActivity?: Date | string | null;
+  updatedAt?: Date | string | null;
+  messages?: Array<unknown>;
+}
+
+function mapConversationForResponse(conversation: Conversation) {
   const contact = conversation.contact
     ? {
         ...conversation.contact,
-        id: conversation.contact.id.toString(),
+        id:
+          conversation.contact.id?.toString?.() ??
+          String(conversation.contact.id),
       }
     : null;
-
   return {
     ...conversation,
-    id: conversation.id.toString(),
+    id: conversation.id?.toString?.() ?? String(conversation.id),
     contact,
   };
 }
@@ -82,18 +283,7 @@ export async function listAllChatsByPhoneHandler(req: Request, res: Response) {
 
   res.json({ abiertos, cerrados });
 }
-import type { Request, Response } from 'express';
-import { ConversationStatus } from '@prisma/client';
-import {
-  getCombinedChatHistoryByPhone,
-  addConversationEvent,
-  closeConversationRecord,
-  ensureConversationAccess,
-  listConversationsForUser,
-  touchConversation,
-  addConversationNote,
-  listConversationNotes,
-} from '../services/conversation.service.js';
+// ...existing code...
 export async function getCombinedChatHistoryHandler(
   req: Request,
   res: Response
@@ -150,7 +340,7 @@ export async function createConversationNoteHandler(
     typeof note.payload === 'object' &&
     'content' in note.payload
   ) {
-    noteContent = (note.payload as any).content;
+    noteContent = (note.payload as { content?: string }).content ?? '';
   }
   res.status(201).json({
     id: note.id.toString(),
@@ -188,7 +378,7 @@ export async function listConversationNotesHandler(
         typeof note.payload === 'object' &&
         'content' in note.payload
       ) {
-        noteContent = (note.payload as any).content;
+        noteContent = (note.payload as { content?: string }).content ?? '';
       }
       return {
         id: note.id.toString(),
@@ -199,21 +389,8 @@ export async function listConversationNotesHandler(
     })
   );
 }
-import {
-  broadcastConversationEvent,
-  broadcastConversationUpdate,
-  broadcastMessageRecord,
-  sendTextFromSession,
-  extractMessageExternalId,
-  resolveMessageDate,
-} from '../services/wpp.service.js';
-import {
-  createConversationMessage,
-  listConversationMessages,
-} from '../services/message.service.js';
-import { getSocketServer } from '../lib/socket.js';
 
-function parseStatuses(value: unknown) {
+function parseStatuses(value: unknown): ConversationStatus[] | undefined {
   if (!value) return undefined;
   const rawValues = Array.isArray(value) ? value : String(value).split(',');
   const values = rawValues.map((item) => String(item).trim()).filter(Boolean);
@@ -263,12 +440,12 @@ export async function listConversationsHandler(req: Request, res: Response) {
       updatedAt: conversation.updatedAt,
       lastMessage: conversation.messages[0]
         ? {
-            id: conversation.messages[0]!.id.toString(),
-            senderType: conversation.messages[0]!.senderType,
-            senderId: conversation.messages[0]!.senderId,
-            content: conversation.messages[0]!.content,
-            externalId: conversation.messages[0]!.externalId,
-            createdAt: conversation.messages[0]!.createdAt,
+            id: conversation.messages[0]?.id?.toString() ?? '',
+            senderType: conversation.messages[0]?.senderType ?? '',
+            senderId: conversation.messages[0]?.senderId ?? '',
+            content: conversation.messages[0]?.content ?? '',
+            externalId: conversation.messages[0]?.externalId ?? '',
+            createdAt: conversation.messages[0]?.createdAt ?? '',
           }
         : null,
     }))
@@ -302,10 +479,8 @@ export async function getConversationMessagesHandler(
   }
 
   const limit = Number.parseInt(String(req.query.limit ?? '100'), 10);
-  const messages = await listConversationMessages(
-    conversationId,
-    Number.isNaN(limit) ? 100 : Math.min(limit, 500)
-  );
+  const safeLimit = Number.isNaN(limit) ? 100 : Math.min(limit, 500);
+  const messages = await listConversationMessages(conversationId, safeLimit);
 
   res.json(
     messages.map((message) => ({
@@ -378,10 +553,29 @@ export async function sendConversationMessageHandler(
     createdAt: outbound ? resolveMessageDate(outbound) : new Date(),
   });
 
+  // Lógica para determinar el siguiente nodo y contexto
+
+  // Implementación real: Determinar el siguiente nodo y contexto según el trigger/mensaje recibido
+  // Supongamos que existe una función getNextNodeAndContext que recibe el nodo actual, el mensaje y el contexto actual
+  // y retorna el siguiente nodo y el nuevo contexto
+  const { nextNodeId, newContext } = await getNextNodeAndContext({
+    currentNodeId: conversation.currentFlowNodeId,
+    message: bodyContent,
+    context: conversation.context,
+    botId: conversation.botId,
+    conversationId,
+  });
+
+  // Si la función no retorna un nodo válido, se mantiene el actual y el contexto
+  const finalNodeId = nextNodeId ?? conversation.currentFlowNodeId;
+  const finalContext = newContext ?? conversation.context;
+
   await touchConversation(conversationId, {
     lastActivity: messageRecord.createdAt,
     status: 'ACTIVE',
     botActive: false,
+    currentFlowNodeId: finalNodeId,
+    context: finalContext,
     ...(conversation.assignedToId
       ? undefined
       : {
@@ -404,7 +598,11 @@ export async function sendConversationMessageHandler(
   });
 }
 
-export async function closeConversationHandler(req: Request, res: Response) {
+/**
+ * Inicia el flujo de una conversación ejecutando el nodo START
+ * POST /conversations/:id/start-flow
+ */
+export async function startFlowHandler(req: Request, res: Response) {
   if (!req.user) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -417,66 +615,110 @@ export async function closeConversationHandler(req: Request, res: Response) {
     return res.status(400).json({ message: 'Invalid conversation id.' });
   }
 
-  const conversation = await ensureConversationAccess(req.user, conversationId);
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+  });
+
   if (!conversation) {
-    return res.status(403).json({ message: 'Forbidden' });
+    return res.status(404).json({ message: 'Conversation not found.' });
   }
 
-  const { message: customMessage } = req.body ?? {};
-  const closingMessage =
-    typeof customMessage === 'string' && customMessage.trim().length
-      ? customMessage.trim()
-      : '\\u2705 Chat finalizado por el operador';
+  if (!conversation.botId) {
+    return res
+      .status(400)
+      .json({ message: 'Conversation has no bot assigned.' });
+  }
 
-  const updated = await closeConversationRecord(conversationId, {
-    closedById: req.user.id,
-    reason: 'manual_close',
-  });
-
-  await addConversationEvent(
-    conversationId,
-    'STATUS_CHANGE',
-    {
-      previousStatus: conversation.status,
-      newStatus: 'CLOSED',
-      reason: 'manual_close',
+  // Buscar el nodo START en el flujo del bot
+  const startNode = await prisma.flow.findFirst({
+    where: {
+      type: 'START',
+      botId: conversation.botId,
+      isActive: true,
     },
-    req.user.id
-  );
+  });
 
-  const outbound = await sendTextFromSession(
-    req.user.id,
-    conversation.userPhone,
-    closingMessage
-  );
-  if (!outbound) {
-    await addConversationEvent(conversationId, 'NOTE', {
-      type: 'send_fail',
-      reason: 'whatsapp_session_unavailable',
-      content: closingMessage,
-    });
+  if (!startNode) {
+    return res
+      .status(404)
+      .json({ message: 'START node not found for this bot.' });
   }
 
-  const messageRecord = await createConversationMessage({
-    conversationId,
-    senderType: 'BOT',
-    senderId: req.user.id,
-    content: closingMessage,
-    isDelivered: Boolean(outbound),
-    externalId: outbound ? extractMessageExternalId(outbound) : null,
-    createdAt: outbound ? resolveMessageDate(outbound) : new Date(),
+  // Inicializar contexto si no existe
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let parsedContext: any = {
+    lastMessage: '',
+    previousNode: null,
+    updatedAt: new Date().toISOString(),
+    variables: {},
+  };
+
+  if (conversation.context) {
+    if (typeof conversation.context === 'string') {
+      try {
+        const parsed = JSON.parse(conversation.context);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          parsedContext = {
+            ...parsed,
+            variables: parsed.variables ?? {},
+          };
+        }
+      } catch {
+        // Mantener contexto por defecto
+      }
+    } else if (
+      typeof conversation.context === 'object' &&
+      !Array.isArray(conversation.context)
+    ) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      parsedContext = {
+        ...(conversation.context as any),
+        variables: (conversation.context as any).variables ?? {},
+      };
+    }
+  }
+
+  // Ejecutar el nodo START
+  const result = await executeNode({
+    botId: conversation.botId,
+    nodeId: startNode.id,
+    context: parsedContext,
   });
+
+  // Actualizar la conversación con el siguiente nodo
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: {
+      currentFlowNodeId: result.nextNodeId,
+      context: JSON.stringify(result.updatedContext),
+      botActive: true,
+    },
+  });
+
+  // Enviar el mensaje de START al cliente si existe
+  if (result.actions && result.actions.length > 0) {
+    const sendMessageAction = result.actions.find(
+      (a: any) => a.type === 'send_message'
+    );
+    if (sendMessageAction) {
+      // Aquí se podría integrar con WhatsApp para enviar el mensaje
+      // Por ahora, se retorna la acción para que el cliente la maneje
+    }
+  }
 
   const io = getSocketServer();
-  await broadcastMessageRecord(io, conversationId, messageRecord, [
-    req.user.id,
-  ]);
   await broadcastConversationUpdate(io, conversationId);
-  await broadcastConversationEvent(io, conversationId, 'conversation:closed');
 
-  res.json({
-    id: updated.id.toString(),
-    status: updated.status,
-    closedAt: updated.closedAt,
+  return res.json({
+    success: true,
+    nextNodeId: result.nextNodeId,
+    actions: result.actions,
+    updatedContext: result.updatedContext,
   });
+}
+
+export async function closeConversationHandler(req: Request, res: Response) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
 }

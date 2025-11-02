@@ -1,3 +1,58 @@
+/**
+ * @swagger
+ * /bots:
+ *   get:
+ *     summary: Listar todos los bots
+ *     tags:
+ *       - Bots
+ *     responses:
+ *       200:
+ *         description: Lista de bots
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   name:
+ *                     type: string
+ *                   status:
+ *                     type: string
+ *   post:
+ *     summary: Crear un bot
+ *     tags:
+ *       - Bots
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Bot creado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 name:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *       500:
+ *         description: Error al crear bot
+ */
 import { Request, Response } from 'express';
 import * as botService from '../services/bots.service.js';
 

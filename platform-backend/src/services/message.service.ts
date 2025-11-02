@@ -1,3 +1,6 @@
+import { Prisma, type MessageSender } from '@prisma/client';
+import { prisma } from '../config/prisma';
+
 // Marca como leídos todos los mensajes de todas las conversaciones de un número
 export async function markAllMessagesAsReadByPhone(
   userPhone: string
@@ -36,9 +39,6 @@ export async function markMessagesAsRead(
   });
   return result.count;
 }
-import { Prisma, type MessageSender } from '@prisma/client';
-import { prisma } from '../config/prisma.js';
-
 const messageSelect = Prisma.validator<Prisma.MessageSelect>()({
   id: true,
   conversationId: true,
@@ -59,18 +59,21 @@ export type ConversationMessage = Prisma.MessageGetPayload<{
 
 export async function listConversationMessages(
   conversationId: bigint | number,
-  limit = 100
+  limit?: number
 ): Promise<ConversationMessage[]> {
   const id =
     typeof conversationId === 'bigint'
       ? conversationId
       : BigInt(conversationId);
 
-  return prisma.message.findMany({
+  const messages = await prisma.message.findMany({
     where: { conversationId: id },
-    orderBy: { createdAt: 'asc' },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
     select: messageSelect,
   });
+
+  return messages.reverse();
 }
 
 type CreateMessageInput = {

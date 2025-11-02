@@ -1,3 +1,8 @@
+/**
+ * @copyright Copyright (c) 2025 zerofarias
+ * @author zerofarias
+ * @file Rutas para nodos de flujos conversacionales
+ */
 import { Router } from 'express';
 import { listNodes, createNode } from '../controllers/nodes.controller.js';
 

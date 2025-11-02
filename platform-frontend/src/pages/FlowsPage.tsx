@@ -604,3 +604,4 @@ const linkButtonStyle: React.CSSProperties = {
   padding: 0,
   fontSize: '0.9rem',
 };
+// Archivo eliminado. Ver eliminacion-flows-log.md para detalles.

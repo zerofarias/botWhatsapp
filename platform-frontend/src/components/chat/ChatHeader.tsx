@@ -10,18 +10,28 @@ function getDisplayName(conversation: ConversationSummary) {
   return conversation.userPhone;
 }
 
+/**
+ * Props para ChatHeader
+ * @param conversation Conversación activa
+ * @param onCloseConversation Handler para finalizar
+ * @param isClosing Si está cerrando
+ * @param isBotActive Si el bot está gestionando
+ * @param onTakeBot Handler para tomar la conversación
+ */
 type ChatHeaderProps = {
   conversation: ConversationSummary;
   onCloseConversation: () => void;
-  // onToggleNoteMode y isNoteMode eliminados, funcionalidad movida a ChatComposer
   isClosing: boolean;
+  isBotActive?: boolean;
+  onTakeBot?: () => void;
 };
 
 const ChatHeader: React.FC<ChatHeaderProps> = ({
   conversation,
   onCloseConversation,
-  // onToggleNoteMode, isNoteMode eliminados
   isClosing,
+  isBotActive,
+  onTakeBot,
 }) => {
   const displayName = getDisplayName(conversation);
 
@@ -33,13 +43,57 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
         </div>
         <div className="chat-header-details">
           <div className="name">{displayName}</div>
-          <div className="status">{conversation.status}</div>
+          <div className="status">
+            {conversation.status}
+            {isBotActive && (
+              <span
+                style={{ marginLeft: 8, color: '#eab308', fontWeight: 600 }}
+              >
+                (Bot activo)
+              </span>
+            )}
+            {!isBotActive && conversation.assignedTo && (
+              <span
+                style={{ marginLeft: 8, color: '#22c55e', fontWeight: 600 }}
+              >
+                (Operador)
+              </span>
+            )}
+          </div>
         </div>
       </div>
       <div className="chat-header-actions">
-        {/* Botón Nota eliminado, funcionalidad movida a ChatComposer */}
+        {isBotActive && onTakeBot && (
+          <button
+            onClick={onTakeBot}
+            style={{
+              marginRight: 8,
+              background: '#eab308',
+              color: '#333',
+              border: 'none',
+              borderRadius: 6,
+              padding: '0.5rem 1rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Tomar
+          </button>
+        )}
         <button
-          onClick={onCloseConversation}
+          onClick={async () => {
+            try {
+              await fetch(`/api/conversations/${conversation.id}/finish`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason: 'manual_close' }),
+              });
+              window.location.reload();
+            } catch {
+              alert('No se pudo finalizar la conversación.');
+            }
+          }}
           disabled={isClosing || conversation.status === 'CLOSED'}
         >
           {isClosing ? 'Cerrando...' : 'Finalizar'}

@@ -1,9 +1,11 @@
 import React, { useEffect, useState, FormEvent } from 'react';
 import { api } from '../services/api';
 import '../styles/modal.css'; // Assuming a simple modal style is available
-import FlowNodesPage from './FlowNodesPage';
+import FlowBuilder from '../views/FlowBuilder/FlowBuilder';
 
-// Mock Bot type until prisma types are properly shared
+/**
+ * Tipo de bot para gestión en BotsPage
+ */
 type BotType = {
   id: number;
   name: string;
@@ -19,12 +21,16 @@ const initialNewBotData = {
   initialFlowId: null,
 };
 
+/**
+ * Página de gestión de bots y acceso a Flow Builder
+ */
 export default function BotsPage() {
   const [bots, setBots] = useState<BotType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newBotData, setNewBotData] = useState(initialNewBotData);
+  const [selectedBot, setSelectedBot] = useState<BotType | null>(null);
 
   const fetchBots = async () => {
     try {
@@ -83,6 +89,17 @@ export default function BotsPage() {
     return <div style={{ color: 'red' }}>{error}</div>;
   }
 
+  // Si hay un bot seleccionado, mostrar el Flow Builder para ese bot
+  if (selectedBot) {
+    return (
+      <FlowBuilder
+        botId={selectedBot.id}
+        botName={selectedBot.name}
+        onBack={() => setSelectedBot(null)}
+      />
+    );
+  }
+
   return (
     <div className="page-container">
       <h1>Bot Management</h1>
@@ -108,14 +125,15 @@ export default function BotsPage() {
                   <td>{bot.description}</td>
                   <td>{bot.isDefault ? 'Yes' : 'No'}</td>
                   <td>
-                    <button className="btn btn-sm btn-primary">Edit</button>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => setSelectedBot(bot)}
+                    >
+                      Flow Builder
+                    </button>
                     <button className="btn btn-sm btn-danger ms-2">
                       Delete
                     </button>
-                    {/* Botón para ver nodos del flujo inicial */}
-                    {bot.initialFlowId && (
-                      <FlowNodesPage flowId={bot.initialFlowId} />
-                    )}
                   </td>
                 </tr>
               ))

@@ -2,6 +2,13 @@ import React, { useState } from 'react';
 
 import '../../styles/chat-composer-note.css';
 
+/**
+ * Props para ChatComposer
+ * @param disabled Si el input está bloqueado
+ * @param isNoteMode Si está en modo nota
+ * @param setNoteMode Cambia el modo nota
+ * @param onSubmit Envía el mensaje
+ */
 type ChatComposerProps = {
   disabled: boolean;
   isNoteMode: boolean;

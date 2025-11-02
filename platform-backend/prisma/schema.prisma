@@ -1,20 +1,3 @@
-model Node {
-  id         Int      @id @default(autoincrement())
-  flowId     Int      @map("flow_id")
-  name       String
-  type       String
-  content    String?
-  orderIndex Int      @default(0) @map("order_index")
-  metadata   Json?
-  isActive   Boolean  @default(true) @map("is_active")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
-
-  flow Flow @relation(fields: [flowId], references: [id])
-
-  @@map("nodes")
-}
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -24,48 +7,91 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Area {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique
-  description String?
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+model flow_classic {
+  id              BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  flow_id         Int
+  parent_id       Int?
+  type            String   @db.VarChar(20)
+  label           String?  @db.VarChar(255)
+  value           String?  @db.Text
+  seconds         Int?
+  trigger_keyword String?  @db.VarChar(100)
+  next_step_id    Int?
+  order_in_parent Int?
+  created_at      DateTime @default(now()) @db.Timestamp(0)
+  updated_at      DateTime @default(now()) @db.Timestamp(0)
+}
 
-  defaultUsers  User[]         @relation("AreaDefaultUsers")
-  userAreas     UserArea[]
-  flows         Flow[]
-  conversations Conversation[]
+model Node {
+  id             Int      @id @default(autoincrement())
+  flowId         Int      @map("flow_id")
+  name           String
+  type           NodeType @default(TEXT)
+  content        String?
+  orderIndex     Int      @default(0) @map("order_index")
+  metadata       String?  @db.LongText
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  condition      String?
+  trueNodeId     Int?
+  falseNodeId    Int?
+  seconds        Int?
+  targetBotId    Int?
+  agentId        Int?
+  prompt         String?
+  model          String?
+  expectedType   String?
+  variable       String?
+  value          String?  @db.LongText
+  welcomeMessage String?
+  flow           Flow     @relation(fields: [flowId], references: [id])
+
+  @@index([flowId], map: "nodes_flow_id_fkey")
+  @@map("nodes")
+}
+
+model Area {
+  id            Int            @id @default(autoincrement())
+  name          String         @unique
+  description   String?
+  isActive      Boolean        @default(true) @map("is_active")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
   contacts      Contact[]
-  workingHours  WorkingHour[]
+  conversations Conversation[]
+  flows         Flow[]
   quickReplies  QuickReply[]
+  userAreas     UserArea[]
+  defaultUsers  User[]         @relation("AreaDefaultUsers")
+  workingHours  WorkingHour[]
 
   @@map("areas")
 }
 
 model User {
-  id            Int       @id @default(autoincrement())
-  name          String
-  username      String    @unique
-  email         String?   @unique
-  passwordHash  String    @map("password_hash")
-  role          UserRole  @default(OPERATOR)
-  defaultAreaId Int?      @map("default_area_id")
-  isActive      Boolean   @default(true) @map("is_active")
-  lastLoginAt   DateTime? @map("last_login_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-
-  defaultArea        Area?               @relation("AreaDefaultUsers", fields: [defaultAreaId], references: [id])
-  areas              UserArea[]
-  flows              Flow[]              @relation("FlowCreator")
+  id                 Int                 @id @default(autoincrement())
+  name               String
+  username           String              @unique
+  email              String?             @unique
+  passwordHash       String              @map("password_hash")
+  role               UserRole            @default(OPERATOR)
+  defaultAreaId      Int?                @map("default_area_id")
+  isActive           Boolean             @default(true) @map("is_active")
+  lastLoginAt        DateTime?           @map("last_login_at")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
   botSessions        BotSession[]
+  conversationEvents ConversationEvent[]
   assignedChats      Conversation[]      @relation("ConversationAssignedTo")
   closedChats        Conversation[]      @relation("ConversationClosedBy")
-  conversationEvents ConversationEvent[]
+  flows              Flow[]              @relation("FlowCreator")
   messages           Message[]
   quickReplies       QuickReply[]
+  areas              UserArea[]
+  defaultArea        Area?               @relation("AreaDefaultUsers", fields: [defaultAreaId], references: [id])
 
+  @@index([defaultAreaId], map: "users_default_area_id_fkey")
   @@map("users")
 }
 
@@ -73,11 +99,11 @@ model UserArea {
   userId     Int      @map("user_id")
   areaId     Int      @map("area_id")
   assignedAt DateTime @default(now()) @map("assigned_at")
-
-  user User @relation(fields: [userId], references: [id])
-  area Area @relation(fields: [areaId], references: [id])
+  area       Area     @relation(fields: [areaId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
 
   @@id([userId, areaId])
+  @@index([areaId], map: "user_areas_area_id_fkey")
   @@map("user_areas")
 }
 
@@ -89,9 +115,7 @@ model Bot {
   initialFlowId Int?     @map("initial_flow_id")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
-
   flows         Flow[]
-  conversations Conversation[]
 
   @@index([isDefault], map: "idx_bots_is_default")
   @@map("bots")
@@ -108,42 +132,41 @@ model BotSession {
   paused      Boolean          @default(false)
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
-
-  owner User @relation(fields: [ownerUserId], references: [id])
+  owner       User             @relation(fields: [ownerUserId], references: [id])
 
   @@unique([ownerUserId, sessionName], map: "ux_bot_sessions_owner")
   @@map("bot_sessions")
 }
 
 model Flow {
-  id         Int      @id @default(autoincrement())
-  name       String
-  trigger    String?
-  message    String
-  type       FlowType @default(MESSAGE)
-  parentId   Int?     @map("parent_id")
-  areaId     Int?     @map("area_id")
-  orderIndex Int      @default(0) @map("order_index")
-  metadata   Json?
-  isActive   Boolean  @default(true) @map("is_active")
-  createdBy  Int      @map("created_by")
-  botId      Int      @map("bot_id")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
-
-  parent              Flow?            @relation("FlowHierarchy", fields: [parentId], references: [id])
-  children            Flow[]           @relation("FlowHierarchy")
-  area                Area?            @relation(fields: [areaId], references: [id])
-  creator             User             @relation("FlowCreator", fields: [createdBy], references: [id])
-  bot                 Bot              @relation(fields: [botId], references: [id], onDelete: Cascade)
-  nodes               Node[]
+  id                  Int              @id @default(autoincrement())
+  name                String
+  type                String?          @db.VarChar(32)
+  trigger             String?
+  message             String
+  parentId            Int?             @map("parent_id")
+  areaId              Int?             @map("area_id")
+  orderIndex          Int              @default(0) @map("order_index")
+  metadata            Json?            @db.Json
+  isActive            Boolean          @default(true) @map("is_active")
+  createdBy           Int              @map("created_by")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+  botId               Int              @map("bot_id")
   outgoingConnections FlowConnection[] @relation("FromFlow")
   incomingConnections FlowConnection[] @relation("ToFlow")
+  area                Area?            @relation(fields: [areaId], references: [id])
+  bot                 Bot              @relation(fields: [botId], references: [id], onUpdate: Restrict)
+  creator             User             @relation("FlowCreator", fields: [createdBy], references: [id])
+  parent              Flow?            @relation("FlowHierarchy", fields: [parentId], references: [id])
+  children            Flow[]           @relation("FlowHierarchy")
+  nodes               Node[]
 
   @@index([parentId], map: "idx_flows_parent")
   @@index([areaId], map: "idx_flows_area")
   @@index([trigger], map: "idx_flows_trigger")
   @@index([botId], map: "idx_flows_bot")
+  @@index([createdBy], map: "flows_created_by_fkey")
   @@map("flows")
 }
 
@@ -152,41 +175,39 @@ model FlowConnection {
   fromId  Int    @map("from_id")
   toId    Int    @map("to_id")
   trigger String
-
-  from Flow @relation("FromFlow", fields: [fromId], references: [id])
-  to   Flow @relation("ToFlow", fields: [toId], references: [id])
+  from    Flow   @relation("FromFlow", fields: [fromId], references: [id])
+  to      Flow   @relation("ToFlow", fields: [toId], references: [id])
 
   @@unique([fromId, toId], map: "ux_flow_connections_pair")
+  @@index([toId], map: "flow_connections_to_id_fkey")
   @@map("flow_connections")
 }
 
 model Conversation {
-  id                BigInt             @id @default(autoincrement())
-  userPhone         String             @map("user_phone")
-  contactName       String?            @map("contact_name")
-  contactId         Int?               @map("contact_id")
-  areaId            Int?               @map("area_id")
-  assignedToId      Int?               @map("assigned_to")
-  status            ConversationStatus @default(PENDING)
-  botActive         Boolean            @default(true) @map("bot_active")
-  lastActivity      DateTime           @default(now()) @map("last_activity")
-  lastBotMessageAt  DateTime?          @map("last_bot_message_at")
-  closedAt          DateTime?          @map("closed_at")
-  closedReason      String?            @map("closed_reason")
-  closedById        Int?               @map("closed_by")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
-  currentFlowNodeId Int?               @map("current_flow_node_id")
-  context           Json?              @map("context")
-  botId             Int?               @map("bot_id")
-
-  area       Area?               @relation(fields: [areaId], references: [id])
-  assignedTo User?               @relation("ConversationAssignedTo", fields: [assignedToId], references: [id])
-  closedBy   User?               @relation("ConversationClosedBy", fields: [closedById], references: [id])
-  contact    Contact?            @relation(fields: [contactId], references: [id])
-  bot        Bot?                @relation(fields: [botId], references: [id], onDelete: SetNull)
-  messages   Message[]
-  events     ConversationEvent[]
+  id                BigInt              @id @default(autoincrement())
+  userPhone         String              @map("user_phone")
+  contactName       String?             @map("contact_name")
+  contactId         Int?                @map("contact_id")
+  areaId            Int?                @map("area_id")
+  assignedToId      Int?                @map("assigned_to")
+  status            ConversationStatus  @default(PENDING)
+  botActive         Boolean             @default(true) @map("bot_active")
+  lastActivity      DateTime            @default(now()) @map("last_activity")
+  lastBotMessageAt  DateTime?           @map("last_bot_message_at")
+  closedAt          DateTime?           @map("closed_at")
+  closedReason      String?             @map("closed_reason")
+  closedById        Int?                @map("closed_by")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  currentFlowNodeId Int?                @map("current_flow_node_id")
+  context           String?             @map("context") @db.LongText
+  botId             Int?                @map("bot_id")
+  events            ConversationEvent[]
+  area              Area?               @relation(fields: [areaId], references: [id])
+  assignedTo        User?               @relation("ConversationAssignedTo", fields: [assignedToId], references: [id])
+  closedBy          User?               @relation("ConversationClosedBy", fields: [closedById], references: [id])
+  contact           Contact?            @relation(fields: [contactId], references: [id])
+  messages          Message[]
 
   @@index([userPhone], map: "idx_conversations_user_phone")
   @@index([status], map: "idx_conversations_status")
@@ -195,6 +216,7 @@ model Conversation {
   @@index([lastActivity], map: "idx_conversations_last_activity")
   @@index([contactId], map: "idx_conversations_contact")
   @@index([botId], map: "idx_conversations_bot")
+  @@index([closedById], map: "conversations_closed_by_fkey")
   @@map("conversations")
 }
 
@@ -210,12 +232,12 @@ model Message {
   isRead         Boolean       @default(false) @map("is_read")
   externalId     String?       @unique @map("external_id")
   createdAt      DateTime      @default(now()) @map("created_at")
-
-  conversation Conversation @relation(fields: [conversationId], references: [id])
-  sender       User?        @relation(fields: [senderId], references: [id])
+  conversation   Conversation  @relation(fields: [conversationId], references: [id])
+  sender         User?         @relation(fields: [senderId], references: [id])
 
   @@index([conversationId], map: "idx_messages_conversation")
   @@index([senderType, senderId], map: "idx_messages_sender")
+  @@index([senderId], map: "messages_sender_id_fkey")
   @@map("messages")
 }
 
@@ -223,14 +245,14 @@ model ConversationEvent {
   id             BigInt                @id @default(autoincrement())
   conversationId BigInt                @map("conversation_id")
   eventType      ConversationEventType @map("event_type")
-  payload        Json?
+  payload        String?               @map("payload") @db.LongText
   createdById    Int?                  @map("created_by")
   createdAt      DateTime              @default(now()) @map("created_at")
-
-  conversation Conversation @relation(fields: [conversationId], references: [id])
-  createdBy    User?        @relation(fields: [createdById], references: [id])
+  conversation   Conversation          @relation(fields: [conversationId], references: [id])
+  createdBy      User?                 @relation(fields: [createdById], references: [id])
 
   @@index([conversationId], map: "idx_conversation_events_conversation")
+  @@index([createdById], map: "conversation_events_created_by_fkey")
   @@map("conversation_events")
 }
 
@@ -243,17 +265,17 @@ model Session {
 }
 
 model Contact {
-  id        Int      @id @default(autoincrement())
-  name      String
-  phone     String   @unique
-  dni       String?  @db.VarChar(20)
-  areaId    Int?     @map("area_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
+  id            Int            @id @default(autoincrement())
+  name          String
+  phone         String         @unique
+  dni           String?        @db.VarChar(20)
+  areaId        Int?           @map("area_id")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
   area          Area?          @relation(fields: [areaId], references: [id])
   conversations Conversation[]
 
+  @@index([areaId], map: "contacts_area_id_fkey")
   @@map("contacts")
 }
 
@@ -266,10 +288,29 @@ model WorkingHour {
   message   String?  @map("message")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  area      Area     @relation(fields: [areaId], references: [id])
 
-  area Area @relation(fields: [areaId], references: [id])
-
+  @@index([areaId], map: "working_hours_area_id_fkey")
   @@map("working_hours")
+}
+
+model QuickReply {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String   @db.Text
+  shortcut  String?  @unique
+  areaId    Int?     @map("area_id")
+  userId    Int?     @map("user_id")
+  isGlobal  Boolean  @default(false) @map("is_global")
+  order     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  area      Area?    @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([areaId])
+  @@index([userId])
+  @@map("quick_replies")
 }
 
 enum UserRole {
@@ -285,14 +326,6 @@ enum BotSessionStatus {
   CONNECTING   @map("connecting")
   DISCONNECTED @map("disconnected")
   ERROR        @map("error")
-}
-
-enum FlowType {
-  MESSAGE  @map("message")
-  MENU     @map("menu")
-  ACTION   @map("action")
-  REDIRECT @map("redirect")
-  END      @map("end")
 }
 
 enum ConversationStatus {
@@ -315,22 +348,15 @@ enum ConversationEventType {
   NOTE          @map("note")
 }
 
-model QuickReply {
-  id        Int      @id @default(autoincrement())
-  title     String // "Saludo Inicial", "Info Horarios", etc.
-  content   String   @db.Text // El mensaje completo
-  shortcut  String?  @unique // "/saludo", "/horarios", etc.
-  areaId    Int?     @map("area_id") // Si es específico de un área
-  userId    Int?     @map("user_id") // Si es personal del operador
-  isGlobal  Boolean  @default(false) @map("is_global") // Disponible para todos
-  order     Int      @default(0) // Orden de visualización
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  area Area? @relation(fields: [areaId], references: [id], onDelete: Cascade)
-  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([areaId])
-  @@index([userId])
-  @@map("quick_replies")
+enum NodeType {
+  START
+  TEXT
+  CONDITIONAL
+  DELAY
+  REDIRECT_BOT
+  REDIRECT_AGENT
+  AI
+  SET_VARIABLE
+  END
+  SCHEDULE
 }

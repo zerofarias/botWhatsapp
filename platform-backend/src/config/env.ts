@@ -61,5 +61,19 @@ export const env = {
       ? Number(process.env.SCHEDULER_INTERVAL_MS)
       : 5 * 60 * 1000,
   autoCloseMessage:
-    process.env.AUTO_CLOSE_MESSAGE ?? '🕒 Chat finalizado por inactividad',
+    process.env.AUTO_CLOSE_MESSAGE ??
+    'Gracias por escribirnos. Chat finalizado por inactividad.',
+  requestBodyLimit: process.env.REQUEST_BODY_LIMIT ?? 'Infinity',
+  prismaTransactionTimeoutMs:
+    Number(process.env.PRISMA_TRANSACTION_TIMEOUT_MS) > 0
+      ? Number(process.env.PRISMA_TRANSACTION_TIMEOUT_MS)
+      : 60_000,
+  prismaTransactionMaxWaitMs:
+    Number(process.env.PRISMA_TRANSACTION_MAX_WAIT_MS) > 0
+      ? Number(process.env.PRISMA_TRANSACTION_MAX_WAIT_MS)
+      : 10_000,
+  flowGraphTransactionNodeLimit:
+    Number(process.env.FLOW_GRAPH_TRANSACTION_NODE_LIMIT) > 0
+      ? Number(process.env.FLOW_GRAPH_TRANSACTION_NODE_LIMIT)
+      : 1200,
 };

@@ -6,6 +6,7 @@ Este servicio expone la API REST de la plataforma WPPConnect y gestiona la integ
 
 - **Condiciones en flujos**: cada nodo puede guardar un arreglo `conditions` con `match`, `matchMode` (`EXACT`, `CONTAINS`, `REGEX`) y `targetId`, lo que permite ramificar conversaciones sin depender unicamente de botones.
 - **Persistencia del grafo**: los endpoints `GET/POST /flows/graph` serializan las condiciones junto con `options`, y etiquetan cada arista con `optionId` o `conditionId` para que el frontend reconstruya el flujo sin perder conexiones.
+- **API unificada del Flow Builder**: los endpoints REST individuales (`/flows`, `/flows/:id`, `/flows/edges`) quedaron obsoletos. Toda la edición se realiza serializando el grafo completo con `GET /flows/graph` + `POST /flows/save-graph`, garantizando que backend y frontend compartan el mismo contrato.
 - **Evaluacion en runtime**: el bot analiza primero las condiciones (texto normalizado y literal); si alguna coincide, responde con el mensaje del nodo destino y actualiza `currentFlowNodeId`. Los triggers clasicos siguen funcionando como respaldo.
 - **Proyeccion Prisma**: la seleccion de conversaciones ahora incluye `currentFlowNodeId` y datos completos del contacto, evitando errores de tipado al componer respuestas.
 - **Envio de mensajes**: el envio directo usa `cache.client.sendText(...)`, corrigiendo la referencia a un cliente inexistente.
@@ -77,3 +78,52 @@ npm run build # compila TypeScript y corrige imports con tsc-alias
 - `END`: finaliza la conversacion sin cerrar al contacto manualmente.
 
 Para capturar respuestas de listas o botones, inicia la sesion con webhook (`POST /api/{session}/start-session`) y procesa los eventos entrantes.
+
+## Frontend: Dashboard React
+
+### Flujos y edición visual (FlowsPage)
+
+La página `FlowsPage.tsx` permite crear, editar y visualizar la jerarquía de flujos conversacionales de cada bot. Su diseño está orientado a la gestión visual y rápida de pasos automáticos, menús y derivaciones.
+
+#### Estructura principal
+
+- **Formulario de edición/creación**: Permite definir nombre, tipo, orden, disparador, mensaje, área destino y metadata avanzada (opciones, botones, listas).
+- **Mapa de flujos**: Muestra la jerarquía de pasos, permitiendo editar/eliminar cada nodo y visualizar sus hijos.
+
+#### Props y tipos
+
+- `FlowType`: 'MESSAGE', 'MENU', 'ACTION', 'REDIRECT', 'END'.
+- `FlowMessageKind`: 'TEXT', 'BUTTONS', 'LIST'.
+- `FlowNode`: Nodo de flujo con hijos, metadata y estado.
+- `FlowMetadata`: Configuración avanzada para opciones, botones y listas.
+
+#### Lógica y funciones clave
+
+- **fetchData**: Obtiene flujos y áreas desde la API REST.
+- **handleEdit**: Carga los datos de un nodo para edición.
+- **handleDelete**: Elimina un paso del flujo.
+- **handleSubmit**: Envía el formulario para crear/actualizar un flujo.
+- **FlowTreeItem**: Componente recursivo para mostrar la jerarquía de nodos.
+- **flattenFlows**: Utilidad para aplanar la estructura de flujos.
+
+#### Integración con la API
+
+- Utiliza el servicio `api` para consumir endpoints `/flows` y `/areas`.
+- El payload incluye metadata estructurada para opciones, botones y listas, permitiendo automatizar respuestas y menús en WhatsApp.
+
+#### Ejemplo visual
+
+- El usuario puede crear un menú principal, agregar opciones y condiciones, y derivar a áreas u operadores según la lógica del negocio.
+- Cada nodo muestra su tipo, disparador, mensaje y estado, facilitando la edición y el control de la conversación.
+
+### Otras vistas y navegación
+
+- **BotsPage**: Lista de bots, selección y creación.
+- **FlowNodesPage**: Nodos de un flujo, edición y creación.
+- **ChatHistoryPage, ContactsPage, AreasPage, UsersPage**: Gestión de historial, contactos, áreas y usuarios.
+
+### Integración con la API
+
+- Servicios en `/src/api` y `/src/services` para consumir endpoints REST.
+- Contextos y hooks para manejo de estado global (bot, flujo, usuario).
+- Componentes reutilizables para formularios, listas y edición de nodos/flujos.

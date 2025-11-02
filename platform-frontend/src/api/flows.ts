@@ -15,7 +15,9 @@ export async function saveFlowGraph(
   return data;
 }
 
-export async function getFlowGraph(): Promise<FlowGraphResponse> {
-  const { data } = await api.get<FlowGraphResponse>('/flows/graph');
+export async function getFlowGraph(botId: number): Promise<FlowGraphResponse> {
+  const { data } = await api.get<FlowGraphResponse>('/flows/graph', {
+    params: { botId },
+  });
   return data;
 }

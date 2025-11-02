@@ -2,8 +2,8 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import DashboardLayout from './layouts/DashboardLayout';
+
 import DashboardOverview from './pages/DashboardOverview';
-import FlowsPage from './pages/FlowsPage';
 import SettingsPage from './pages/SettingsPage';
 import ChatPage from './pages/ChatPage';
 import UsersPage from './pages/UsersPage';
@@ -12,6 +12,7 @@ import ContactsPage from './pages/ContactsPage';
 import WorkingHoursPage from './pages/WorkingHoursPage';
 import FlowBuilder from './views/FlowBuilder/FlowBuilder';
 import BotsPage from './pages/BotsPage';
+import ClassicFlow from './pages/classic-flow';
 
 export default function App() {
   return (
@@ -23,14 +24,14 @@ export default function App() {
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardOverview />} />
           <Route path="chat" element={<ChatPage />} />
-          <Route path="flows" element={<FlowsPage />} />
-          <Route path="flow-builder" element={<FlowBuilder />} />
+          {/* Flows y Flow Builder eliminados, ahora solo desde Bots */}
           <Route path="bots" element={<BotsPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="areas" element={<AreasPage />} />
           <Route path="contacts" element={<ContactsPage />} />
           <Route path="working-hours" element={<WorkingHoursPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="classic-flow" element={<ClassicFlow />} />
         </Route>
       </Route>
 

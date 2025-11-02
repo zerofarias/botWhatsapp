@@ -1,3 +1,66 @@
+/**
+ * @swagger
+ * /users:
+ *   get:
+ *     summary: Listar todos los usuarios
+ *     tags:
+ *       - Usuarios
+ *     responses:
+ *       200:
+ *         description: Lista de usuarios
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   name:
+ *                     type: string
+ *                   username:
+ *                     type: string
+ *                   role:
+ *                     type: string
+ *   post:
+ *     summary: Crear un usuario
+ *     tags:
+ *       - Usuarios
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               username:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Usuario creado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 name:
+ *                   type: string
+ *                 username:
+ *                   type: string
+ *                 role:
+ *                   type: string
+ *       500:
+ *         description: Error al crear usuario
+ */
 import type { Request, Response } from 'express';
 import {
   createUser,

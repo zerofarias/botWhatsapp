@@ -132,14 +132,14 @@ export default function DashboardOverview() {
               ...prev,
               cache: {
                 status: payload,
-                lastQr: prev.cache?.lastQr ?? prev.record.lastQr,
+                lastQr: prev.cache?.lastQr ?? prev.record?.lastQr ?? null,
                 lastQrAscii:
-                  prev.cache?.lastQrAscii ?? prev.record.lastQrAscii ?? null,
+                  prev.cache?.lastQrAscii ?? prev.record?.lastQrAscii ?? null,
                 connectedAt:
                   prev.cache?.connectedAt ??
-                  prev.record.connectedAt ??
+                  prev.record?.connectedAt ??
                   undefined,
-                paused: prev.cache?.paused ?? prev.record.paused,
+                paused: prev.cache?.paused ?? prev.record?.paused ?? false,
               },
             }
           : prev

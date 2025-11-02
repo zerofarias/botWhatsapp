@@ -47,12 +47,15 @@ export async function getCombinedChatHistoryByPhone(userPhone: string) {
     const notes = await listConversationNotes(conv.id);
     for (const note of notes) {
       let noteContent = '';
-      if (
-        note.payload &&
-        typeof note.payload === 'object' &&
-        'content' in note.payload
-      ) {
-        noteContent = (note.payload as any).content;
+      if (note.payload) {
+        try {
+          const payload = JSON.parse(note.payload);
+          if (payload && typeof payload === 'object' && 'content' in payload) {
+            noteContent = (payload as any).content;
+          }
+        } catch (e) {
+          // ignore parse error
+        }
       }
       history.push({
         id: note.id.toString(),
@@ -107,6 +110,8 @@ export const conversationSelect = {
   assignedToId: true,
   status: true,
   botActive: true,
+  botId: true,
+  context: true,
   lastActivity: true,
   lastBotMessageAt: true,
   currentFlowNodeId: true,
@@ -140,6 +145,9 @@ type CreateConversationInput = {
   assignedToId?: number | null;
   status?: ConversationStatus;
   botActive?: boolean;
+  botId?: number | null;
+  currentFlowNodeId?: number | null;
+  context?: any;
 };
 
 const ACTIVE_STATUSES: ConversationStatus[] = ['PENDING', 'ACTIVE', 'PAUSED'];
@@ -190,6 +198,15 @@ export async function createConversation(
       assignedToId: input.assignedToId ?? null,
       status: input.status ?? 'PENDING',
       botActive: input.botActive ?? true,
+      botId: input.botId ?? 1, // Asignar bot por defecto si no se provee
+      currentFlowNodeId: input.currentFlowNodeId ?? 1, // Nodo raíz por defecto
+      // Serializar context como string para cumplir con el tipo Prisma
+      context:
+        input.context == null
+          ? null
+          : typeof input.context === 'string'
+          ? input.context
+          : JSON.stringify(input.context),
     },
     select: conversationSelect,
   });
@@ -215,7 +232,7 @@ export async function addConversationEvent(
     data: {
       conversationId,
       eventType,
-      payload: payload ?? Prisma.JsonNull,
+      payload: payload ? JSON.stringify(payload) : null,
       createdById: createdById ?? null,
     },
   });
@@ -231,7 +248,7 @@ export async function addConversationNote(
     data: {
       conversationId,
       eventType: 'NOTE',
-      payload: { content },
+      payload: JSON.stringify({ content }),
       createdById: createdById ?? null,
     },
   });

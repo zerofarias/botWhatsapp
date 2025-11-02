@@ -11,6 +11,9 @@ import {
   listConversationNotesHandler,
   listAllChatsByPhoneHandler,
   listAllChatsHandler,
+  takeConversationHandler,
+  finishConversationHandler,
+  startFlowHandler,
 } from '../controllers/conversation.controller.js';
 
 export const conversationRouter = Router();
@@ -32,6 +35,23 @@ conversationRouter.post(
   closeConversationHandler
 );
 
-// Notas internas en la conversación
-conversationRouter.post('/:id/notes', createConversationNoteHandler);
-conversationRouter.get('/:id/notes', listConversationNotesHandler);
+// Endpoint para tomar la conversación
+conversationRouter.post(
+  '/:id/take',
+  authorize(['ADMIN', 'SUPERVISOR', 'OPERATOR']),
+  takeConversationHandler
+);
+
+// Endpoint para finalizar la conversación
+conversationRouter.post(
+  '/:id/finish',
+  authorize(['ADMIN', 'SUPERVISOR', 'OPERATOR']),
+  finishConversationHandler
+);
+
+// Endpoint para iniciar el flujo
+conversationRouter.post(
+  '/:id/start-flow',
+  authorize(['ADMIN', 'SUPERVISOR', 'OPERATOR']),
+  startFlowHandler
+);

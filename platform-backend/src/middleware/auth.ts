@@ -1,3 +1,8 @@
+/**
+ * @copyright Copyright (c) 2025 zerofarias
+ * @author zerofarias
+ * @file Middleware de autenticación para Express
+ */
 import type { Request, Response, NextFunction } from 'express';
 
 export function authenticate(req: Request, res: Response, next: NextFunction) {
