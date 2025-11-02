@@ -763,18 +763,43 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
       return {
         botId,
         nodes: uniqueNodes.map(toSerializedNode),
-        edges: referenceEdges.map<SerializedEdge>((edge) => ({
-          id: edge.id,
-          source: edge.source,
-          target: edge.target,
-          label:
-            typeof edge.label === 'string'
-              ? edge.label
-              : edge.label != null
-              ? String(edge.label)
-              : null,
-          data: edge.data,
-        })),
+        edges: referenceEdges.map<SerializedEdge>((edge) => {
+          // Extraer sourceHandle desde el conditionId o desde data.conditionId/optionId
+          let sourceHandle: string | null = edge.sourceHandle || null;
+          if (!sourceHandle && edge.data?.conditionId) {
+            sourceHandle = edge.data.conditionId;
+          } else if (!sourceHandle && edge.data?.optionId) {
+            sourceHandle = edge.data.optionId;
+          }
+
+          const serialized = {
+            id: edge.id,
+            source: edge.source,
+            target: edge.target,
+            sourceHandle: sourceHandle || undefined,
+            targetHandle: edge.targetHandle || undefined,
+            label:
+              typeof edge.label === 'string'
+                ? edge.label
+                : edge.label != null
+                ? String(edge.label)
+                : null,
+            data: edge.data,
+          };
+
+          // DEBUG: Log cuando el sourceHandle se establece
+          if (sourceHandle) {
+            console.log('[buildGraphPayload] Edge with sourceHandle:', {
+              id: serialized.id,
+              sourceHandle,
+              conditionId: edge.data?.conditionId,
+              optionId: edge.data?.optionId,
+              label: serialized.label,
+            });
+          }
+
+          return serialized;
+        }),
         deleteMissing: true,
       };
     },
@@ -845,17 +870,34 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
         ? nodesFromApi.map(normalizeNodeFromServer)
         : [];
       const normalizedEdges: FlowBuilderEdge[] = Array.isArray(edgesFromApi)
-        ? edgesFromApi.map(
-            (edge) =>
-              ({
-                id: edge.id,
-                source: edge.source,
-                target: edge.target,
-                data: edge.data,
-                label: edge.label ?? undefined,
-                type: DEFAULT_NODE_TYPE,
-              } as FlowBuilderEdge)
-          )
+        ? edgesFromApi.map((edge) => {
+            const normalized = {
+              id: edge.id,
+              source: edge.source,
+              target: edge.target,
+              sourceHandle: edge.sourceHandle || undefined,
+              targetHandle: edge.targetHandle || undefined,
+              data: edge.data,
+              label: edge.label ?? undefined,
+              type: DEFAULT_NODE_TYPE,
+            } as FlowBuilderEdge;
+
+            // DEBUG: Log cuando se cargan edges con sourceHandle
+            if (normalized.sourceHandle) {
+              console.log(
+                '[loadNodesAndEdges] Edge loaded with sourceHandle:',
+                {
+                  id: normalized.id,
+                  source: normalized.source,
+                  target: normalized.target,
+                  sourceHandle: normalized.sourceHandle,
+                  label: normalized.label,
+                }
+              );
+            }
+
+            return normalized;
+          })
         : [];
       setNodes(normalizedNodes);
       nodesRef.current = normalizedNodes;
@@ -1229,6 +1271,8 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
             id: `edge-${connection.source}-${connection.target}-${uuidv4()}`,
             source: connection.source!,
             target: connection.target!,
+            sourceHandle: connection.sourceHandle || undefined, // ← AGREGAR
+            targetHandle: connection.targetHandle || undefined, // ← AGREGAR
             label,
             type: DEFAULT_NODE_TYPE,
           },

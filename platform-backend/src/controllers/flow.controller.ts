@@ -1383,6 +1383,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
         if (!fromId || !toId) continue;
 
         let trigger = '';
+        let sourceHandle = ''; // Nueva variable para almacenar el sourceHandle
 
         if (normalized.data && typeof normalized.data === 'object') {
           const dataRecord = normalized.data as Record<string, unknown>;
@@ -1393,9 +1394,11 @@ export async function saveFlowGraph(req: Request, res: Response) {
               ? dataRecord.conditionId
               : null;
           if (connectionId) {
+            sourceHandle = connectionId; // Guardar el connectionId como sourceHandle
             const lookup = connectionLookup.get(connectionId);
             if (lookup?.condition) {
-              trigger = `cond:${lookup.condition.id}`;
+              // Usar el label de la condición, no el ID
+              trigger = lookup.condition.label || 'Condición';
             } else if (lookup?.option?.trigger) {
               trigger = lookup.option.trigger.trim();
             } else if (lookup?.option?.label) {
@@ -1404,20 +1407,39 @@ export async function saveFlowGraph(req: Request, res: Response) {
           }
         }
 
+        // Si no se encontró trigger, usar el label enviado desde el frontend
         if (!trigger && typeof normalized.label === 'string') {
           trigger = normalized.label.trim();
         }
 
-        if (trigger.length > 0 && normalized.target) {
+        // Guardar sourceHandle como prefijo en trigger: "sourceHandle||displayLabel"
+        const triggerWithSourceHandle = sourceHandle
+          ? `${sourceHandle}||${trigger}`
+          : trigger;
+
+        // DEBUG: Log para verificar el formato
+        if (sourceHandle) {
+          console.log('[saveFlowGraph] Edge trigger format:', {
+            sourceHandle,
+            trigger,
+            triggerWithSourceHandle,
+          });
+        }
+
+        if (triggerWithSourceHandle.length > 0 && normalized.target) {
           const set =
             incomingTriggerMap.get(normalized.target) ?? new Set<string>();
-          set.add(trigger);
+          set.add(triggerWithSourceHandle);
           incomingTriggerMap.set(normalized.target, set);
         }
 
-        const key = `${fromId}|${toId}|${trigger}`;
+        const key = `${fromId}|${toId}|${triggerWithSourceHandle}`;
         if (!uniqueConnections.has(key)) {
-          uniqueConnections.set(key, { fromId, toId, trigger });
+          uniqueConnections.set(key, {
+            fromId,
+            toId,
+            trigger: triggerWithSourceHandle,
+          });
         }
       }
 
@@ -1566,6 +1588,8 @@ export async function getFlowGraph(req: Request, res: Response) {
       source: string;
       target: string;
       label?: string;
+      sourceHandle?: string;
+      targetHandle?: string;
       data?: { optionId?: string; conditionId?: string };
     };
 
@@ -1745,12 +1769,55 @@ export async function getFlowGraph(req: Request, res: Response) {
           return null;
         }
 
+        // DEBUG: Log el trigger tal como está en BD
+        console.log('[getFlowGraph] Connection trigger from DB:', {
+          id: conn.id,
+          fromId: conn.fromId,
+          toId: conn.toId,
+          trigger: conn.trigger,
+        });
+
+        // Extraer sourceHandle del trigger: "sourceHandleId||displayLabel"
+        let sourceHandle: string | undefined;
+        let displayLabel: string | undefined;
+
+        if (conn.trigger) {
+          const parts = conn.trigger.split('||');
+          if (parts.length === 2) {
+            sourceHandle = parts[0] || undefined;
+            displayLabel = parts[1] || undefined;
+          } else {
+            displayLabel = conn.trigger;
+          }
+        }
+
+        // DEBUG: Log resultado de la extracción
+        if (sourceHandle) {
+          console.log('[getFlowGraph] Extracted sourceHandle:', {
+            original: conn.trigger,
+            sourceHandle,
+            displayLabel,
+          });
+        }
+
+        // Determinar si es conditionId u optionId basándose en el trigger
+        const edgeData: { conditionId?: string; optionId?: string } = {};
+        if (sourceHandle) {
+          if (displayLabel?.startsWith('cond:')) {
+            edgeData.conditionId = sourceHandle;
+          } else {
+            edgeData.optionId = sourceHandle;
+          }
+        }
+
         return {
           id: `edge-${conn.id}`,
           source: sourceId,
           target: targetId,
-          label: conn.trigger ?? undefined,
-          data: {},
+          label: displayLabel,
+          sourceHandle,
+          targetHandle: undefined,
+          data: edgeData,
         };
       })
       .filter((edge): edge is SerializedEdgeResponse => edge !== null);
