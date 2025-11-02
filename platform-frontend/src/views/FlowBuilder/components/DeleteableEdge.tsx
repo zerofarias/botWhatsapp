@@ -1,14 +1,15 @@
 import React from 'react';
-import { EdgeProps, getBezierPath, useReactFlow } from 'reactflow';
+import { EdgeProps, getSmoothStepPath, useReactFlow } from 'reactflow';
 
 export const DeleteableEdge: React.FC<EdgeProps> = (props) => {
   const { id, sourceX, sourceY, targetX, targetY } = props;
   const { setEdges } = useReactFlow();
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
     targetX,
     targetY,
+    borderRadius: 50, // Aumentar radio para curvas más pronunciadas
   });
 
   const onEdgeClick = (e: React.MouseEvent) => {
