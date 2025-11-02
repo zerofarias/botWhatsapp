@@ -40,6 +40,7 @@ import {
 import { getFlowGraph, saveFlowGraph } from '../../api/flows';
 import { FlowToolbar } from '../../components/flow-builder/FlowToolbar';
 import { ConditionalNode } from '../../components/flow-builder/nodes/ConditionalNode';
+import { GenericNode } from '../../components/flow-builder/nodes/GenericNode';
 import { DeleteableEdge } from './components/DeleteableEdge';
 // import { api } from '../../services/api';
 import './flow-builder.css';
@@ -1059,6 +1060,7 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
   // Conexión entre nodos según su tipo
   const nodeTypes = useMemo(
     () => ({
+      default: GenericNode,
       conditionalNode: ConditionalNode,
     }),
     []

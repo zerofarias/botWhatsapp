@@ -1,10 +1,10 @@
 import React from 'react';
-import { EdgeProps, getSmoothStepPath, useReactFlow } from 'reactflow';
+import { EdgeProps, getBezierPath, useReactFlow } from 'reactflow';
 
 export const DeleteableEdge: React.FC<EdgeProps> = (props) => {
-  const { id, sourceX, sourceY, targetX, targetY, markerEnd } = props;
+  const { id, sourceX, sourceY, targetX, targetY } = props;
   const { setEdges } = useReactFlow();
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
+  const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
     targetX,
@@ -18,14 +18,30 @@ export const DeleteableEdge: React.FC<EdgeProps> = (props) => {
 
   return (
     <>
+      {/* Definir marcador personalizado */}
+      <defs>
+        <marker
+          id="arrowhead"
+          markerWidth="10"
+          markerHeight="10"
+          refX="9"
+          refY="3"
+          orient="auto"
+        >
+          <polygon points="0 0, 10 3, 0 6" fill="#7c3aed" />
+        </marker>
+      </defs>
+
       <path
         id={id}
         className="react-flow__edge-path"
         d={edgePath}
-        markerEnd={markerEnd}
+        markerEnd="url(#arrowhead)"
         style={{
-          stroke: '#b1b1b7',
-          strokeWidth: 2,
+          stroke: '#7c3aed',
+          strokeWidth: 3,
+          opacity: 0.9,
+          fill: 'none',
         }}
       />
       {/* Botón X para eliminar */}
