@@ -175,13 +175,28 @@ export const TextNodeForm: React.FC<TextNodeFormProps> = ({
         <div className="text-node-form__grid">
           <div className="text-node-form__field">
             <label htmlFor="text-node-variable">Nombre de la variable</label>
-            <input
-              id="text-node-variable"
-              type="text"
-              placeholder="flow_consultaCP"
-              value={variableName ?? ''}
-              onChange={(e) => handleChange({ variableName: e.target.value })}
-            />
+            {availableVariables && availableVariables.length > 0 ? (
+              <select
+                id="text-node-variable"
+                value={variableName ?? ''}
+                onChange={(e) => handleChange({ variableName: e.target.value })}
+              >
+                <option value="">-- Selecciona una variable --</option>
+                {availableVariables.map((v) => (
+                  <option key={v.name} value={v.name}>
+                    {v.name} ({v.createdByNodeType})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                id="text-node-variable"
+                type="text"
+                placeholder="flow_consultaCP"
+                value={variableName ?? ''}
+                onChange={(e) => handleChange({ variableName: e.target.value })}
+              />
+            )}
             {variableError && (
               <span className="text-node-form__error">
                 Debes definir un nombre para almacenar la respuesta.

@@ -141,6 +141,13 @@ export interface CaptureNodeData extends BaseNodeData {
   audioModel?: string | null;
   imageModel?: string | null;
   waitForResponse?: boolean; // Siempre true para capturadores
+  // Variables disponibles en este punto del flujo (para UI)
+  availableVariables?: Array<{
+    name: string;
+    createdByNodeId?: string;
+    createdByNodeType?: string;
+    createdByNodeLabel?: string;
+  }>;
 }
 
 export interface ConditionalNodeData extends BaseNodeData {
@@ -223,6 +230,13 @@ export interface SetVariableNodeData extends BaseNodeData {
   type: 'SET_VARIABLE';
   variable: string;
   value: string;
+  // Variables disponibles en este punto del flujo (para UI)
+  availableVariables?: Array<{
+    name: string;
+    createdByNodeId?: string;
+    createdByNodeType?: string;
+    createdByNodeLabel?: string;
+  }>;
 }
 
 export interface EndNodeData extends BaseNodeData {

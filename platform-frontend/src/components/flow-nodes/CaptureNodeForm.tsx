@@ -1,12 +1,20 @@
 import React from 'react';
 import type { FlowVariableType } from '../../views/FlowBuilder/types';
 
+export interface AvailableVariableUI {
+  name: string;
+  createdByNodeId?: string;
+  createdByNodeType?: string;
+  createdByNodeLabel?: string;
+}
+
 export interface CaptureNodeFormProps {
   message: string;
   variableName?: string;
   variableType?: FlowVariableType;
   audioModel?: string | null;
   imageModel?: string | null;
+  availableVariables?: AvailableVariableUI[];
   onChange: (data: {
     message: string;
     variableName?: string;
@@ -39,6 +47,7 @@ export const CaptureNodeForm: React.FC<CaptureNodeFormProps> = ({
   variableType = 'STRING',
   audioModel = 'none',
   imageModel = 'none',
+  availableVariables = [],
   onChange,
 }) => {
   const normalizedVariable = (variableName ?? '').trim();
@@ -104,13 +113,28 @@ export const CaptureNodeForm: React.FC<CaptureNodeFormProps> = ({
           <label htmlFor="capture-node-variable">
             Nombre de la variable (requerido)
           </label>
-          <input
-            id="capture-node-variable"
-            type="text"
-            placeholder="flow_nombreUsuario"
-            value={variableName ?? ''}
-            onChange={(e) => handleChange({ variableName: e.target.value })}
-          />
+          {availableVariables && availableVariables.length > 0 ? (
+            <select
+              id="capture-node-variable"
+              value={variableName ?? ''}
+              onChange={(e) => handleChange({ variableName: e.target.value })}
+            >
+              <option value="">-- Selecciona una variable --</option>
+              {availableVariables.map((v) => (
+                <option key={v.name} value={v.name}>
+                  {v.name} ({v.createdByNodeType})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id="capture-node-variable"
+              type="text"
+              placeholder="flow_nombreUsuario"
+              value={variableName ?? ''}
+              onChange={(e) => handleChange({ variableName: e.target.value })}
+            />
+          )}
           {variableError && (
             <span className="capture-node-form__error">
               Debes definir un nombre para almacenar la respuesta.

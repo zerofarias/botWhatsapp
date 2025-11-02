@@ -170,6 +170,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
           variableType={data.responseVariableType ?? 'STRING'}
           audioModel={data.audioModel ?? null}
           imageModel={data.imageModel ?? null}
+          availableVariables={data.availableVariables}
           onChange={({
             message,
             variableName,
@@ -266,6 +267,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
         <SetVariableNodeForm
           variable={data.variable}
           value={data.value}
+          availableVariables={data.availableVariables}
           onChange={({ variable, value }) => handleUpdate({ variable, value })}
         />
       );

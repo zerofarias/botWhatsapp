@@ -336,9 +336,18 @@ export async function executeNode({
       const conditionConnections = new Map<string, number>();
       connections.forEach((connection) => {
         if (typeof connection.trigger !== 'string') return;
-        if (!connection.trigger.startsWith('cond:')) return;
-        const conditionId = connection.trigger.slice(5);
-        conditionConnections.set(conditionId, connection.toId);
+        // Manejar triggers en dos formatos:
+        // Formato antiguo: 'cond:UUID'
+        // Formato nuevo: 'UUID||Label'
+        let conditionId: string | null = null;
+        if (connection.trigger.startsWith('cond:')) {
+          conditionId = connection.trigger.slice(5);
+        } else if (connection.trigger.includes('||')) {
+          conditionId = connection.trigger.split('||')[0];
+        }
+        if (conditionId) {
+          conditionConnections.set(conditionId, connection.toId);
+        }
       });
 
       const fallbackConditionId =

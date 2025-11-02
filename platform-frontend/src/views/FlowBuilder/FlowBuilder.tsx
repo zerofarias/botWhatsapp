@@ -1213,9 +1213,14 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
           : nodeDataType.toLowerCase();
         const shapeClass = getNodeShapeClass(nodeDataType);
 
-        // Enriquecer nodos CONDITIONAL y TEXT con variables disponibles
+        // Enriquecer nodos CONDITIONAL, TEXT, CAPTURE y SET_VARIABLE con variables disponibles
         let enrichedData = node.data;
-        if (node.data.type === 'CONDITIONAL' || node.data.type === 'TEXT') {
+        if (
+          node.data.type === 'CONDITIONAL' ||
+          node.data.type === 'TEXT' ||
+          node.data.type === 'CAPTURE' ||
+          node.data.type === 'SET_VARIABLE'
+        ) {
           const availableVars = getAvailableVariablesForNode(
             node.id,
             variabilityMap
