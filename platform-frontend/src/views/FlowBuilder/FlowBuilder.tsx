@@ -940,6 +940,31 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
     return nodes.find((node) => node.id === selectedNodeId) ?? null;
   }, [nodes, selectedNodeId]);
 
+  // Enriquecer el nodo seleccionado con variables disponibles
+  const enrichedSelectedNode = useMemo(() => {
+    if (!selectedNode) return null;
+    if (
+      selectedNode.data.type !== 'CONDITIONAL' &&
+      selectedNode.data.type !== 'TEXT' &&
+      selectedNode.data.type !== 'CAPTURE' &&
+      selectedNode.data.type !== 'SET_VARIABLE'
+    ) {
+      return selectedNode;
+    }
+
+    const availableVars = getAvailableVariablesForNode(
+      selectedNode.id,
+      variabilityMap
+    );
+    return {
+      ...selectedNode,
+      data: {
+        ...selectedNode.data,
+        availableVariables: availableVars,
+      },
+    };
+  }, [selectedNode, variabilityMap]);
+
   // Cargar nodos y edges usando el grafo persistido
   const loadNodesAndEdges = useCallback(async () => {
     setLoading(true);
@@ -1625,9 +1650,9 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
           )}
         </div>
 
-        {!loading && selectedNode && (
+        {!loading && enrichedSelectedNode && (
           <NodeEditor
-            node={selectedNode}
+            node={enrichedSelectedNode}
             onChange={(node) => {
               void handleNodeUpdate(node);
             }}
