@@ -1047,7 +1047,14 @@ export async function saveFlowGraph(req: Request, res: Response) {
           typeof data.label === 'string' && data.label.trim().length
             ? data.label.trim()
             : 'Nodo sin título';
-        const message = typeof data.message === 'string' ? data.message : '';
+        const message =
+          flowType === 'NOTE'
+            ? typeof dataRecord.value === 'string'
+              ? dataRecord.value
+              : ''
+            : typeof data.message === 'string'
+            ? data.message
+            : '';
         const isActive =
           typeof data.isActive === 'boolean' ? data.isActive : true;
 
