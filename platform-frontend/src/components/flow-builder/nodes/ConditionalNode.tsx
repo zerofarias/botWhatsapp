@@ -15,45 +15,6 @@ export const ConditionalNode: React.FC<NodeProps<ConditionalNodeData>> = ({
       ? data.defaultConditionId
       : `default-${id}`;
 
-  // DEBUG: Log para verificar que los handles tienen IDs diferentes
-  React.useEffect(() => {
-    const handles = document.querySelectorAll(
-      `[data-nodeid="${id}"] .conditional-node__handle`
-    );
-    console.log(`[ConditionalNode ${id}] Found ${handles.length} handles`);
-
-    // Información detallada de cada handle
-    handles.forEach((h, idx) => {
-      const handleElement = h as HTMLElement;
-      const parent = handleElement.closest('.conditional-node__row');
-      const parentData = parent?.getAttribute('data-row-id');
-
-      console.log(`  Handle ${idx}:`, {
-        dataHandleId: handleElement.getAttribute('data-handleid'),
-        rowId: parentData,
-        classes: handleElement.className,
-      });
-    });
-
-    // Comparar posiciones
-    const positions = Array.from(handles).map((h) => {
-      const rect = (h as HTMLElement).getBoundingClientRect();
-      return {
-        top: Math.round(rect.top),
-        right: Math.round(rect.right),
-        bottom: Math.round(rect.bottom),
-      };
-    });
-    console.log(
-      '  Positions (Y):',
-      positions.map((p) => p.top)
-    );
-    console.log(
-      '  All same Y?',
-      positions.every((p) => p.top === positions[0].top)
-    );
-  }, [id, data.evaluations.length]);
-
   return (
     <div
       className={`conditional-node ${

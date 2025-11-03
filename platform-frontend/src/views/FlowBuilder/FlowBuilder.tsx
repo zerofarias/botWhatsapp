@@ -285,10 +285,7 @@ function normalizeNodeFromServer(node: SerializedNode): FlowBuilderNode {
             ? (legacy as any).defaultConditionId
             : uuidv4(),
       };
-      if (id)
-        console.log(
-          `[normalizeNode] CONDITIONAL "${id}": sourceVariable="${data.sourceVariable}"`
-        );
+
       break;
     case 'DELAY':
       data = {
@@ -806,17 +803,6 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
             data: edge.data,
           };
 
-          // DEBUG: Log cuando el sourceHandle se establece
-          if (sourceHandle) {
-            console.log('[buildGraphPayload] Edge with sourceHandle:', {
-              id: serialized.id,
-              sourceHandle,
-              conditionId: edge.data?.conditionId,
-              optionId: edge.data?.optionId,
-              label: serialized.label,
-            });
-          }
-
           return serialized;
         }),
         deleteMissing: true,
@@ -995,20 +981,6 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
               label: edge.label ?? undefined,
               type: DEFAULT_NODE_TYPE,
             } as FlowBuilderEdge;
-
-            // DEBUG: Log cuando se cargan edges con sourceHandle
-            if (normalized.sourceHandle) {
-              console.log(
-                '[loadNodesAndEdges] Edge loaded with sourceHandle:',
-                {
-                  id: normalized.id,
-                  source: normalized.source,
-                  target: normalized.target,
-                  sourceHandle: normalized.sourceHandle,
-                  label: normalized.label,
-                }
-              );
-            }
 
             return normalized;
           })
