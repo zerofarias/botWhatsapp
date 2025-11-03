@@ -12,6 +12,7 @@ import { RedirectBotNodeForm } from '../../components/flow-nodes/RedirectBotNode
 import { RedirectAgentNodeForm } from '../../components/flow-nodes/RedirectAgentNodeForm';
 import { AINodeForm } from '../../components/flow-nodes/AINodeForm';
 import { SetVariableNodeForm } from '../../components/flow-nodes/SetVariableNodeForm';
+import { NoteNodeForm } from '../../components/flow-nodes/NoteNodeForm';
 import { EndNodeForm } from '../../components/flow-nodes/EndNodeForm';
 //
 
@@ -269,6 +270,16 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
           value={data.value}
           availableVariables={data.availableVariables}
           onChange={({ variable, value }) => handleUpdate({ variable, value })}
+        />
+      );
+      break;
+    }
+    case 'NOTE': {
+      const data = node.data;
+      nodeForm = (
+        <NoteNodeForm
+          value={data.value}
+          onChange={({ value }) => handleUpdate({ value })}
         />
       );
       break;

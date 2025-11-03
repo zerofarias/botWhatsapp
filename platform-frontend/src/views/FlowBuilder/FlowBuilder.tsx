@@ -658,6 +658,13 @@ function createNode(type: FlowNodeType, position: XYPosition): FlowBuilderNode {
         value: '',
       };
       break;
+    case 'NOTE':
+      data = {
+        type: 'NOTE',
+        label: 'Nota',
+        value: '',
+      };
+      break;
     case 'END':
       data = {
         type: 'END',
@@ -1544,6 +1551,7 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
         case 'REDIRECT_AGENT':
         case 'AI':
         case 'SET_VARIABLE':
+        case 'NOTE':
         case 'END':
         case 'START':
           newData = {

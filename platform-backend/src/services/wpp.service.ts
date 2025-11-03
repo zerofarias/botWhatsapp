@@ -90,6 +90,7 @@ import {
   findOpenConversationByPhone,
   isActiveConversationStatus,
   touchConversation,
+  addConversationNote,
 } from './conversation.service.js';
 import {
   createConversationMessage,
@@ -1407,8 +1408,9 @@ async function handleIncomingMessage(
             newContext as unknown as import('../services/flow.service').ConversationContext,
         });
 
-        // Si hay acciones (mensajes), enviarlas
+        // Si hay acciones (mensajes y notas), enviarlas
         if (chainResult.actions && chainResult.actions.length > 0) {
+          // Procesar mensajes
           const sendMessageAction = chainResult.actions.find(
             (a) => a.type === 'send_message'
           );
@@ -1430,6 +1432,29 @@ async function handleIncomingMessage(
               messageText,
               io
             );
+          }
+
+          // Procesar notas internas
+          const saveNoteAction = chainResult.actions.find(
+            (a) => a.type === 'save_note'
+          );
+          if (
+            saveNoteAction &&
+            saveNoteAction.payload &&
+            typeof saveNoteAction.payload === 'object'
+          ) {
+            const payload = saveNoteAction.payload as Record<string, unknown>;
+            const noteContent = (payload.content as string) ?? '';
+            if (noteContent) {
+              console.log(
+                `[FLOW] Saving note to conversation: "${noteContent}"`
+              );
+              await addConversationNote(
+                BigInt(conversationId),
+                noteContent,
+                null
+              );
+            }
           }
         }
 

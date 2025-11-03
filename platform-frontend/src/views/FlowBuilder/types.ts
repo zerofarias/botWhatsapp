@@ -12,6 +12,7 @@ export const FLOW_NODE_TYPES = [
   'REDIRECT_AGENT',
   'AI',
   'SET_VARIABLE',
+  'NOTE',
   'END',
 ] as const;
 
@@ -28,6 +29,7 @@ export const FLOW_NODE_TYPE_LABELS: Record<FlowNodeType, string> = {
   REDIRECT_AGENT: 'Redirigir a Agente',
   AI: 'Consulta IA',
   SET_VARIABLE: 'Setear Variable',
+  NOTE: 'Nota Interna',
   END: 'Fin del Flujo',
 };
 
@@ -43,6 +45,7 @@ export const FLOW_NODE_TYPE_DESCRIPTIONS: Record<FlowNodeType, string> = {
   REDIRECT_AGENT: 'Asigna la conversación a un agente humano.',
   AI: 'Consulta un modelo de IA y procesa la respuesta.',
   SET_VARIABLE: 'Guarda o modifica una variable en el contexto.',
+  NOTE: 'Nota interna que no se envía al usuario, solo se registra.',
   END: 'Termina el flujo.',
 };
 
@@ -90,6 +93,7 @@ export type FlowNodeData =
   | RedirectAgentNodeData
   | AINodeData
   | SetVariableNodeData
+  | NoteNodeData
   | EndNodeData;
 
 // Permite cargar nodos legacy 'MENU' como si fueran TEXT
@@ -237,6 +241,11 @@ export interface SetVariableNodeData extends BaseNodeData {
     createdByNodeType?: string;
     createdByNodeLabel?: string;
   }>;
+}
+
+export interface NoteNodeData extends BaseNodeData {
+  type: 'NOTE';
+  value: string; // Contenido de la nota interna
 }
 
 export interface EndNodeData extends BaseNodeData {

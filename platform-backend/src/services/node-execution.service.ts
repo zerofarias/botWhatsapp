@@ -397,6 +397,26 @@ export async function executeNode({
       console.log(`[CONDITIONAL] Final nextNodeId: ${nextNodeId}`);
       break;
     }
+    case 'NOTE': {
+      // Nodo NOTE: solo registra una nota interna, no se envía al cliente
+      const noteContent =
+        node.message || (builderMeta as Record<string, unknown>)?.value || '';
+      console.log(`[NOTE] Node ${node.id}: Registering note: "${noteContent}"`);
+
+      actions.push({
+        type: 'save_note',
+        payload: {
+          nodeId: node.id,
+          content: noteContent,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      updatedContext.waitingForInput = false;
+      updatedContext.waitingVariable = null;
+      nextNodeId = resolveNextNodeId();
+      break;
+    }
     case 'END': {
       actions.push({ type: 'end_flow', payload: { nodeId: node.id } });
       updatedContext.waitingForInput = false;
