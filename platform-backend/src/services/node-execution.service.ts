@@ -110,6 +110,27 @@ function normalizeOperator(raw?: string): ConditionOperator {
   return CONDITIONAL_OPERATOR_SET.has(upper) ? upper : 'EQUALS';
 }
 
+/**
+ * Interpola variables en un mensaje
+ * Reemplaza {{variableName}} con el valor de la variable en el contexto
+ * Ejemplo: "Hola {{nombre}}" con context {nombre: "Juan"} -> "Hola Juan"
+ */
+function interpolateVariables(
+  message: string,
+  context: ConversationContext
+): string {
+  if (!message || typeof message !== 'string') return message;
+
+  return message.replace(/\{\{(\w+)\}\}/g, (match, varName) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const value = (context as any)[varName];
+    if (value === null || value === undefined) {
+      return match; // Si no existe la variable, dejar como está
+    }
+    return normalizeToString(value);
+  });
+}
+
 function evaluateConditional(
   actual: unknown,
   expectedValue: string,
@@ -186,10 +207,14 @@ export async function executeNode({
 
   const sendMessage = () => {
     if (!node.message) return;
+    const interpolatedMessage = interpolateVariables(
+      node.message,
+      updatedContext
+    );
     actions.push({
       type: 'send_message',
       payload: {
-        message: node.message,
+        message: interpolatedMessage,
         builder: builderMeta,
         nodeId: node.id,
         type: node.type,

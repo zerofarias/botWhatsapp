@@ -113,28 +113,13 @@ export const CaptureNodeForm: React.FC<CaptureNodeFormProps> = ({
           <label htmlFor="capture-node-variable">
             Nombre de la variable (requerido)
           </label>
-          {availableVariables && availableVariables.length > 0 ? (
-            <select
-              id="capture-node-variable"
-              value={variableName ?? ''}
-              onChange={(e) => handleChange({ variableName: e.target.value })}
-            >
-              <option value="">-- Selecciona una variable --</option>
-              {availableVariables.map((v) => (
-                <option key={v.name} value={v.name}>
-                  {v.name} ({v.createdByNodeType})
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              id="capture-node-variable"
-              type="text"
-              placeholder="flow_nombreUsuario"
-              value={variableName ?? ''}
-              onChange={(e) => handleChange({ variableName: e.target.value })}
-            />
-          )}
+          <input
+            id="capture-node-variable"
+            type="text"
+            placeholder="flow_nombreUsuario"
+            value={variableName ?? ''}
+            onChange={(e) => handleChange({ variableName: e.target.value })}
+          />
           {variableError && (
             <span className="capture-node-form__error">
               Debes definir un nombre para almacenar la respuesta.
