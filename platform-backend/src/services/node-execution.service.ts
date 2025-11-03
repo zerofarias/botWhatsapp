@@ -450,6 +450,17 @@ export async function executeNode({
       nextNodeId = resolveNextNodeId();
       break;
     }
+    case 'default': {
+      // Nodos con tipo 'default' se tratan como END para mantener compatibilidad
+      console.log(
+        `[executeNode] Node ${node.id}: tipo "default" detectado, tratando como END`
+      );
+      actions.push({ type: 'end_flow', payload: { nodeId: node.id } });
+      updatedContext.waitingForInput = false;
+      updatedContext.waitingVariable = null;
+      nextNodeId = null;
+      break;
+    }
     default: {
       // En esta etapa solo manejamos START/TEXT/END. El resto avanza al siguiente nodo.
       console.log(

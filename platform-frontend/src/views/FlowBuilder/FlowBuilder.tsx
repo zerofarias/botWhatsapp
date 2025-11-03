@@ -52,7 +52,7 @@ import {
 import './flow-builder.css';
 
 const DEFAULT_POSITION: XYPosition = { x: 160, y: 120 };
-const DEFAULT_NODE_TYPE = 'default';
+const DEFAULT_NODE_TYPE = 'END';
 
 /**
  * Retorna la clase CSS para la forma de un nodo basado en su tipo
