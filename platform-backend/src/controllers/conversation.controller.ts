@@ -335,7 +335,14 @@ export async function createConversationNoteHandler(
     req.user.id
   );
   let noteContent = '';
-  if (
+  if (note.payload && typeof note.payload === 'string') {
+    try {
+      const parsed = JSON.parse(note.payload);
+      noteContent = (parsed as { content?: string }).content ?? '';
+    } catch {
+      // ignore parse error
+    }
+  } else if (
     note.payload &&
     typeof note.payload === 'object' &&
     'content' in note.payload
@@ -373,7 +380,14 @@ export async function listConversationNotesHandler(
   res.json(
     notes.map((note) => {
       let noteContent = '';
-      if (
+      if (note.payload && typeof note.payload === 'string') {
+        try {
+          const parsed = JSON.parse(note.payload);
+          noteContent = (parsed as { content?: string }).content ?? '';
+        } catch {
+          // ignore parse error
+        }
+      } else if (
         note.payload &&
         typeof note.payload === 'object' &&
         'content' in note.payload
