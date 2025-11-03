@@ -134,16 +134,12 @@ export const TextNodeForm: React.FC<TextNodeFormProps> = ({
         {availableVariables && availableVariables.length > 0 && (
           <div className="text-node-form__variables-helper">
             <p className="text-node-form__variables-title">
-              💡 Variables disponibles: usa para insertar
+              💡 Variables disponibles: usa $$variableName para reutilizar
             </p>
             <div className="text-node-form__variables-list">
               {availableVariables.map((v) => (
                 <span key={v.name} className="text-node-form__variable-tag">
-                  {'{'}
-                  {'{'}
-                  {v.name}
-                  {'}'}
-                  {'}'}
+                  <code>$${v.name}</code>
                   <small>de {v.createdByNodeLabel}</small>
                 </span>
               ))}

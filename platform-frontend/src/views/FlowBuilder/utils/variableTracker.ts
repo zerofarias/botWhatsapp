@@ -159,10 +159,11 @@ export function getAvailableVariableNames(
 
 /**
  * Detecta todas las referencias a variables en un string
- * Ejemplo: "Hola {{nombre}}, tu edad es {{edad}}" → ["nombre", "edad"]
+ * Ejemplo: "Hola $$nombre, tu edad es $$edad" → ["nombre", "edad"]
+ * Soporta: $$variableName
  */
 export function extractVariableReferences(text: string): string[] {
-  const regex = /\{\{(\w+)\}\}/g;
+  const regex = /\$\$(\w+)/g;
   const matches: string[] = [];
   let match;
 

@@ -111,9 +111,8 @@ function normalizeOperator(raw?: string): ConditionOperator {
 }
 
 /**
- * Interpola variables en un mensaje
- * Reemplaza {{variableName}} con el valor de la variable en el contexto
- * Ejemplo: "Hola {{nombre}}" con context {nombre: "Juan"} -> "Hola Juan"
+ * Reemplaza $$variableName con el valor de la variable en el contexto
+ * Ejemplo: "Hola $$nombre" con context {nombre: "Juan"} -> "Hola Juan"
  */
 function interpolateVariables(
   message: string,
@@ -121,7 +120,7 @@ function interpolateVariables(
 ): string {
   if (!message || typeof message !== 'string') return message;
 
-  return message.replace(/\{\{(\w+)\}\}/g, (match, varName) => {
+  return message.replace(/\$\$(\w+)/g, (match, varName) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const value = (context as any)[varName];
     if (value === null || value === undefined) {

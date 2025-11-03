@@ -29,7 +29,7 @@ export const SetVariableNodeForm: React.FC<SetVariableNodeFormProps> = ({
     }}
   >
     <h3 style={{ margin: 0, color: '#43a047' }}>Setear Variable</h3>
-    <label>
+    <label style={{ display: 'block', marginBottom: 12 }}>
       Nombre de variable:
       {availableVariables && availableVariables.length > 0 ? (
         <select
@@ -49,20 +49,42 @@ export const SetVariableNodeForm: React.FC<SetVariableNodeFormProps> = ({
           type="text"
           value={variable}
           onChange={(e) => onChange({ variable: e.target.value, value })}
-          style={{ marginLeft: 8 }}
+          style={{ marginLeft: 8, display: 'block', marginTop: 6 }}
           placeholder="nombreVariable"
         />
       )}
     </label>
-    <label style={{ marginLeft: 16 }}>
-      Valor:
+    <label style={{ display: 'block', marginBottom: 12 }}>
+      Valor (usa $$variableName para reutilizar):
       <input
         type="text"
         value={value}
         onChange={(e) => onChange({ variable, value: e.target.value })}
-        style={{ marginLeft: 8 }}
-        placeholder="valor"
+        style={{ marginLeft: 8, display: 'block', marginTop: 6 }}
+        placeholder="$$test1 o un valor fijo"
       />
     </label>
+    {availableVariables && availableVariables.length > 0 && (
+      <div style={{ marginTop: 12, fontSize: 12, color: '#555' }}>
+        <p style={{ margin: '6px 0', fontWeight: 'bold' }}>
+          💡 Variables disponibles:
+        </p>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {availableVariables.map((v) => (
+            <code
+              key={v.name}
+              style={{
+                background: '#fff3e0',
+                padding: '4px 8px',
+                borderRadius: 4,
+                fontSize: 11,
+              }}
+            >
+              $${v.name}
+            </code>
+          ))}
+        </div>
+      </div>
+    )}
   </div>
 );
