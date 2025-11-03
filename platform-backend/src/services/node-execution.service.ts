@@ -210,6 +210,9 @@ export async function executeNode({
       node.message,
       updatedContext
     );
+    console.log(`[TEXT] Original message:`, node.message);
+    console.log(`[TEXT] Context keys:`, Object.keys(updatedContext));
+    console.log(`[TEXT] Interpolated message:`, interpolatedMessage);
     actions.push({
       type: 'send_message',
       payload: {
