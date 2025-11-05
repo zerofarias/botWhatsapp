@@ -82,7 +82,24 @@ const ConversationListItem: React.FC<ConversationListItemProps> = ({
       onClick={onSelect}
     >
       <div className="conversation-item-avatar">
-        {displayName.charAt(0).toUpperCase()}
+        {conversation.contact?.photoUrl ? (
+          <img
+            src={conversation.contact.photoUrl}
+            alt={displayName}
+            className="conversation-item-avatar-image"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+              e.currentTarget.nextElementSibling?.classList.remove('hidden');
+            }}
+          />
+        ) : null}
+        <span
+          className={`conversation-item-avatar-fallback${
+            conversation.contact?.photoUrl ? ' hidden' : ''
+          }`}
+        >
+          {displayName.charAt(0).toUpperCase()}
+        </span>
       </div>
       <div className="conversation-item-content">
         <div className="conversation-item-header">

@@ -442,12 +442,14 @@ export async function listConversationsHandler(req: Request, res: Response) {
             name: conversation.contact.name,
             phone: conversation.contact.phone,
             dni: conversation.contact.dni,
+            photoUrl: (conversation.contact as any).photoUrl ?? null,
           }
         : {
             id: conversation.contactId ?? null,
             name: conversation.contactName,
             phone: conversation.userPhone,
             dni: null,
+            photoUrl: null,
           },
       area: conversation.area
         ? { id: conversation.area.id, name: conversation.area.name }
