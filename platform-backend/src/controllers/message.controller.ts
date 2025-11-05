@@ -71,25 +71,35 @@ export async function processMessageAndAdvanceFlow(
   let capturedVariableName: string | null = null;
   if (context.waitingForInput && context.waitingVariable) {
     const key = context.waitingVariable;
-    // Limpiar contenido de imágenes base64 antes de guardar en variable
-    let cleanedContent = normalizedContent;
-    if (
+    // Detectar y procesar imágenes en base64
+    let processedContent = normalizedContent;
+    const hasImageBase64 =
       normalizedContent.includes('/9j/4AAQSkZJRg') ||
-      normalizedContent.includes('data:image')
-    ) {
+      normalizedContent.includes('data:image');
+
+    if (hasImageBase64) {
       const base64Match = normalizedContent.match(
         /(\n)?\/9j\/4AAQSkZJRg[\w+/]*={0,2}|data:image[^;]*;base64,[A-Za-z0-9+/]*={0,2}/
       );
-      if (base64Match && base64Match.index) {
-        cleanedContent = normalizedContent
-          .substring(0, base64Match.index)
-          .trim();
+      if (base64Match) {
+        if (base64Match.index) {
+          // Si hay texto antes de la imagen, mantenerlo + agregar marca de imagen
+          const textBeforeImage = normalizedContent
+            .substring(0, base64Match.index)
+            .trim();
+          processedContent = textBeforeImage
+            ? `${textBeforeImage}\n📸 ENVÍO UNA IMAGEN`
+            : '📸 ENVÍO UNA IMAGEN';
+        } else {
+          // Solo hay imagen, sin texto previo
+          processedContent = '📸 ENVÍO UNA IMAGEN';
+        }
         console.log(
-          `[processMessage] Imagen removida de variable "${key}". Contenido limpio: "${cleanedContent}"`
+          `[processMessage] Imagen detectada en variable "${key}". Procesado como: "${processedContent}"`
         );
       }
     }
-    variableBag[key] = cleanedContent;
+    variableBag[key] = processedContent;
     contextWithMessage.waitingForInput = false;
     contextWithMessage.waitingVariable = null;
     capturedVariableName = key;
