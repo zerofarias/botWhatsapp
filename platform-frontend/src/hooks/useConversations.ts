@@ -98,6 +98,46 @@ export function useConversations() {
     });
   }, [cerradas, searchTerm, matchesFilter]);
 
+  // Listener para actualizar la lista cuando la conversación cambia (ej: bot desactivado en END node)
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleConversationUpdate = (updatedConversation: ConversationSummary) => {
+      console.log(
+        '[useConversations] Conversation updated:',
+        updatedConversation.id,
+        'botActive:',
+        updatedConversation.botActive
+      );
+
+      setAbiertas((prev) => {
+        const idx = prev.findIndex((c) => c.id === updatedConversation.id);
+        if (idx === -1) return prev;
+
+        // Crear nueva lista con la conversación actualizada
+        const updated = [...prev];
+        updated[idx] = updatedConversation;
+        return updated;
+      });
+
+      setCerradas((prev) => {
+        const idx = prev.findIndex((c) => c.id === updatedConversation.id);
+        if (idx === -1) return prev;
+
+        // Crear nueva lista con la conversación actualizada
+        const updated = [...prev];
+        updated[idx] = updatedConversation;
+        return updated;
+      });
+    };
+
+    socket.on('conversation:update', handleConversationUpdate);
+
+    return () => {
+      socket.off('conversation:update', handleConversationUpdate);
+    };
+  }, [socket]);
+
   return {
     loading,
     abiertas: abiertasFiltradas,

@@ -117,10 +117,11 @@ export default function DashboardOverview() {
     }
   }, []);
 
+  // Efecto para cargar datos iniciales - solo una vez al montar
   useEffect(() => {
     void fetchStatus();
     void fetchConversationStats();
-  }, [fetchStatus, fetchConversationStats]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!socket) return;
@@ -182,8 +183,43 @@ export default function DashboardOverview() {
       setMessages((prev) => [preview, ...prev].slice(0, 6));
     };
 
-    const refreshStats = () => {
-      void fetchConversationStats();
+    // Función local para refrescar stats (sin dependencia externa)
+    const refreshStats = async () => {
+      setStatsLoading(true);
+      setStatsError(null);
+      try {
+        const [activeResponse, closedResponse] = await Promise.all([
+          api.get<ConversationSummary[]>('/conversations', {
+            params: { status: 'PENDING,ACTIVE,PAUSED' },
+          }),
+          api.get<ConversationSummary[]>('/conversations', {
+            params: { status: 'CLOSED' },
+          }),
+        ]);
+
+        const areaCounter = new Map<string, number>();
+        activeResponse.data.forEach((conversation) => {
+          const key = conversation.area?.name ?? 'Sin area';
+          areaCounter.set(key, (areaCounter.get(key) ?? 0) + 1);
+        });
+
+        const areaBreakdown = Array.from(areaCounter.entries())
+          .map(([areaName, active]) => ({ areaName, active }))
+          .sort((a, b) => b.active - a.active);
+
+        setConversationStats({
+          active: activeResponse.data.length,
+          closed: closedResponse.data.length,
+          areaBreakdown,
+        });
+      } catch (error) {
+        console.error('[Dashboard] Failed to refresh conversation stats', error);
+        setStatsError(
+          'No se pudieron obtener las estadisticas de conversaciones.'
+        );
+      } finally {
+        setStatsLoading(false);
+      }
     };
 
     socket.on('session:status', onStatus);
@@ -201,7 +237,7 @@ export default function DashboardOverview() {
       socket.off('conversation:incoming', refreshStats);
       socket.off('conversation:closed', refreshStats);
     };
-  }, [socket, fetchConversationStats]);
+  }, [socket]);
 
   const handleStart = async () => {
     setStartLoading(true);

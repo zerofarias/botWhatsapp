@@ -185,7 +185,7 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
             content
           );
           // Actualizar estado inmediatamente en lugar de recargar todo
-          setHistory((prevHistory) => {
+          setHistory((prevHistory: HistoryItem[]) => {
             const newHistory = [...prevHistory, { type: 'note', ...newNote }];
             newHistory.sort(
               (a, b) =>
@@ -195,12 +195,40 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
             return newHistory;
           });
         } else {
-          // Enviar mensaje
-          await api.post(`/conversations/${activeConversation.id}/messages`, {
+          // Agregar mensaje optimista al historial inmediatamente
+          const optimisticMessage: HistoryItem = {
+            type: 'message',
+            id: `temp-${Date.now()}`,
             content,
-          });
-          // Recargar historial después de enviar (socket también notificará)
-          await loadHistoryOnce(activeConversation.userPhone);
+            senderType: 'OPERATOR',
+            createdAt: new Date().toISOString(),
+            conversationId: activeConversation.id,
+            senderId: null,
+            mediaType: null,
+            mediaUrl: null,
+            externalId: null,
+            isDelivered: false,
+            isRead: false,
+          };
+
+          setHistory((prevHistory: HistoryItem[]) => [
+            ...prevHistory,
+            optimisticMessage,
+          ]);
+
+          try {
+            // Enviar mensaje
+            await api.post(`/conversations/${activeConversation.id}/messages`, {
+              content,
+            });
+            // Socket notificará la actualización con el ID real
+          } catch (error) {
+            // Si falla, remover el mensaje optimista
+            setHistory((prevHistory: HistoryItem[]) =>
+              prevHistory.filter((m: HistoryItem) => m.id !== optimisticMessage.id)
+            );
+            throw error;
+          }
         }
       } catch (error) {
         console.error('[useChatSession] Failed to send message', error);
@@ -209,7 +237,7 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
         setSending(false);
       }
     },
-    [activeConversation, loadHistoryOnce]
+    [activeConversation]
   );
 
   // Función para cerrar conversación

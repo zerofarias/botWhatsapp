@@ -47,20 +47,13 @@ const MessageList: React.FC<MessageListProps> = ({ loading, messages }) => {
 
     // Si el usuario estaba cerca del final o es un mensaje nuevo, scroll al final
     if (isNewMessage && isUserNearBottom.current && endOfMessagesRef.current) {
-      // Usar setTimeout para asegurar que el DOM está actualizado
-      setTimeout(() => {
-        endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 0);
+      endOfMessagesRef.current?.scrollIntoView({ behavior: 'auto' });
     } else if (firstUnreadIndex !== -1 && firstUnreadRef.current) {
       // Si hay mensajes no leídos, ir al primero
-      setTimeout(() => {
-        firstUnreadRef.current?.scrollIntoView({ behavior: 'auto' });
-      }, 0);
+      firstUnreadRef.current?.scrollIntoView({ behavior: 'auto' });
     } else if (!isNewMessage && endOfMessagesRef.current) {
       // Si es la carga inicial, ir al final
-      setTimeout(() => {
-        endOfMessagesRef.current?.scrollIntoView({ behavior: 'auto' });
-      }, 0);
+      endOfMessagesRef.current?.scrollIntoView({ behavior: 'auto' });
     }
   }, [messages.length, firstUnreadIndex]);
 

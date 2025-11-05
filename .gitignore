@@ -1,20 +1,60 @@
+# OS
 .DS_Store
+.env.local
+.env.*.local
+Thumbs.db
+
+# IDE
 .idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+*.vscode
+
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build artifacts
+dist/
+dist.zip
+build/
 *.tgz
-/debug.log
+
+# Environment & Configuration
+.env
+.env.production
+.env.development
+
+# Logs
+logs/
+*.log
+debug.log
+
+# Session & Token Management
+tokens/
+session/
+session-*/
+platform-backend/tokens/
+platform-backend/uploads/
+
+# Temporary files
+*.tmp
+temp/
+tmp/
+.cache/
+
+# Development
+.idea/
+.vscode/
 006.png
+gohan.jpg
 api-docs
-app.js
+src/app.ts
 app.ts
+app.js
 app2.js
 assets
-dist.zip
-dist/
-gohan.jpg
-node_modules
-session
-session-*
-src/app.ts
-tokens
-yarn.lock
-package-lock.json

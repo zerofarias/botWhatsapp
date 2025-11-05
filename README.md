@@ -1,80 +1,319 @@
-# WhatsApp Customer Care Platform
+# WhatsApp Customer Care Platform# WhatsApp Customer Care Platform
 
-Full stack workspace built on top of WPPConnect to run a multi-operator WhatsApp help desk. The monorepo bundles the upstream WPPConnect automation service, an Express/Prisma API, and a React console for human agents. This README captures the complete structure and operating model so any developer or automation can install, configure, and operate the stack without additional context.
 
-## System Architecture
+
+Full-stack WhatsApp helpdesk built on WPPConnect. Multi-operator console for managing customer conversations.Full-stack WhatsApp helpdesk built on WPPConnect. Multi-operator console for managing customer conversations.
+
+
+
+## System Architecture## System Architecture
+
+
+
+``````
+
+Browsers (agents)Browsers (agents)
+
+    ↓    ↓
+
+Frontend (React/Vite, :5173)Frontend (React/Vite, :5173)
+
+    ↓    ↓
+
+Backend API (Express/Prisma, :4000)Backend API (Express/Prisma, :4000)
+
+    ↓    ↓
+
+WPPConnect (Node, :3000)WPPConnect (Node, :3000)
+
+    ↓    ↓
+
+Puppeteer → WhatsApp WebPuppeteer → WhatsApp Web
+
+    ↓    ↓
+
+MySQL/MariaDBMySQL/MariaDB
+
+``````
+
+
+
+## Components## Componentes
+
+
+
+| Component | Port | Description || Componente | Puerto | Descripción |
+
+|-----------|------|-------------||-----------|--------|-------------|
+
+| Frontend | 5173 | Operator console (React) || Frontend | 5173 | Consola de operadores React |
+
+| Backend API | 4000 | REST API + Socket.IO || Backend API | 4000 | REST API + Socket.IO |
+
+| WPPConnect | 3000 | WhatsApp session || WPPConnect | 3000 | Sesión WhatsApp |
+
+| MySQL | 3306 | Database || MySQL | 3306 | Base de datos |
+
+
+
+## Project Structure## Estructura
+
+
+
+``````
+
+wppconnect/wppconnect/
+
+├── platform-backend/    # Express API + Prisma├── platform-backend/    # API Express + Prisma
+
+│   ├── src/│   ├── src/
+
+│   ├── prisma/│   ├── prisma/
+
+│   └── package.json│   └── package.json
+
+├── platform-frontend/   # React console├── platform-frontend/   # Console React
+
+│   ├── src/│   ├── src/
+
+│   └── package.json│   └── package.json
+
+├── package.json├── package.json
+
+└── README.md└── README.md
+
+``````
+
+
+
+## Quick Start## Inicio Rápido
+
+
+
+### 1. Setup### 1. Configuración
+
+```bash```bash
+
+npm installnpm install
+
+npm install --prefix platform-backendnpm install --prefix platform-backend
+
+npm install --prefix platform-frontendnpm install --prefix platform-frontend
+
+
+
+cp platform-backend/.env.example platform-backend/.env# Copiar y editar .env
+
+cp platform-frontend/.env.example platform-frontend/.envcp platform-backend/.env.example platform-backend/.env
+
+```cp platform-frontend/.env.example platform-frontend/.env
 
 ```
-Browsers (agents)
-    |
-    | HTTP + Socket.IO
-    v
-Platform Frontend (React/Vite, port 5173)
-    |
-    | REST + Socket.IO
-    v
-Platform Backend (Express + Prisma, port 4000)
-    |
-    | WhatsApp session control
-    v
-WPPConnect Core (Node, port 3000)
-    |
-    | Puppeteer drives WhatsApp Web
-    v
-WhatsApp Web
+
+### 2. Database
+
+```bash### 2. Base de datos
+
+cd platform-backend```bash
+
+npx prisma migrate deploycd platform-backend
+
+cd ..npx prisma migrate deploy
+
+```cd ..
+
 ```
 
-Persistent data (users, conversations, quick replies, sessions, media metadata) lives in MySQL or MariaDB.
+### 3. Run
 
-| Component            | Default port | Notes                                                                 |
-| -------------------- | ------------ | --------------------------------------------------------------------- |
-| WPPConnect dashboard | 3000         | Web UI to start/stop the WhatsApp client, view QR codes, inspect logs |
-| Platform backend API | 4000         | REST API, Socket.IO server, static `/uploads` for media               |
-| Platform frontend    | 5173         | Vite dev server for the operator console                              |
-| MySQL / MariaDB      | 3306         | Prisma datasource, stores all platform entities                       |
+```bash### 3. Iniciar
 
-## Repository Layout
+# Terminal 1 - Backend```bash
 
-| Path                                   | Purpose                                                                                |
-| -------------------------------------- | -------------------------------------------------------------------------------------- |
-| `/`                                    | Upstream `@wppconnect-team/wppconnect` package, dashboard assets, base package.json    |
-| `platform-backend/`                    | Express API (TypeScript), Prisma schema, scheduler, WhatsApp session management, seeds |
-| `platform-frontend/`                   | React 18 + Vite operator console with quick reply UI and Socket.IO client              |
-| `platform-backend/db/`                 | SQL schemas and seed scripts for quick replies                                         |
-| `platform-backend/scripts/`            | Utilities such as `create-test-user.ts` and `seed-quick-replies.ts`                    |
-| `docs/`, `examples/`, `platform-docs/` | Vendor documentation retained for reference                                            |
-| `dashboard/`                           | Static assets for the WPPConnect dashboard (served on port 3000)                       |
-| `STARTUP-GUIDE.md`                     | Step-by-step operational playbook (Windows focused)                                    |
-| `QUICK-REPLIES-GUIDE.md`               | Functional deep dive into quick replies and shortcuts                                  |
-| `SHORTCUT-DETECTION-IMPLEMENTATION.md` | Frontend implementation notes for shortcut handling                                    |
+npm start --prefix platform-backend# Terminal 1 - Backend
 
-## Feature Highlights
+npm start --prefix platform-backend
 
-- Session-based authentication backed by Prisma with role-aware authorization for `ADMIN`, `SUPERVISOR`, `OPERATOR`, `SUPPORT`, and `SALES`.
-- Conversation lifecycle tracking: persistent contact data, area ownership, operator assignment, status transitions, and message history for contacts, bot, and operators.
-- Areas, load-balanced assignment, and working-hour guardrails that block escalations outside office hours and send configurable courtesy messages.
-- Visual flow builder persisted in MySQL covering message, menu, action, redirect, and end nodes.
-- Quick replies with `/shortcut` detection, keyboard navigation, and template variables (for example `[OPERADOR]`, `{operatorName}`) injected client side.
-- Scheduler that closes inactive conversations, logs events, and attempts to send a WhatsApp courtesy message using any active operator session.
-- Media ingestion for images, video, audio, documents, stickers, and locations with storage under `platform-backend/uploads` (auto-created by the service).
-- Socket.IO rooms by user, role, and area broadcasting `conversation:update`, `conversation:incoming`, `message:new`, `conversation:closed`, `session:qr`, `session:status`, and error/loading events.
+# Terminal 2 - Frontend
+
+npm run dev --prefix platform-frontend# Terminal 2 - Frontend
+
+```npm run dev --prefix platform-frontend
+
+```
+
+Visit: **http://localhost:5173**
+
+Accede a: http://localhost:5173
+
+---
+
+## Configuración de Producción
+
+## Production Deployment
+
+### Variables de entorno críticas
+
+### Environment Variables
+
+**Backend (.env):**
+
+**Backend (.env):**```env
+
+```envDATABASE_URL=mysql://user:pass@host/db
+
+DATABASE_URL=mysql://user:pass@host/dbSESSION_SECRET=<clave-aleatoria-segura>
+
+SESSION_SECRET=<random-secure-key>CORS_ORIGIN=https://tu-dominio.com
+
+CORS_ORIGIN=https://your-domain.comPORT=4000
+
+PORT=4000```
+
+WPP_HEADLESS=true
+
+```**Frontend (.env):**
+
+```env
+
+**Frontend (.env):**VITE_API_URL=https://api.tu-dominio.com
+
+```env```
+
+VITE_API_URL=https://api.your-domain.com
+
+```### Deploy
+
+
+
+### Deploy```bash
+
+```bash# Instalar
+
+npm ci --prefix platform-backendnpm ci --prefix platform-backend
+
+npm ci --prefix platform-frontendnpm ci --prefix platform-frontend
+
+npm run build --prefix platform-backend
+
+npm run build --prefix platform-frontend# Compilar
+
+npx prisma migrate deploy --prefix platform-backendnpm run build --prefix platform-backend
+
+npm start --prefix platform-backendnpm run build --prefix platform-frontend
+
+# Serve platform-frontend/dist with nginx/apache
+
+```# Migrar BD
+
+npx prisma migrate deploy --prefix platform-backend
+
+---
+
+# Iniciar Backend
+
+## Featuresnpm start --prefix platform-backend
+
+
+
+- ✅ Real-time conversation management# Servir Frontend desde platform-frontend/dist (nginx/apache)
+
+- ✅ Multi-operator with roles & permissions```
+
+- ✅ Customizable bot flows
+
+- ✅ Quick replies & shortcuts## Características Principales
+
+- ✅ Full message history
+
+- ✅ WhatsApp session control- ✅ Gestión de conversaciones en tiempo real
+
+- ✅ Auto-close inactive conversations- ✅ Multi-operador
+
+- ✅ Media handling (images, audio, video)- ✅ Bot con flujos personalizados
+
+- ✅ Socket.IO live updates- ✅ Respuestas rápidas
+
+- ✅ Historial de mensajes
+
+---- ✅ Control de sesión WhatsApp
+
+- ✅ Auto-cierre de conversaciones
+
+## Requirements
+
+## Documentación
+
+- **Node.js 18+** with npm 9+
+
+- **MySQL 8+** or **MariaDB 10.6+**- **Backend**: `platform-backend/README.md`
+
+- **Chrome/Chromium** (auto-downloaded by Puppeteer)- **Frontend**: `platform-frontend/README.md`
+
+- **License**: Ver `LICENSE.md`
+
+---
+
+## Soporte
+
+## Main API Routes
+
+Para problemas y sugerencias, consulta la documentación en cada directorio de módulo.
+
+| Route | Methods | Purpose |
+
+|-------|---------|---------|
+
+| `/api/auth` | POST | Login/Logout |- Session-based authentication backed by Prisma with role-aware authorization for `ADMIN`, `SUPERVISOR`, `OPERATOR`, `SUPPORT`, and `SALES`.
+
+| `/api/bot` | GET/POST | WhatsApp control |- Conversation lifecycle tracking: persistent contact data, area ownership, operator assignment, status transitions, and message history for contacts, bot, and operators.
+
+| `/api/conversations` | GET/POST | Chat management |- Areas, load-balanced assignment, and working-hour guardrails that block escalations outside office hours and send configurable courtesy messages.
+
+| `/api/messages` | GET/POST | Messages |- Visual flow builder persisted in MySQL covering message, menu, action, redirect, and end nodes.
+
+| `/api/flows` | CRUD | Bot flows |- Quick replies with `/shortcut` detection, keyboard navigation, and template variables (for example `[OPERADOR]`, `{operatorName}`) injected client side.
+
+| `/api/quick-replies` | CRUD | Quick replies |- Scheduler that closes inactive conversations, logs events, and attempts to send a WhatsApp courtesy message using any active operator session.
+
+| `/api/users` | CRUD | User management |- Media ingestion for images, video, audio, documents, stickers, and locations with storage under `platform-backend/uploads` (auto-created by the service).
+
+| `/api/areas` | CRUD | Support areas |- Socket.IO rooms by user, role, and area broadcasting `conversation:update`, `conversation:incoming`, `message:new`, `conversation:closed`, `session:qr`, `session:status`, and error/loading events.
+
 - Operator console with WhatsApp-like layout, unread tracking, search, filters (active/all/closed), image modal, and quick reply suggestions.
-- WPPConnect dashboard to manage the WhatsApp session, inspect status history, recent messages, logs, and trigger start/stop/pause actions.
 
-## Technology Stack
+---- WPPConnect dashboard to manage the WhatsApp session, inspect status history, recent messages, logs, and trigger start/stop/pause actions.
 
-| Layer               | Technology                                                                       |
-| ------------------- | -------------------------------------------------------------------------------- |
-| WhatsApp automation | WPPConnect (Node, Puppeteer)                                                     |
-| Backend             | Node.js 18+, Express 4, Prisma 5, Socket.IO 4, express-session with Prisma store |
+
+
+## Tech Stack## Technology Stack
+
+
+
+- **Backend**: Node.js, Express, Prisma, Socket.IO| Layer               | Technology                                                                       |
+
+- **Frontend**: React 18, Vite, TypeScript| ------------------- | -------------------------------------------------------------------------------- |
+
+- **Database**: MySQL / MariaDB| WhatsApp automation | WPPConnect (Node, Puppeteer)                                                     |
+
+- **Automation**: WPPConnect, Puppeteer| Backend             | Node.js 18+, Express 4, Prisma 5, Socket.IO 4, express-session with Prisma store |
+
 | Frontend            | React 18, Vite 5, TypeScript, Axios, React Router                                |
-| Database            | MySQL 8+ or MariaDB 10.6+                                                        |
+
+---| Database            | MySQL 8+ or MariaDB 10.6+                                                        |
+
 | Tooling             | ESLint, TypeScript, ts-node-dev, prisma CLI                                      |
+
+## License
 
 ## Prerequisites
 
+LGPL-3.0-or-later (inherited from WPPConnect)
+
 - Node.js 18 or newer and npm 9+ on the host machine.
-- MySQL 8.x or MariaDB 10.6+ with credentials that match the Prisma connection string.
+
+See `LICENSE.md` for details.- MySQL 8.x or MariaDB 10.6+ with credentials that match the Prisma connection string.
+
 - Chrome/Chromium or the system dependencies required by Puppeteer (WPPConnect downloads Chromium automatically by default).
 - Git (if cloning the repository).
 - On Windows PowerShell allow local scripts once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. Alternatively call `npm.cmd` instead of `npm`.
