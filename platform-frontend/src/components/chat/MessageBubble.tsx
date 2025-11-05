@@ -1,5 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { HistoryItem } from '../../types/chat';
+import ImageViewerModal from './ImageViewerModal';
+
+// Obtener la URL base del API desde la variable de entorno o el proxy
+function getApiBaseUrl(): string {
+  const apiUrl = import.meta.env.VITE_API_URL;
+  if (apiUrl && apiUrl.length) {
+    // Si VITE_API_URL es http://example.com:4001/api, extraer http://example.com:4001
+    return apiUrl.replace(/\/api\/?$/, '');
+  }
+  // En desarrollo, usar el mismo host/puerto (el proxy se encarga)
+  return window.location.origin;
+}
 
 type MessageBubbleProps = {
   item: HistoryItem;
@@ -14,6 +26,8 @@ function formatTime(isoDate?: string) {
 }
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({ item }) => {
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
   if (item.type === 'label') {
     const label = (item.label || '').toLowerCase();
     const isStart = label.includes('inicio');
@@ -53,13 +67,24 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ item }) => {
     ? 'message-bubble--outgoing'
     : 'message-bubble--incoming';
 
-  // Si la URL es relativa, anteponer el hostname y puerto del backend
+  // Si la URL es relativa, construir la URL completa usando la base del API
   const getFullMediaUrl = (url?: string | null) => {
     if (!url) return '';
-    if (url.startsWith('/uploads/')) {
-      return `http://localhost:4000${url}`;
+
+    // Si es una URL absoluta, devolverla tal cual
+    if (url.startsWith('http')) {
+      return url;
     }
-    return url;
+
+    // Si ya tiene /uploads/, usar la base del API
+    if (url.startsWith('/uploads/')) {
+      const apiBase = getApiBaseUrl();
+      return `${apiBase}${url}`;
+    }
+
+    // Si no, construir la ruta completa
+    const apiBase = getApiBaseUrl();
+    return `${apiBase}/uploads/${url}`;
   };
 
   return (
@@ -72,15 +97,35 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ item }) => {
           {/* Renderizar contenido multimedia si existe */}
           {item.mediaType && item.mediaUrl ? (
             item.mediaType.includes('image') ? (
-              <img
-                src={getFullMediaUrl(item.mediaUrl)}
-                alt="Imagen recibida"
-                style={{
-                  maxWidth: '220px',
-                  borderRadius: '8px',
-                  marginBottom: '0.5rem',
-                }}
-              />
+              <>
+                <img
+                  src={getFullMediaUrl(item.mediaUrl)}
+                  alt="Imagen recibida"
+                  onClick={() =>
+                    setSelectedImage(getFullMediaUrl(item.mediaUrl))
+                  }
+                  style={{
+                    maxWidth: '220px',
+                    borderRadius: '8px',
+                    marginBottom: '0.5rem',
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.target as HTMLImageElement).style.transform =
+                      'scale(1.05)';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.target as HTMLImageElement).style.transform = 'scale(1)';
+                  }}
+                />
+                <ImageViewerModal
+                  isOpen={selectedImage === getFullMediaUrl(item.mediaUrl)}
+                  imageUrl={getFullMediaUrl(item.mediaUrl)}
+                  onClose={() => setSelectedImage(null)}
+                  filename={`imagen-${Date.now()}.jpg`}
+                />
+              </>
             ) : item.mediaType.includes('audio') ? (
               <audio
                 controls
