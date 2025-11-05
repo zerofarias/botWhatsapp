@@ -7,6 +7,7 @@ export type ContactSummary = {
   name: string | null;
   phone: string;
   dni: string | null;
+  photoUrl?: string | null;
 };
 
 export type ConversationSummary = {

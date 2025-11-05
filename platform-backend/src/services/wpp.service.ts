@@ -835,7 +835,7 @@ function extractPhoneNumber(whatsappId: string): string {
 async function getContactInfoFromWhatsApp(
   client: Whatsapp,
   phoneNumber: string
-): Promise<{ name: string | null; number: string }> {
+): Promise<{ name: string | null; number: string; photoUrl?: string | null }> {
   const cleanNumber = extractPhoneNumber(phoneNumber);
 
   try {
@@ -847,10 +847,12 @@ async function getContactInfoFromWhatsApp(
         contactInfo.pushname ||
         contactInfo.shortName ||
         null;
+      const photoUrl = (contactInfo as any).profilePicThumbObj?.imgFull || null;
+
       console.log(
-        `[WPP] Contact info for ${cleanNumber}: name="${contactName}"`
+        `[WPP] Contact info for ${cleanNumber}: name="${contactName}", photo=${!!photoUrl}`
       );
-      return { name: contactName, number: cleanNumber };
+      return { name: contactName, number: cleanNumber, photoUrl };
     }
   } catch (error) {
     console.warn(`[WPP] Could not get contact info for ${cleanNumber}:`, error);
@@ -868,15 +870,17 @@ async function ensureConversation(
   // Extraer número limpio y obtener información del contacto desde WhatsApp
   const cleanNumber = extractPhoneNumber(contactNumber);
   let contactName: string | null = null;
+  let contactPhotoUrl: string | null = null;
 
   if (client) {
     const contactInfo = await getContactInfoFromWhatsApp(client, contactNumber);
     contactName = contactInfo.name;
+    contactPhotoUrl = contactInfo.photoUrl || null;
   }
 
   const { contact, created: contactCreated } = await findOrCreateContactByPhone(
     cleanNumber,
-    { name: contactName }
+    { name: contactName, photoUrl: contactPhotoUrl }
   );
 
   const existing = await findOpenConversationByPhone(cleanNumber);

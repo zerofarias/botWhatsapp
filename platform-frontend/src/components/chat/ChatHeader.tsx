@@ -41,7 +41,20 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
     <header className="chat-header">
       <div className="chat-header-info">
         <div className="chat-header-avatar">
-          {displayName.charAt(0).toUpperCase()}
+          {conversation.contact?.photoUrl ? (
+            <img
+              src={conversation.contact.photoUrl}
+              alt={displayName}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                borderRadius: 'inherit',
+              }}
+            />
+          ) : (
+            displayName.charAt(0).toUpperCase()
+          )}
         </div>
         <div className="chat-header-details">
           <div className="name">
@@ -73,7 +86,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
         </div>
       </div>
       <div className="chat-header-actions">
-        {!conversation.contact && (
+        {!conversation.contact || !conversation.contact.id ? (
           <button
             onClick={() => setShowAddContactModal(true)}
             className="btn-add-contact"
@@ -81,7 +94,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
           >
             + Contacto
           </button>
-        )}
+        ) : null}
         {isBotActive && onTakeBot && (
           <button
             onClick={onTakeBot}

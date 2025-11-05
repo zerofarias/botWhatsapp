@@ -260,6 +260,7 @@ export async function findOrCreateContactByPhone(
     name?: string | null;
     areaId?: number | null;
     dni?: string | null;
+    photoUrl?: string | null;
   }
 ) {
   const phone = normalizePhone(phoneValue);
@@ -276,6 +277,7 @@ export async function findOrCreateContactByPhone(
       name: normalizeName(defaults?.name) || 'Desconocido',
       phone,
       dni: defaults?.dni ? sanitizeDni(defaults.dni) : null,
+      photoUrl: defaults?.photoUrl || null,
       areaId: defaults?.areaId ?? null,
     },
     select: contactSelect,

@@ -254,6 +254,7 @@ model Contact {
   name          String
   phone         String         @unique
   dni           String?        @db.VarChar(20)
+  photoUrl      String?        @map("photo_url") @db.LongText
   areaId        Int?           @map("area_id")
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
