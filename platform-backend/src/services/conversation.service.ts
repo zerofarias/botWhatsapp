@@ -128,6 +128,7 @@ export const conversationSelect = {
       createdAt: true,
       updatedAt: true,
       dni: true,
+      photoUrl: true,
     },
   },
 } satisfies Prisma.ConversationSelect;

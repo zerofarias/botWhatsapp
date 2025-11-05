@@ -7,6 +7,7 @@ const contactSelect = Prisma.validator<Prisma.ContactSelect>()({
   name: true,
   phone: true,
   dni: true,
+  photoUrl: true,
   areaId: true,
   createdAt: true,
   updatedAt: true,

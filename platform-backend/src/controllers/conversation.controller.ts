@@ -215,6 +215,7 @@ interface Contact {
   name?: string;
   phone?: string;
   dni?: string | null;
+  photoUrl?: string | null;
 }
 
 interface Conversation {
