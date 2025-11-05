@@ -300,7 +300,10 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
           // NO recargar historial aquí - ya se cargó en el efecto principal
         })
         .catch((error) => {
-          console.error('[useChatSession] Error starting flow:', error);
+          // 404 es esperado si no hay flujo asignado - no es un error real
+          if (error?.response?.status !== 404) {
+            console.error('[useChatSession] Error starting flow:', error);
+          }
           // Remover de la lista si falló para permitir reintento
           flowStartedRef.current.delete(conversationKey);
         });
