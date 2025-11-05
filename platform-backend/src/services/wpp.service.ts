@@ -880,8 +880,18 @@ async function ensureConversation(
 
   const { contact, created: contactCreated } = await findOrCreateContactByPhone(
     cleanNumber,
-    { name: contactName, photoUrl: contactPhotoUrl }
+    { name: contactName }
   );
+
+  // Si obtuvimos una foto de WhatsApp, actualizarla
+  if (contactPhotoUrl) {
+    await (prisma.contact.update as any)({
+      where: { id: contact.id },
+      data: { photoUrl: contactPhotoUrl },
+    }).catch((err: unknown) => {
+      console.warn(`[WPP] Could not update contact photo:`, err);
+    });
+  }
 
   const existing = await findOpenConversationByPhone(cleanNumber);
   if (existing) {

@@ -126,13 +126,13 @@ model BotSession {
 model Flow {
   id                  Int              @id @default(autoincrement())
   name                String
-  type                String?          @db.VarChar(32)
   trigger             String?
   message             String
+  type                String?          @db.VarChar(32)
   parentId            Int?             @map("parent_id")
   areaId              Int?             @map("area_id")
   orderIndex          Int              @default(0) @map("order_index")
-  metadata            Json?            @db.Json
+  metadata            String?          @db.LongText
   isActive            Boolean          @default(true) @map("is_active")
   createdBy           Int              @map("created_by")
   createdAt           DateTime         @default(now()) @map("created_at")
@@ -254,10 +254,10 @@ model Contact {
   name          String
   phone         String         @unique
   dni           String?        @db.VarChar(20)
-  photoUrl      String?        @map("photo_url") @db.LongText
   areaId        Int?           @map("area_id")
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
+  photoUrl      String?        @map("photo_url") @db.LongText
   area          Area?          @relation(fields: [areaId], references: [id])
   conversations Conversation[]
 

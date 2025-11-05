@@ -14,7 +14,7 @@
     "seed:test-user": "node --loader ts-node/esm scripts/create-test-user.ts"
   },
   "dependencies": {
-    "@prisma/client": "^6.18.0",
+    "@prisma/client": "^6.19.0",
     "@wppconnect-team/wppconnect": "^1.37.5",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
