@@ -207,9 +207,172 @@
         color: var(--muted);
         min-height: 1rem;
       }
+
+      .toast-container {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        max-width: 380px;
+      }
+
+      .toast {
+        padding: 1rem 1.25rem;
+        border-radius: 12px;
+        background: rgba(15, 23, 42, 0.95);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        box-shadow: 0 20px 35px -20px rgba(15, 23, 42, 0.8);
+        animation: slideIn 0.3s ease-out;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 0.9rem;
+      }
+
+      @keyframes slideIn {
+        from {
+          transform: translateX(400px);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+
+      @keyframes slideOut {
+        to {
+          transform: translateX(400px);
+          opacity: 0;
+        }
+      }
+
+      .toast.closing {
+        animation: slideOut 0.3s ease-out forwards;
+      }
+
+      .toast.info {
+        border-color: rgba(28, 126, 214, 0.3);
+      }
+
+      .toast.success {
+        border-color: rgba(31, 179, 68, 0.3);
+      }
+
+      .toast.warn {
+        border-color: rgba(240, 140, 0, 0.3);
+      }
+
+      .toast.error {
+        border-color: rgba(224, 49, 49, 0.3);
+      }
+
+      .toast-icon {
+        font-size: 1.2rem;
+        flex-shrink: 0;
+      }
+
+      .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+
+      .checkbox-group input[type='checkbox'] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+      }
+
+      .checkbox-group label {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.9rem;
+        color: var(--muted);
+        cursor: pointer;
+      }
+
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 0.8rem;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        font-weight: 500;
+      }
+
+      .status-badge.idle {
+        background: rgba(148, 163, 184, 0.15);
+        color: var(--muted);
+      }
+
+      .status-badge.loading {
+        background: rgba(240, 140, 0, 0.15);
+        color: #f08c00;
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+
+      .status-badge.authenticating {
+        background: rgba(240, 140, 0, 0.15);
+        color: #f08c00;
+        animation: pulse 1s ease-in-out infinite;
+      }
+
+      .status-badge.qr-pending {
+        background: rgba(240, 140, 0, 0.15);
+        color: #f08c00;
+        animation: pulse 0.8s ease-in-out infinite;
+      }
+
+      .status-badge.logged-in {
+        background: rgba(31, 179, 68, 0.15);
+        color: var(--success);
+      }
+
+      .status-badge.running {
+        background: rgba(31, 179, 68, 0.15);
+        color: var(--success);
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      .status-badge.error {
+        background: rgba(224, 49, 49, 0.15);
+        color: var(--error);
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.6;
+        }
+      }
+
+      .uptime {
+        font-size: 0.8rem;
+        color: var(--muted);
+        margin-top: 0.25rem;
+      }
     </style>
   </head>
   <body>
+    <div class="toast-container" id="toast-container"></div>
     <header>
       <h1>WPPConnect Dashboard</h1>
       <p id="session-name">Session: &mdash;</p>
@@ -217,11 +380,19 @@
     <main class="grid grid-two">
       <section>
         <h2>Controls</h2>
+        <div class="checkbox-group">
+          <input type="checkbox" id="auto-start-checkbox" />
+          <label for="auto-start-checkbox">Iniciar WPP automáticamente</label>
+        </div>
         <div class="controls">
           <button id="start-btn">Start Session</button>
           <button id="stop-btn" class="secondary">Stop Session</button>
-          <span id="connection-state" class="chip">IDLE</span>
+          <div id="connection-state" class="status-badge idle">
+            <span class="status-dot"></span>
+            <span>IDLE</span>
+          </div>
         </div>
+        <div class="uptime" id="uptime"></div>
         <p class="message" id="action-feedback"></p>
         <div>
           <h3>Status History</h3>
@@ -288,6 +459,10 @@ Waiting for QR code...
     <script>
       const $ = (selector) => document.querySelector(selector);
       const statusEndpoint = '/api/status';
+      const STORAGE_KEY = 'wpp-dashboard-auto-start';
+      const STORAGE_SESSION_START = 'wpp-session-start-time';
+
+      let sessionStartTime = null;
 
       const elements = {
         sessionName: $('#session-name'),
@@ -301,7 +476,109 @@ Waiting for QR code...
         actionFeedback: $('#action-feedback'),
         sendForm: $('#send-message-form'),
         sendFeedback: $('#send-feedback'),
+        autoStartCheckbox: $('#auto-start-checkbox'),
+        toastContainer: $('#toast-container'),
+        uptime: $('#uptime'),
       };
+
+      // Toast notifications
+      function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+
+        const icons = {
+          info: 'ℹ️',
+          success: '✓',
+          warn: '⚠️',
+          error: '✕',
+        };
+
+        toast.innerHTML = `
+          <span class="toast-icon">${icons[type] || icons.info}</span>
+          <span>${escapeHtml(message)}</span>
+        `;
+
+        elements.toastContainer.appendChild(toast);
+
+        setTimeout(() => {
+          toast.classList.add('closing');
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+      }
+
+      // Storage management
+      function getAutoStartPreference() {
+        return localStorage.getItem(STORAGE_KEY) === 'true';
+      }
+
+      function setAutoStartPreference(value) {
+        localStorage.setItem(STORAGE_KEY, value ? 'true' : 'false');
+        elements.autoStartCheckbox.checked = value;
+      }
+
+      function getSessionStartTime() {
+        const stored = localStorage.getItem(STORAGE_SESSION_START);
+        return stored ? new Date(stored) : null;
+      }
+
+      function setSessionStartTime(time) {
+        if (time) {
+          sessionStartTime = time;
+          localStorage.setItem(STORAGE_SESSION_START, time.toISOString());
+        } else {
+          sessionStartTime = null;
+          localStorage.removeItem(STORAGE_SESSION_START);
+        }
+      }
+
+      function formatUptime(startTime) {
+        if (!startTime) return '';
+        const now = new Date();
+        const diff = now - startTime;
+
+        const seconds = Math.floor((diff / 1000) % 60);
+        const minutes = Math.floor((diff / (1000 * 60)) % 60);
+        const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+        if (days > 0) return `Conectado hace ${days}d ${hours}h`;
+        if (hours > 0) return `Conectado hace ${hours}h ${minutes}m`;
+        if (minutes > 0) return `Conectado hace ${minutes}m`;
+        return `Conectado hace ${seconds}s`;
+      }
+
+      function updateStatusBadge(isRunning, connectionState) {
+        const badge = elements.connectionState;
+        badge.className = 'status-badge';
+
+        const stateMap = {
+          IDLE: 'idle',
+          LOADING: 'loading',
+          AUTHENTICATING: 'authenticating',
+          QR_PENDING: 'qr-pending',
+          LOGGED_IN: 'logged-in',
+          RUNNING: 'running',
+          ERROR: 'error',
+        };
+
+        const stateClass = stateMap[connectionState] || 'idle';
+        badge.classList.add(stateClass);
+
+        const labels = {
+          idle: 'INACTIVO',
+          loading: 'CARGANDO...',
+          authenticating: 'AUTENTICANDO...',
+          'qr-pending': 'QR PENDIENTE',
+          'logged-in': 'CONECTADO',
+          running: 'EN EJECUCIÓN',
+          error: 'ERROR',
+        };
+
+        badge.innerHTML = `
+          <span class="status-dot"></span>
+          <span>${labels[stateClass]}</span>
+        `;
+      }
 
       async function fetchStatus() {
         try {
@@ -317,24 +594,39 @@ Waiting for QR code...
         } catch (error) {
           console.error(error);
           elements.actionFeedback.textContent =
-            'Cannot reach dashboard API. Check the backend.';
+            'No se puede alcanzar el API del dashboard. Verifica el backend.';
+          updateStatusBadge(false, 'ERROR');
         }
       }
 
       function updateDashboard(data) {
         elements.sessionName.textContent = `Session: ${data.session}`;
-        elements.connectionState.textContent =
+
+        const connectionState =
           data.connectionState || (data.running ? 'RUNNING' : 'IDLE');
-        elements.connectionState.classList.toggle(
-          'active',
-          Boolean(data.running)
-        );
+        updateStatusBadge(data.running, connectionState);
+
+        // Handle session start time
+        if (data.running && !sessionStartTime) {
+          setSessionStartTime(new Date());
+          showToast('WPP conectado exitosamente', 'success');
+        } else if (!data.running && sessionStartTime) {
+          setSessionStartTime(null);
+          showToast('WPP desconectado', 'warn');
+        }
+
+        // Update uptime display
+        if (sessionStartTime) {
+          elements.uptime.textContent = formatUptime(sessionStartTime);
+        } else {
+          elements.uptime.textContent = '';
+        }
 
         if (data.qr && data.qr.ascii) {
           elements.qrDisplay.textContent = data.qr.ascii;
           elements.qrDisplay.classList.remove('qr-placeholder');
         } else {
-          elements.qrDisplay.textContent = 'Waiting for QR code...';
+          elements.qrDisplay.textContent = 'Esperando código QR...';
           elements.qrDisplay.classList.add('qr-placeholder');
         }
 
@@ -352,7 +644,7 @@ Waiting for QR code...
         if (!statusHistory.length) {
           const chip = document.createElement('span');
           chip.className = 'chip';
-          chip.textContent = 'No status yet';
+          chip.textContent = 'Sin estado aún';
           elements.statusHistory.appendChild(chip);
           return;
         }
@@ -373,7 +665,7 @@ Waiting for QR code...
       function renderMessageHistory(messages) {
         if (!messages.length) {
           elements.messageHistory.innerHTML =
-            '<tr><td colspan="3">No messages yet.</td></tr>';
+            '<tr><td colspan="3">No hay mensajes aún.</td></tr>';
           return;
         }
 
@@ -385,7 +677,7 @@ Waiting for QR code...
               <tr>
                 <td>${formatTime(message.timestamp)}</td>
                 <td>${escapeHtml(message.from)}</td>
-                <td>${escapeHtml(message.body || '<no content>')}</td>
+                <td>${escapeHtml(message.body || '<sin contenido>')}</td>
               </tr>
             `
           )
@@ -397,7 +689,7 @@ Waiting for QR code...
       function renderLogs(logs) {
         if (!logs.length) {
           elements.logOutput.innerHTML =
-            '<div class="log-entry">No logs yet.</div>';
+            '<div class="log-entry">Sin logs aún.</div>';
           return;
         }
 
@@ -444,27 +736,41 @@ Waiting for QR code...
           const payload = await response.json().catch(() => ({}));
 
           if (!response.ok || payload.ok === false) {
-            const message = payload.error || 'Action failed.';
+            const message = payload.error || 'Acción fallida.';
             feedbackEl.textContent = message;
+            showToast(message, 'error');
             fetchStatus();
             return;
           }
 
-          feedbackEl.textContent = 'Action completed.';
+          feedbackEl.textContent = 'Acción completada.';
+          showToast('Acción completada', 'success');
         } catch (error) {
-          feedbackEl.textContent = 'Request failed. See console for details.';
+          feedbackEl.textContent = 'Error en la solicitud. Ver consola.';
+          showToast('Error en la solicitud', 'error');
           console.error(error);
         } finally {
           fetchStatus();
         }
       }
 
+      // Event listeners
       elements.startBtn.addEventListener('click', () => {
         callAction('/api/start', elements.actionFeedback);
       });
 
       elements.stopBtn.addEventListener('click', () => {
         callAction('/api/stop', elements.actionFeedback);
+      });
+
+      elements.autoStartCheckbox.addEventListener('change', (e) => {
+        setAutoStartPreference(e.target.checked);
+        showToast(
+          e.target.checked
+            ? 'Auto-start habilitado'
+            : 'Auto-start deshabilitado',
+          'info'
+        );
       });
 
       elements.sendForm.addEventListener('submit', async (event) => {
@@ -476,11 +782,13 @@ Waiting for QR code...
         };
 
         if (!payload.to || !payload.message) {
-          elements.sendFeedback.textContent = 'Please fill all fields.';
+          elements.sendFeedback.textContent =
+            'Por favor completa todos los campos.';
+          showToast('Por favor completa todos los campos', 'warn');
           return;
         }
 
-        elements.sendFeedback.textContent = 'Sending...';
+        elements.sendFeedback.textContent = 'Enviando...';
 
         try {
           const response = await fetch('/api/send-message', {
@@ -494,24 +802,55 @@ Waiting for QR code...
           const data = await response.json().catch(() => ({}));
 
           if (!response.ok || data.ok === false) {
-            const message = data.error || 'Failed to send message.';
+            const message = data.error || 'Error al enviar mensaje.';
             elements.sendFeedback.textContent = message;
+            showToast(message, 'error');
             fetchStatus();
             return;
           }
 
-          elements.sendFeedback.textContent = 'Message sent.';
+          elements.sendFeedback.textContent = 'Mensaje enviado.';
+          showToast('Mensaje enviado', 'success');
           elements.sendForm.reset();
           fetchStatus();
         } catch (error) {
           console.error(error);
-          elements.sendFeedback.textContent =
-            'Request failed. Check the console.';
+          elements.sendFeedback.textContent = 'Error en la solicitud.';
+          showToast('Error en la solicitud', 'error');
         }
       });
 
-      fetchStatus();
-      setInterval(fetchStatus, 4000);
+      // Initialize
+      function initialize() {
+        // Restore auto-start preference
+        const autoStartEnabled = getAutoStartPreference();
+        elements.autoStartCheckbox.checked = autoStartEnabled;
+
+        // Restore session start time if it was saved
+        sessionStartTime = getSessionStartTime();
+
+        // Initial fetch
+        fetchStatus();
+
+        // Auto-start if enabled
+        if (autoStartEnabled) {
+          setTimeout(() => {
+            callAction('/api/start', elements.actionFeedback);
+          }, 500);
+        }
+
+        // Poll every 4 seconds
+        setInterval(fetchStatus, 4000);
+
+        // Update uptime every second
+        setInterval(() => {
+          if (sessionStartTime) {
+            elements.uptime.textContent = formatUptime(sessionStartTime);
+          }
+        }, 1000);
+      }
+
+      initialize();
     </script>
   </body>
 </html>
