@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import QuickReplyPanel from '../QuickReplyPanel';
+import QuickReplyEditor from '../QuickReplyEditor';
 import {
   quickReplyService,
   type QuickReply,
@@ -30,6 +31,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
   const [allQuickReplies, setAllQuickReplies] = useState<QuickReply[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
+  const [showEditor, setShowEditor] = useState(false);
 
   // Cargar quick replies al montar
   useEffect(() => {
@@ -132,6 +134,16 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
     setShowSuggestions(false);
   };
 
+  const handleQuickReplySaved = async (reply: QuickReply) => {
+    // Recargar las quick replies después de crear una nueva
+    try {
+      const replies = await quickReplyService.list();
+      setAllQuickReplies(replies);
+    } catch (err) {
+      console.error('Error reloading quick replies:', err);
+    }
+  };
+
   return (
     <>
       <form
@@ -165,26 +177,64 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
             Esperando que alguien tome el chat...
           </div>
         )}
-        <button
-          type="button"
-          className="chat-composer-note-btn"
-          onClick={() => setNoteMode(true)}
+        <div
           style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px',
             marginRight: '8px',
             alignSelf: 'flex-end',
-            height: '40px',
-            background: isNoteMode ? '#ffd700' : '#eee',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: isNoteMode ? 'not-allowed' : 'pointer',
-            color: '#333',
-            fontWeight: '500',
-            opacity: disabled ? 0.6 : 1,
           }}
-          disabled={isNoteMode || disabled}
         >
-          📝 Nota
-        </button>
+          <button
+            type="button"
+            className="chat-composer-note-btn"
+            onClick={() => setNoteMode(true)}
+            style={{
+              width: '40px',
+              height: '40px',
+              background: isNoteMode ? '#ffd700' : '#eee',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: isNoteMode ? 'not-allowed' : 'pointer',
+              fontSize: '20px',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: disabled ? 0.6 : 1,
+              transition: 'all 0.2s',
+            }}
+            disabled={isNoteMode || disabled}
+            title="Agregar nota interna"
+          >
+            📝
+          </button>
+          <button
+            type="button"
+            className="chat-composer-shortcut-btn"
+            onClick={() => setShowEditor(true)}
+            style={{
+              width: '40px',
+              height: '40px',
+              background: '#f0f0f0',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '18px',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: disabled ? 0.6 : 1,
+              transition: 'all 0.2s',
+            }}
+            disabled={disabled}
+            title="Crear nuevo atajo rápido"
+          >
+            ⚡
+          </button>
+        </div>
         <div style={{ position: 'relative', flex: 1 }}>
           <textarea
             className={`chat-composer-textarea${
@@ -292,6 +342,11 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
           Enviar
         </button>
       </form>
+      <QuickReplyEditor
+        isOpen={showEditor}
+        onClose={() => setShowEditor(false)}
+        onSave={handleQuickReplySaved}
+      />
     </>
   );
 };
