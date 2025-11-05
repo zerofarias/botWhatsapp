@@ -90,6 +90,35 @@ function normalizeToString(value: unknown): string {
   }
 }
 
+/**
+ * Limpia contenido de base64 de imágenes/datos
+ * Evita guardar imágenes como texto en notas y capturas
+ */
+function removeImageBase64(content: string): string {
+  if (!content || typeof content !== 'string') return '';
+
+  // Detectar y remover imágenes en base64
+  // Patrones: /9j/4AAQSkZJRg... (JPEG) o data:image/...;base64,...
+  const base64ImagePatterns = [
+    /(\n)?\/9j\/4AAQSkZJRg[\w+/]*={0,2}/g, // JPEG
+    /data:image\/[^;]*;base64,[A-Za-z0-9+/]*={0,2}/g, // data:image URIs
+    /data:application\/pdf;base64,[A-Za-z0-9+/]*={0,2}/g, // PDFs
+  ];
+
+  let cleaned = content;
+  for (const pattern of base64ImagePatterns) {
+    const match = cleaned.match(pattern);
+    if (match && match.index) {
+      // Tomar solo el texto antes de la imagen
+      cleaned = cleaned.substring(0, match.index).trim();
+      console.log(`[removeImageBase64] Imagen detectada y removida`);
+      break;
+    }
+  }
+
+  return cleaned;
+}
+
 function normalizeToNumber(value: unknown): number | null {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
@@ -410,7 +439,7 @@ export async function executeNode({
       );
       console.log(`[NOTE] builderMeta:`, JSON.stringify(builderMeta));
 
-      const noteContent = (node.message ||
+      let noteContent = (node.message ||
         (builderMeta as Record<string, unknown>)?.value ||
         '') as string;
 
@@ -420,7 +449,10 @@ export async function executeNode({
           (builderMeta as Record<string, unknown>)?.value
         }"`
       );
-      console.log(`[NOTE] noteContent final = "${noteContent}"`);
+
+      // Limpiar contenido de imágenes base64 antes de guardar
+      noteContent = removeImageBase64(noteContent);
+      console.log(`[NOTE] noteContent after cleaning = "${noteContent}"`);
 
       // Interpolar variables en el contenido de la nota
       const interpolatedNote = interpolateVariables(

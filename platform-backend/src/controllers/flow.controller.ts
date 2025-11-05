@@ -1072,7 +1072,27 @@ export async function saveFlowGraph(req: Request, res: Response) {
             : 'Nodo sin título';
 
         // Para nodos NOTE, siempre usar el campo message del payload
-        const message = typeof data.message === 'string' ? data.message : '';
+        // Pero FILTRAR imágenes/datos base64 que no debería estar en el contenido
+        let message = typeof data.message === 'string' ? data.message : '';
+
+        // Limpieza: eliminar datos base64 de imágenes (evitar que las imágenes se guarden como texto)
+        if (
+          message.includes('/9j/4AAQSkZJRg') ||
+          message.includes('data:image')
+        ) {
+          // Detectar si hay base64 de imagen y extraer solo el texto antes de ella
+          const base64Match = message.match(
+            /(\n)?\/9j\/4AAQSkZJRg[\w+/]*={0,2}|data:image[^;]*;base64,[A-Za-z0-9+/]*={0,2}/
+          );
+          if (base64Match) {
+            // Tomar solo el texto antes de la imagen
+            message = message.substring(0, base64Match.index || 0).trim();
+            console.log(
+              `[saveFlowGraph] Node "${nodeId}" (type: ${flowType}): Imagen removida del contenido. Mensaje limpio: "${message}"`
+            );
+          }
+        }
+
         console.log(
           `[saveFlowGraph] Node "${nodeId}" (type: ${flowType}): data.message="${message}"`
         );

@@ -71,7 +71,25 @@ export async function processMessageAndAdvanceFlow(
   let capturedVariableName: string | null = null;
   if (context.waitingForInput && context.waitingVariable) {
     const key = context.waitingVariable;
-    variableBag[key] = normalizedContent;
+    // Limpiar contenido de imágenes base64 antes de guardar en variable
+    let cleanedContent = normalizedContent;
+    if (
+      normalizedContent.includes('/9j/4AAQSkZJRg') ||
+      normalizedContent.includes('data:image')
+    ) {
+      const base64Match = normalizedContent.match(
+        /(\n)?\/9j\/4AAQSkZJRg[\w+/]*={0,2}|data:image[^;]*;base64,[A-Za-z0-9+/]*={0,2}/
+      );
+      if (base64Match && base64Match.index) {
+        cleanedContent = normalizedContent
+          .substring(0, base64Match.index)
+          .trim();
+        console.log(
+          `[processMessage] Imagen removida de variable "${key}". Contenido limpio: "${cleanedContent}"`
+        );
+      }
+    }
+    variableBag[key] = cleanedContent;
     contextWithMessage.waitingForInput = false;
     contextWithMessage.waitingVariable = null;
     capturedVariableName = key;
