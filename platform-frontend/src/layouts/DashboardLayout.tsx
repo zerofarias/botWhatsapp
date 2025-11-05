@@ -13,8 +13,6 @@ type NavigationLink = {
 const NAVIGATION_LINKS: NavigationLink[] = [
   { to: '/dashboard', label: 'Estado' },
   { to: '/dashboard/chat', label: 'Chat' },
-  // Flujos y Flow Builder eliminados del menú lateral
-  { to: '/dashboard/classic-flow', label: 'Classic Flow' },
   { to: '/dashboard/bots', label: 'Bots', roles: ['ADMIN', 'SUPERVISOR'] },
   { to: '/dashboard/users', label: 'Usuarios', roles: ['ADMIN'] },
   { to: '/dashboard/areas', label: 'Areas', roles: ['ADMIN'] },
@@ -58,7 +56,7 @@ export default function DashboardLayout() {
     <div className={`dashboard-layout${collapsed ? ' collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar__brand">
-          <span className="sidebar__logo">WPPConnect</span>
+          <span className="sidebar__logo">Bot</span>
           <button
             className="sidebar__collapse"
             onClick={() => setCollapsed((c) => !c)}

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { ConversationSummary } from '../../types/chat';
+import AddContactModal from './AddContactModal';
 
 // Helper functions from ChatPage (to be moved to utils)
 function getDisplayName(conversation: ConversationSummary) {
@@ -33,6 +34,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
   isBotActive,
   onTakeBot,
 }) => {
+  const [showAddContactModal, setShowAddContactModal] = useState(false);
   const displayName = getDisplayName(conversation);
 
   return (
@@ -42,7 +44,15 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
           {displayName.charAt(0).toUpperCase()}
         </div>
         <div className="chat-header-details">
-          <div className="name">{displayName}</div>
+          <div className="name">
+            {displayName}
+            {conversation.contact?.dni && (
+              <span className="chat-header-dni">
+                {' '}
+                • DNI: {conversation.contact.dni}
+              </span>
+            )}
+          </div>
           <div className="status">
             {conversation.status}
             {isBotActive && (
@@ -63,6 +73,15 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
         </div>
       </div>
       <div className="chat-header-actions">
+        {!conversation.contact && (
+          <button
+            onClick={() => setShowAddContactModal(true)}
+            className="btn-add-contact"
+            title="Agregar este número como contacto"
+          >
+            + Contacto
+          </button>
+        )}
         {isBotActive && onTakeBot && (
           <button
             onClick={onTakeBot}
@@ -99,6 +118,36 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
           {isClosing ? 'Cerrando...' : 'Finalizar'}
         </button>
       </div>
+
+      <AddContactModal
+        isOpen={showAddContactModal}
+        onClose={() => setShowAddContactModal(false)}
+        phoneNumber={conversation.userPhone}
+        onSubmit={async (name, dni) => {
+          try {
+            const response = await fetch('/api/contacts', {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name,
+                phone: conversation.userPhone,
+                dni: dni || null,
+              }),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Error al agregar contacto');
+            }
+
+            // Recargar para reflejar el nuevo contacto
+            window.location.reload();
+          } catch (error) {
+            throw error;
+          }
+        }}
+      />
     </header>
   );
 };

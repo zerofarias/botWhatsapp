@@ -28,20 +28,47 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
   // Usar ref para tracking sin efectos secundarios
   const isMountedRef = useRef(true);
   const loadingInProgressRef = useRef(false);
+  const flowStartedRef = useRef<Set<string>>(new Set()); // Track conversations where flow was started
+
+  // Reset loading state cuando se monta el hook
+  useEffect(() => {
+    isMountedRef.current = true;
+    loadingInProgressRef.current = false;
+
+    return () => {
+      isMountedRef.current = false;
+      loadingInProgressRef.current = false;
+      flowStartedRef.current.clear(); // Limpiar flows iniciados
+    };
+  }, []);
 
   // Función centralizada para cargar historial sin duplicación
   const loadHistoryOnce = useCallback(async (phoneNumber: string) => {
     // Evitar múltiples peticiones simultáneas
-    if (loadingInProgressRef.current) return;
+    if (loadingInProgressRef.current) {
+      console.log('[useChatSession] Load already in progress, skipping');
+      return;
+    }
 
+    console.log('[useChatSession] Loading history for:', phoneNumber);
     loadingInProgressRef.current = true;
+
     try {
       const fullHistory = await getCombinedHistory(phoneNumber);
       if (isMountedRef.current) {
+        console.log(
+          '[useChatSession] History loaded:',
+          fullHistory?.length,
+          'items'
+        );
         setHistory(fullHistory || []);
       }
     } catch (error) {
       console.error('[useChatSession] Failed to fetch combined history', error);
+      // En caso de error, asegurar que el estado se resetee
+      if (isMountedRef.current) {
+        setHistory([]);
+      }
     } finally {
       loadingInProgressRef.current = false;
     }
@@ -54,17 +81,25 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
       return;
     }
 
+    console.log(
+      '[useChatSession] Loading conversation:',
+      activeConversation.id,
+      'botActive:',
+      activeConversation.botActive
+    );
     setLoading(true);
 
     // Marcar como leído y cargar historial en paralelo
     Promise.all([
       markAllMessagesAsReadByPhone(activeConversation.userPhone).catch(
-        // eslint-disable-next-line @typescript-eslint/no-empty-function
-        () => {}
+        (error) => {
+          console.warn('[useChatSession] Failed to mark as read:', error);
+        }
       ),
       loadHistoryOnce(activeConversation.userPhone),
     ]).finally(() => {
       if (isMountedRef.current) {
+        console.log('[useChatSession] Finished loading conversation data');
         setLoading(false);
       }
     });
@@ -83,50 +118,149 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
       activeConversation.id
     );
 
-    // Listener para nuevos mensajes
-    const onMessage = (payload: { conversationId: string }) => {
+    // Listener para nuevos mensajes - actualización incremental
+    const onMessage = (payload: {
+      id: string;
+      conversationId: string;
+      senderType: string;
+      senderId: string | null;
+      content: string;
+      mediaType: string | null;
+      mediaUrl: string | null;
+      createdAt: string;
+    }) => {
       if (payload.conversationId === activeConversation.id) {
-        console.log('[useChatSession] Received message:new event');
-        loadHistoryOnce(activeConversation.userPhone);
+        console.log(
+          '[useChatSession] Received message:new event for message:',
+          payload.id
+        );
+
+        // Agregar el mensaje al historial existente en lugar de recargar todo
+        const newHistoryItem: HistoryItem = {
+          type: 'message',
+          id: payload.id,
+          conversationId: payload.conversationId,
+          senderType: payload.senderType as 'CONTACT' | 'BOT' | 'OPERATOR',
+          senderId: payload.senderId ? Number(payload.senderId) : null,
+          content: payload.content,
+          mediaType: payload.mediaType,
+          mediaUrl: payload.mediaUrl,
+          externalId: null, // No disponible en el evento
+          isDelivered: true,
+          isRead: false, // Asumimos que no está leído inicialmente
+          createdAt: payload.createdAt,
+        };
+
+        setHistory((prev) => {
+          // Verificación más robusta de duplicados
+          const exists = prev.some(
+            (item) =>
+              item.type === 'message' &&
+              (item.id === payload.id ||
+                (item.content === payload.content &&
+                  item.senderType === payload.senderType &&
+                  Math.abs(
+                    new Date(item.createdAt).getTime() -
+                      new Date(payload.createdAt).getTime()
+                  ) < 1000))
+          );
+
+          if (exists) {
+            console.log(
+              '[useChatSession] Duplicate message detected, ignoring:',
+              payload.id
+            );
+            return prev;
+          }
+
+          console.log(
+            '[useChatSession] Adding new message to history:',
+            payload.id
+          );
+          const sortedHistory = [...prev, newHistoryItem].sort((a, b) => {
+            const aTime = a.type === 'label' ? a.timestamp : a.createdAt;
+            const bTime = b.type === 'label' ? b.timestamp : b.createdAt;
+            return new Date(aTime).getTime() - new Date(bTime).getTime();
+          });
+          return sortedHistory;
+        });
       }
     };
 
-    // Listener para takeover
+    // Listener para takeover - solo actualizar si realmente cambia el estado
     const onTake = (payload: {
       conversationId: string;
       assignedTo: number;
       botActive: boolean;
     }) => {
       if (payload.conversationId === activeConversation.id) {
-        console.log('[useChatSession] Conversation taken over');
-        loadHistoryOnce(activeConversation.userPhone);
+        console.log('[useChatSession] Conversation taken over:', payload);
+        // Evitar recargas innecesarias - solo si hay cambio real
+        const stateChanged =
+          payload.botActive !== activeConversation.botActive ||
+          payload.assignedTo !== activeConversation.assignedTo?.id;
+
+        if (stateChanged) {
+          console.log(
+            '[useChatSession] State actually changed, reloading history'
+          );
+          loadHistoryOnce(activeConversation.userPhone);
+        } else {
+          console.log(
+            '[useChatSession] No significant state change, skipping reload'
+          );
+        }
       }
     };
 
-    // Listener para finish
+    // Listener para finish - siempre recargar para estado final
     const onFinish = (payload: {
       conversationId: string;
       status: string;
       reason: string;
     }) => {
       if (payload.conversationId === activeConversation.id) {
-        console.log('[useChatSession] Conversation finished');
+        console.log(
+          '[useChatSession] Conversation finished, reloading final state'
+        );
         loadHistoryOnce(activeConversation.userPhone);
       }
     };
 
-    // Listener para actualizaciones (incluyendo END node)
+    // Listener consolidado para actualizaciones (incluyendo END node)
     const onConversationUpdate = (payload: {
       id?: string;
       conversationId?: string;
       botActive?: boolean;
       status?: string;
+      assignedTo?: number;
       [key: string]: unknown;
     }) => {
       const payloadId = payload.id || payload.conversationId;
       if (payloadId === activeConversation.id) {
-        console.log('[useChatSession] Conversation update received');
-        loadHistoryOnce(activeConversation.userPhone);
+        console.log('[useChatSession] Conversation update received:', {
+          botActive: payload.botActive,
+          status: payload.status,
+          assignedTo: payload.assignedTo,
+        });
+
+        // Solo recargar si hay cambios significativos
+        const significantChanges =
+          payload.status === 'CLOSED' ||
+          payload.status === 'FINISHED' ||
+          (payload.botActive !== undefined &&
+            payload.botActive !== activeConversation.botActive) ||
+          (payload.assignedTo !== undefined &&
+            payload.assignedTo !== activeConversation.assignedTo?.id);
+
+        if (significantChanges) {
+          console.log(
+            '[useChatSession] Significant change detected, reloading history'
+          );
+          loadHistoryOnce(activeConversation.userPhone);
+        } else {
+          console.log('[useChatSession] Minor update, skipping history reload');
+        }
       }
     };
 
@@ -144,25 +278,34 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
     };
   }, [activeConversation, socket, loadHistoryOnce]);
 
-  // Efecto 3: Iniciar flujo automáticamente si es necesario
+  // Efecto 3: Iniciar flujo automáticamente si es necesario (solo una vez por conversación)
   useEffect(() => {
     if (!activeConversation) return;
 
-    if (activeConversation.botActive && !activeConversation.assignedTo) {
+    const conversationKey = `${activeConversation.id}_${activeConversation.botActive}`;
+
+    if (
+      activeConversation.botActive &&
+      !activeConversation.assignedTo &&
+      !flowStartedRef.current.has(conversationKey)
+    ) {
+      flowStartedRef.current.add(conversationKey);
+
       startConversationFlow(activeConversation.id)
         .then(() => {
           console.log(
             '[useChatSession] Flow started for conversation',
             activeConversation.id
           );
-          // Recargar historial después de iniciar el flujo
-          return loadHistoryOnce(activeConversation.userPhone);
+          // NO recargar historial aquí - ya se cargó en el efecto principal
         })
         .catch((error) => {
           console.error('[useChatSession] Error starting flow:', error);
+          // Remover de la lista si falló para permitir reintento
+          flowStartedRef.current.delete(conversationKey);
         });
     }
-  }, [activeConversation, loadHistoryOnce]);
+  }, [activeConversation]);
 
   // Cleanup mount ref
   useEffect(() => {
@@ -225,7 +368,9 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
           } catch (error) {
             // Si falla, remover el mensaje optimista
             setHistory((prevHistory: HistoryItem[]) =>
-              prevHistory.filter((m: HistoryItem) => m.id !== optimisticMessage.id)
+              prevHistory.filter(
+                (m: HistoryItem) => m.id !== optimisticMessage.id
+              )
             );
             throw error;
           }

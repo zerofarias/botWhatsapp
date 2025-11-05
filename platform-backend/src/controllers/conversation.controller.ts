@@ -136,13 +136,19 @@ export async function takeConversationHandler(req: Request, res: Response) {
       botActive: false,
     },
   });
+
   // Notificación en tiempo real
   const io = getSocketServer();
   io?.emit('conversation:take', {
     conversationId: conversationId.toString(),
     assignedTo: req.user.id,
+    assignedToName: req.user.name,
     botActive: false,
   });
+
+  // También emitir actualización completa de la conversación
+  await broadcastConversationUpdate(io, conversationId);
+
   res.json({ success: true, assignedTo: req.user.id, botActive: false });
 }
 

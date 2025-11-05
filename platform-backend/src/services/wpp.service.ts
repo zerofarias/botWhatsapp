@@ -123,6 +123,47 @@ type SessionCache = {
   paused: boolean;
 };
 
+// Cache para evitar procesamiento duplicado de mensajes
+type MessageCache = {
+  timestamp: number;
+  processed: boolean;
+};
+
+const messageProcessingCache = new Map<string, MessageCache>();
+const MESSAGE_CACHE_TTL = 60000; // 1 minuto en cache
+
+// Función para limpiar cache expirado
+function cleanExpiredMessageCache() {
+  const now = Date.now();
+  for (const [key, value] of messageProcessingCache.entries()) {
+    if (now - value.timestamp > MESSAGE_CACHE_TTL) {
+      messageProcessingCache.delete(key);
+    }
+  }
+}
+
+// Función para verificar si un mensaje ya está siendo procesado
+function isMessageBeingProcessed(messageId: string): boolean {
+  cleanExpiredMessageCache();
+  return messageProcessingCache.has(messageId);
+}
+
+// Función para marcar mensaje como procesándose
+function markMessageAsProcessing(messageId: string) {
+  messageProcessingCache.set(messageId, {
+    timestamp: Date.now(),
+    processed: false,
+  });
+}
+
+// Función para marcar mensaje como completado
+function markMessageAsCompleted(messageId: string) {
+  const entry = messageProcessingCache.get(messageId);
+  if (entry) {
+    entry.processed = true;
+  }
+}
+
 type ConversationSnapshot = {
   id: string;
   userPhone: string;
@@ -746,8 +787,8 @@ export async function broadcastConversationUpdate(
     emitToRoom(io, room, 'conversation:update', snapshot)
   );
 
-  // ADEMÁS emitir broadcast a TODOS (para que todos vean actualizaciones)
-  io.emit('conversation:update', snapshot);
+  // NO emitir broadcast duplicado - solo a rooms específicos
+  // io.emit('conversation:update', snapshot);
 
   return snapshot;
 }
@@ -782,8 +823,8 @@ export async function broadcastMessageRecord(
   // Emitir a todos los rooms específicos
   rooms.forEach((room) => emitToRoom(io, room, 'message:new', payload));
 
-  // ADEMÁS emitir broadcast a TODOS (para que todos vean actualizaciones)
-  io.emit('message:new', payload);
+  // NO emitir broadcast duplicado - solo a rooms específicos
+  // io.emit('message:new', payload);
 }
 
 function extractPhoneNumber(whatsappId: string): string {
@@ -1027,6 +1068,8 @@ async function handleIncomingMessage(
   let body =
     typeof bodyValue === 'string' ? bodyValue : String(bodyValue ?? '');
 
+  const externalId = extractMessageExternalId(message);
+
   if (messageAny) {
     if (
       typeof messageAny.selectedButtonId === 'string' &&
@@ -1071,12 +1114,21 @@ async function handleIncomingMessage(
   const contact = ensureResult.contact;
   const conversationId = BigInt(conversation.id);
 
-  const externalId = extractMessageExternalId(message);
   if (externalId) {
-    const duplicate = await findMessageByExternalId(externalId);
-    if (duplicate) {
+    // Verificar cache de procesamiento antes de consultar la base de datos
+    if (isMessageBeingProcessed(externalId)) {
+      console.log('[WPP] Message already being processed:', externalId);
       return;
     }
+
+    const duplicate = await findMessageByExternalId(externalId);
+    if (duplicate) {
+      console.log('[WPP] Duplicate message found in database:', externalId);
+      return;
+    }
+
+    // Marcar mensaje como procesándose
+    markMessageAsProcessing(externalId);
   }
 
   const receivedAt = resolveMessageDate(message);
@@ -1309,6 +1361,11 @@ async function handleIncomingMessage(
         primaryMenu,
         io
       );
+    }
+
+    // Marcar mensaje como completado al finalizar el flujo
+    if (externalId) {
+      markMessageAsCompleted(externalId);
     }
     return;
   }
@@ -1548,6 +1605,11 @@ async function handleIncomingMessage(
               ownerUserId
             );
             logSystem('Mensaje de ausencia enviado');
+
+            // Marcar mensaje como completado antes del return
+            if (externalId) {
+              markMessageAsCompleted(externalId);
+            }
             return;
           }
         }
@@ -1568,6 +1630,11 @@ async function handleIncomingMessage(
         );
       }
     }
+
+    // Marcar mensaje como completado al finalizar
+    if (externalId) {
+      markMessageAsCompleted(externalId);
+    }
     return;
   }
 
@@ -1582,6 +1649,11 @@ async function handleIncomingMessage(
       io
     );
   }
+
+  // Marcar mensaje como completado al final de la función
+  if (externalId) {
+    markMessageAsCompleted(externalId);
+  }
 }
 
 function attachMessageHandlers(
@@ -1590,6 +1662,7 @@ function attachMessageHandlers(
   io?: SocketIOServer
 ) {
   client.onMessage(async (message) => {
+    const externalId = extractMessageExternalId(message);
     try {
       const cache = sessions.get(ownerUserId);
       if (!cache || cache.paused) {
@@ -1598,6 +1671,12 @@ function attachMessageHandlers(
       await handleIncomingMessage(ownerUserId, message, client, io);
     } catch (error) {
       console.error('[WPP] Error handling incoming message', error);
+
+      // Asegurar que se marque como completado incluso en caso de error
+      if (externalId) {
+        markMessageAsCompleted(externalId);
+      }
+
       emitToRoom(io, `user:${ownerUserId}`, 'session:error', {
         message: error instanceof Error ? error.message : String(error),
       });

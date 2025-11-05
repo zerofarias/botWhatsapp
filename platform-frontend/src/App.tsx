@@ -12,7 +12,6 @@ import ContactsPage from './pages/ContactsPage';
 import WorkingHoursPage from './pages/WorkingHoursPage';
 import FlowBuilder from './views/FlowBuilder/FlowBuilder';
 import BotsPage from './pages/BotsPage';
-import ClassicFlow from './pages/classic-flow';
 
 export default function App() {
   return (
@@ -31,7 +30,6 @@ export default function App() {
           <Route path="contacts" element={<ContactsPage />} />
           <Route path="working-hours" element={<WorkingHoursPage />} />
           <Route path="settings" element={<SettingsPage />} />
-          <Route path="classic-flow" element={<ClassicFlow />} />
         </Route>
       </Route>
 

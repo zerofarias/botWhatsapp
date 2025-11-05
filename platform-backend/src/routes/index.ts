@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { authRouter } from './auth.js';
 import { flowRouter } from './flows.js';
-import classicFlowRouter from './classicFlow.js';
 import { botRouter } from './bot.js';
 import botsRouter from './bots.routes.js';
 import { messageRouter } from './messages.js';
@@ -26,5 +25,4 @@ apiRouter.use('/conversations', conversationRouter);
 apiRouter.use('/contacts', contactRouter);
 apiRouter.use('/working-hours', workingHourRouter);
 apiRouter.use('/quick-replies', quickRepliesRouter);
-apiRouter.use('/classic-flow', classicFlowRouter);
 apiRouter.use(nodesRouter);

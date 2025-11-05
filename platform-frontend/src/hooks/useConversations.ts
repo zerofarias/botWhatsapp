@@ -102,7 +102,9 @@ export function useConversations() {
   useEffect(() => {
     if (!socket) return;
 
-    const handleConversationUpdate = (updatedConversation: ConversationSummary) => {
+    const handleConversationUpdate = (
+      updatedConversation: ConversationSummary
+    ) => {
       console.log(
         '[useConversations] Conversation updated:',
         updatedConversation.id,
@@ -131,10 +133,40 @@ export function useConversations() {
       });
     };
 
+    const handleConversationTake = (payload: {
+      conversationId: string;
+      assignedTo: number;
+      assignedToName?: string;
+      botActive: boolean;
+    }) => {
+      console.log('[useConversations] Conversation taken:', payload);
+
+      const updateConversation = (prev: ConversationSummary[]) => {
+        const idx = prev.findIndex((c) => c.id === payload.conversationId);
+        if (idx === -1) return prev;
+
+        const updated = [...prev];
+        updated[idx] = {
+          ...updated[idx],
+          assignedTo: {
+            id: payload.assignedTo,
+            name: payload.assignedToName || null,
+          },
+          botActive: payload.botActive,
+        };
+        return updated;
+      };
+
+      setAbiertas(updateConversation);
+      setCerradas(updateConversation);
+    };
+
     socket.on('conversation:update', handleConversationUpdate);
+    socket.on('conversation:take', handleConversationTake);
 
     return () => {
       socket.off('conversation:update', handleConversationUpdate);
+      socket.off('conversation:take', handleConversationTake);
     };
   }, [socket]);
 

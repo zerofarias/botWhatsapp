@@ -66,15 +66,28 @@ const ChatView: React.FC<ChatViewProps> = ({
         isClosing={isClosing}
         onCloseConversation={onCloseConversation}
         isBotActive={isBotActive}
-        onTakeBot={() => {
-          // Llamar al endpoint para tomar la conversación
-          fetch(`/api/conversations/${conversation.id}/take`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-          })
-            .then(() => window.location.reload())
-            .catch(() => alert('No se pudo tomar la conversación.'));
+        onTakeBot={async () => {
+          try {
+            // Llamar al endpoint para tomar la conversación
+            const response = await fetch(
+              `/api/conversations/${conversation.id}/take`,
+              {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error('Error al tomar la conversación');
+            }
+
+            // No recargar la página - el evento Socket.IO actualizará el estado
+            console.log('Conversación tomada exitosamente');
+          } catch (error) {
+            console.error('Error al tomar conversación:', error);
+            alert('No se pudo tomar la conversación.');
+          }
         }}
       />
       <MessageList messages={messages} loading={loadingMessages} />
