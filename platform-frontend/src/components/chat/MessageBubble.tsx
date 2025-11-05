@@ -1,19 +1,8 @@
 import React from 'react';
-
-// Define types locally for now
-type Message = {
-  type: 'message' | 'note' | 'label';
-  id?: string;
-  content?: string;
-  createdAt?: string;
-  senderType?: 'USER' | 'OPERATOR' | 'BOT' | 'CONTACT';
-  label?: string;
-  mediaType?: string | null;
-  mediaUrl?: string | null;
-};
+import type { HistoryItem } from '../../types/chat';
 
 type MessageBubbleProps = {
-  item: Message;
+  item: HistoryItem;
 };
 
 function formatTime(isoDate?: string) {
@@ -54,6 +43,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ item }) => {
     );
   }
 
+  // Tipo 'message'
   const isOutgoing =
     item.senderType === 'OPERATOR' || item.senderType === 'BOT';
   const containerClass = isOutgoing
@@ -108,7 +98,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ item }) => {
             )
           ) : null}
           {/* Texto del mensaje */}
-          <p>{item.content}</p>
+          <p>{item.content || ''}</p>
         </div>
         <div className="message-bubble-meta">
           <span>{formatTime(item.createdAt)}</span>

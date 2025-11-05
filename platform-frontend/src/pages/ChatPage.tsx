@@ -1,12 +1,14 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useConversations } from '../hooks/useConversations';
 import { useChatSession } from '../hooks/useChatSession';
 import ConversationListItem from '../components/chat/ConversationListItem';
 import ChatView from '../components/chat/ChatView';
 import ImageModal from '../components/ImageModal';
+import {
+  groupConversationsByLatest,
+  searchConversations,
+} from '../utils/conversationHelpers';
 import './ChatPage.redesign.css';
-
-const TEST_PHONE = '5493533473732'; // Puedes cambiar este número por el que desees consultar
 
 const ChatPage = () => {
   const {
@@ -26,6 +28,7 @@ const ChatPage = () => {
   const [selectedImageUrl] = useState('');
   const [noteMode, setNoteMode] = useState(false);
 
+  // Memoizar conversación activa
   const activeConversation = useMemo(() => {
     const all = [...abiertas, ...cerradas];
     return all.find((c) => c.id === selectedId) ?? null;
@@ -60,11 +63,32 @@ const ChatPage = () => {
     setNoteMode(false);
   };
 
-  const handleSubmitMessage = (content: string) => {
-    sendMessage(content, noteMode).then(() => {
-      if (noteMode) setNoteMode(false);
-    });
-  };
+  const handleSubmitMessage = useCallback(
+    (content: string) => {
+      console.log('[ChatPage] handleSubmitMessage called with:', {
+        content,
+        noteMode,
+      });
+      sendMessage(content, noteMode).then(() => {
+        if (noteMode) {
+          console.log('[ChatPage] Resetting noteMode');
+          setNoteMode(false);
+        }
+      });
+    },
+    [sendMessage, noteMode]
+  );
+
+  // Memoizar conversaciones agrupadas y buscadas (sin duplicación)
+  const abiertasGrouped = useMemo(
+    () => groupConversationsByLatest(searchConversations(abiertas, searchTerm)),
+    [abiertas, searchTerm]
+  );
+
+  const cerradasGrouped = useMemo(
+    () => groupConversationsByLatest(searchConversations(cerradas, searchTerm)),
+    [cerradas, searchTerm]
+  );
 
   return (
     <div className="chat-page-redesign">
@@ -106,27 +130,12 @@ const ChatPage = () => {
             <div className="conversation-list-empty">Cargando...</div>
           ) : (
             <>
-              {abiertas.length > 0 && (
+              {abiertasGrouped.length > 0 && (
                 <>
                   <div className="conversation-list-separator">
                     Chats abiertos
                   </div>
-                  {Object.values(
-                    abiertas.reduce((acc, conv) => {
-                      const key =
-                        conv.contact?.name?.trim() ||
-                        conv.contactName?.trim() ||
-                        conv.userPhone;
-                      if (
-                        !acc[key] ||
-                        new Date(conv.lastActivity) >
-                          new Date(acc[key].lastActivity)
-                      ) {
-                        acc[key] = conv;
-                      }
-                      return acc;
-                    }, {} as Record<string, (typeof abiertas)[0]>)
-                  ).map((conv) => (
+                  {abiertasGrouped.map((conv) => (
                     <ConversationListItem
                       key={conv.id}
                       conversation={conv}
@@ -137,27 +146,12 @@ const ChatPage = () => {
                   ))}
                 </>
               )}
-              {cerradas.length > 0 && (
+              {cerradasGrouped.length > 0 && (
                 <>
                   <div className="conversation-list-separator">
                     Chats cerrados
                   </div>
-                  {Object.values(
-                    cerradas.reduce((acc, conv) => {
-                      const key =
-                        conv.contact?.name?.trim() ||
-                        conv.contactName?.trim() ||
-                        conv.userPhone;
-                      if (
-                        !acc[key] ||
-                        new Date(conv.lastActivity) >
-                          new Date(acc[key].lastActivity)
-                      ) {
-                        acc[key] = conv;
-                      }
-                      return acc;
-                    }, {} as Record<string, (typeof cerradas)[0]>)
-                  ).map((conv) => (
+                  {cerradasGrouped.map((conv) => (
                     <ConversationListItem
                       key={conv.id}
                       conversation={conv}
@@ -168,7 +162,7 @@ const ChatPage = () => {
                   ))}
                 </>
               )}
-              {abiertas.length === 0 && cerradas.length === 0 && (
+              {abiertasGrouped.length === 0 && cerradasGrouped.length === 0 && (
                 <div className="conversation-list-empty">
                   No hay conversaciones.
                 </div>

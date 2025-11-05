@@ -244,9 +244,6 @@ export async function executeNode({
       node.message,
       updatedContext
     );
-    console.log(`[TEXT] Original message:`, node.message);
-    console.log(`[TEXT] Context keys:`, Object.keys(updatedContext));
-    console.log(`[TEXT] Interpolated message:`, interpolatedMessage);
     actions.push({
       type: 'send_message',
       payload: {
@@ -273,13 +270,8 @@ export async function executeNode({
       const alreadyCaptured =
         shouldWait && capturedVariableName === builderMeta.responseVariableName;
 
-      console.log(
-        `[TEXT] Node ${node.id}: shouldWait=${shouldWait}, alreadyCaptured=${alreadyCaptured}, capturedVariableName=${capturedVariableName}, message="${node.message}"`
-      );
-
       if (!alreadyCaptured) {
         sendMessage();
-        console.log(`[TEXT] Sending message: "${node.message}"`);
       }
 
       if (shouldWait && !alreadyCaptured) {
@@ -287,25 +279,16 @@ export async function executeNode({
         updatedContext.waitingVariable =
           builderMeta.responseVariableName ?? null;
         nextNodeId = node.id;
-        console.log(
-          `[TEXT] Waiting for input for variable: ${builderMeta.responseVariableName}`
-        );
       } else {
         updatedContext.waitingForInput = false;
         updatedContext.waitingVariable = null;
         nextNodeId = resolveNextNodeId();
-        console.log(
-          `[TEXT] Not waiting, advancing to next node: ${nextNodeId}`
-        );
       }
       break;
     }
     case 'CAPTURE': {
       // CAPTURE es como TEXT que siempre espera respuesta
       sendMessage();
-      console.log(
-        `[CAPTURE] Node ${node.id}: Sending capture message: "${node.message}"`
-      );
 
       const variableName =
         typeof builderMeta.responseVariableName === 'string'
@@ -315,9 +298,6 @@ export async function executeNode({
       updatedContext.waitingForInput = true;
       updatedContext.waitingVariable = variableName;
       nextNodeId = node.id;
-      console.log(
-        `[CAPTURE] Node ${node.id}: Waiting for input for variable: ${variableName}`
-      );
       break;
     }
     case 'CONDITIONAL': {
@@ -381,15 +361,9 @@ export async function executeNode({
           expected,
           operator
         );
-        console.log(
-          `[CONDITIONAL] Evaluating condition "${
-            condition.label || conditionId
-          }": ${variableValue} ${operator} ${expected} = ${isMatched}`
-        );
 
         if (isMatched) {
           matchedConditionId = conditionId;
-          console.log(`[CONDITIONAL] ✅ MATCHED condition: ${conditionId}`);
           break;
         }
       }
@@ -423,51 +397,22 @@ export async function executeNode({
         nextFromCondition = conditionConnections.get(targetConditionId) ?? null;
       }
 
-      console.log(
-        `[CONDITIONAL] targetConditionId="${targetConditionId}", nextFromCondition=${nextFromCondition}, fallback=${fallbackConditionId}`
-      );
-
       nextNodeId = nextFromCondition ?? resolveNextNodeId();
-      console.log(`[CONDITIONAL] Final nextNodeId: ${nextNodeId}`);
       break;
     }
     case 'NOTE': {
       // Nodo NOTE: solo registra una nota interna, no se envía al cliente
-      console.log(
-        `[NOTE] ========== EJECUTANDO NODO NOTE ${node.id} ==========`
-      );
-      console.log(
-        `[NOTE] Nodo completo:`,
-        JSON.stringify(node, (key, value) =>
-          typeof value === 'bigint' ? value.toString() : value
-        )
-      );
-      console.log(`[NOTE] builderMeta:`, JSON.stringify(builderMeta));
-
       let noteContent = (node.message ||
         (builderMeta as Record<string, unknown>)?.value ||
         '') as string;
 
-      console.log(`[NOTE] node.message = "${node.message}"`);
-      console.log(
-        `[NOTE] builderMeta.value = "${
-          (builderMeta as Record<string, unknown>)?.value
-        }"`
-      );
-
       // Procesar imagen si existe (reemplazar por "ENVÍO UNA IMAGEN")
       noteContent = processImageContent(noteContent);
-      console.log(`[NOTE] noteContent after processing = "${noteContent}"`);
 
       // Interpolar variables en el contenido de la nota
       const interpolatedNote = interpolateVariables(
         noteContent,
         updatedContext
-      );
-
-      console.log(`[NOTE] Node ${node.id}: Original note: "${noteContent}"`);
-      console.log(
-        `[NOTE] Node ${node.id}: Interpolated note: "${interpolatedNote}"`
       );
 
       if (noteContent) {
@@ -479,17 +424,11 @@ export async function executeNode({
             timestamp: new Date().toISOString(),
           },
         });
-        console.log(`[NOTE] ✅ Acción save_note agregada para nodo ${node.id}`);
-      } else {
-        console.log(
-          `[NOTE] ⚠️ ADVERTENCIA: Nota vacía para nodo ${node.id}, no se agregó acción`
-        );
       }
 
       updatedContext.waitingForInput = false;
       updatedContext.waitingVariable = null;
       nextNodeId = resolveNextNodeId();
-      console.log(`[NOTE] ========== FIN NODO NOTE ${node.id} ==========`);
       break;
     }
     case 'END': {
@@ -511,12 +450,6 @@ export async function executeNode({
         ?.seconds;
       const seconds = typeof secondsRaw === 'number' ? secondsRaw : 1;
 
-      console.log(
-        `[DELAY] Node ${
-          node.id
-        }: Delaying ${seconds} seconds, metadata=${JSON.stringify(builderMeta)}`
-      );
-
       // Agregar action de delay
       actions.push({
         type: 'delay',
@@ -533,9 +466,6 @@ export async function executeNode({
     }
     default: {
       // En esta etapa solo manejamos START/TEXT/END. El resto avanza al siguiente nodo.
-      console.log(
-        `[executeNode] Node ${node.id}: tipo "${node.type}" no implementado, avanzando al siguiente`
-      );
       nextNodeId = resolveNextNodeId();
       break;
     }
@@ -561,7 +491,6 @@ export async function executeNodeChain({
   context,
   capturedVariableName,
 }: ExecuteNodeInput & { startNodeId?: number }): Promise<ExecuteNodeResult> {
-  console.log(`[executeNodeChain] ⭐ INICIANDO CON startNodeId=${startNodeId}`);
   let currentNodeId = startNodeId ?? null;
   let currentContext = context;
   let allActions: Array<{ type: string; payload?: unknown }> = [];
@@ -571,19 +500,10 @@ export async function executeNodeChain({
 
   while (currentNodeId && iterations < MAX_ITERATIONS) {
     iterations++;
-    console.log(
-      `[executeNodeChain] Iteration ${iterations}: executing node ${currentNodeId}`
-    );
 
     // Si ya hemos enviado mensajes, agregar delay de 1 segundo entre ellos
     if (messageCount > 0) {
-      console.log(
-        `[executeNodeChain] ⏳ Agregando delay de 1 segundo entre mensajes (${new Date().toISOString()})`
-      );
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      console.log(
-        `[executeNodeChain] ✅ Delay completado (${new Date().toISOString()})`
-      );
     }
 
     // Ejecutar el nodo actual

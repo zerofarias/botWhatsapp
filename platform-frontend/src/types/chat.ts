@@ -55,16 +55,17 @@ export type HistoryNoteItem = {
   type: 'note';
   id: string;
   content: string;
-  createdAt: Date | string;
+  createdAt: string;
   createdById: number | null;
   conversationId: string;
 };
 
 export type HistoryLabelItem = {
   type: 'label';
+  id?: string;
   label: string;
   conversationId: string;
-  timestamp: Date | string | null;
+  timestamp: string;
 };
 
 export type HistoryItem =

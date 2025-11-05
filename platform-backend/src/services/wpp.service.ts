@@ -642,18 +642,6 @@ export function evaluateFlowSelection(
       (n) => n.id === currentFlowNodeId
     );
   }
-
-  // Log de depuración: mostrar contexto y candidatos
-  console.log('[FLOW] --- Evaluación de flujo ---');
-  console.log('[FLOW] currentFlowNodeId:', currentFlowNodeId);
-  if (currentNode) {
-    console.log(
-      `[FLOW] Nodo actual: id=${currentNode.id}, name="${currentNode.name}", trigger="${currentNode.trigger}"`
-    );
-  } else {
-    console.log('[FLOW] Sin nodo actual, usando nodos raíz');
-  }
-
   let candidates: FlowNode[] = [];
   if (currentNode) {
     if (currentNode.children.length > 0) {
@@ -683,11 +671,6 @@ export function evaluateFlowSelection(
           });
           if (targetNode && targetNode.isActive) {
             candidates = [targetNode];
-            console.log(
-              '[FLOW] Condición encontrada en metadata, candidato:',
-              targetNode.id,
-              targetNode.name
-            );
           }
         }
       }
@@ -699,33 +682,16 @@ export function evaluateFlowSelection(
             n.id !== currentNode.id &&
             n.isActive
         );
-        if (candidates.length) {
-          console.log(
-            '[FLOW] Fallback: candidatos hermanos:',
-            candidates.map((n) => n.id)
-          );
-        }
       }
       // Fallback: Si aún no hay candidatos, buscar nodos raíz activos
       if (!candidates.length) {
         candidates = nodes.filter((n) => n.parentId == null && n.isActive);
-        if (candidates.length) {
-          console.log(
-            '[FLOW] Fallback: candidatos raíz:',
-            candidates.map((n) => n.id)
-          );
-        }
       }
     }
   } else {
     // Si no hay nodo actual, buscar entre los nodos raíz activos
     candidates = nodes.filter((n) => n.parentId == null && n.isActive);
   }
-
-  console.log('[FLOW] Nodos candidatos:');
-  candidates.forEach((n) => {
-    console.log(`  - id=${n.id}, name="${n.name}", trigger="${n.trigger}"`);
-  });
 
   const match = candidates.find((node) => {
     if (!node.trigger) return false;
@@ -780,6 +746,9 @@ export async function broadcastConversationUpdate(
     emitToRoom(io, room, 'conversation:update', snapshot)
   );
 
+  // ADEMÁS emitir broadcast a TODOS (para que todos vean actualizaciones)
+  io.emit('conversation:update', snapshot);
+
   return snapshot;
 }
 
@@ -810,7 +779,11 @@ export async function broadcastMessageRecord(
   const rooms = conversationRooms(snapshot);
   extraUserIds.forEach((userId) => rooms.add(`user:${userId}`));
 
+  // Emitir a todos los rooms específicos
   rooms.forEach((room) => emitToRoom(io, room, 'message:new', payload));
+
+  // ADEMÁS emitir broadcast a TODOS (para que todos vean actualizaciones)
+  io.emit('message:new', payload);
 }
 
 function extractPhoneNumber(whatsappId: string): string {
@@ -1328,9 +1301,6 @@ async function handleIncomingMessage(
 
     // Fallback to primary menu if START node logic fails
     if (primaryMenu) {
-      console.log(
-        '[FLOW] No START node flow found, falling back to primary menu.'
-      );
       await sendReply(
         ownerUserId,
         client,
@@ -1349,9 +1319,6 @@ async function handleIncomingMessage(
   });
   const currentId = convState?.currentFlowNodeId;
 
-  console.log('[FLOW] Trigger recibido:', normalizedBody);
-  console.log('[FLOW] currentFlowNodeId antes:', currentId);
-
   const previousNodeId = currentId;
   if (previousNodeId) {
     const previousNode = flattenFlowTree(flows).find(
@@ -1365,8 +1332,6 @@ async function handleIncomingMessage(
       builderMeta?.responseVariableName ?? builderMeta?.saveResponseToVariable;
 
     if (variableName && typeof variableName === 'string') {
-      console.log(`[CONTEXT] Saving response to variable '${variableName}'`);
-
       const currentContext =
         convState?.context && typeof convState.context === 'string'
           ? JSON.parse(convState.context)
@@ -1414,7 +1379,6 @@ async function handleIncomingMessage(
             `[FLOW] Procesando ${chainResult.actions.length} acciones:`,
             JSON.stringify(chainResult.actions)
           );
-
           // Procesar mensajes
           const sendMessageAction = chainResult.actions.find(
             (a) => a.type === 'send_message'
@@ -1445,9 +1409,6 @@ async function handleIncomingMessage(
           const saveNoteActions = chainResult.actions.filter(
             (a) => a.type === 'save_note'
           );
-          console.log(
-            `[FLOW] Encontradas ${saveNoteActions.length} acciones de save_note`
-          );
 
           for (const saveNoteAction of saveNoteActions) {
             if (
@@ -1457,35 +1418,18 @@ async function handleIncomingMessage(
             ) {
               const payload = saveNoteAction.payload as Record<string, unknown>;
               const noteContent = (payload.content as string) ?? '';
-              console.log(`[FLOW] Procesando nota: "${noteContent}"`);
               if (noteContent) {
-                console.log(
-                  `[FLOW] Saving note to conversation: "${noteContent}"`
-                );
                 await addConversationNote(
                   BigInt(conversationId),
                   noteContent,
                   null
                 );
-              } else {
-                console.log(
-                  `[FLOW] ⚠️ Nota vacía detectada en payload:`,
-                  payload
-                );
               }
-            } else {
-              console.log(
-                `[FLOW] ⚠️ saveNoteAction no tiene payload válido:`,
-                saveNoteAction
-              );
             }
           }
 
           // Solo emitir conversation:update si hay cambios importantes (sin messages ni notas solas)
           if (!hasMessage && saveNoteActions.length > 0) {
-            console.log(
-              `[FLOW] Notas procesadas, emitiendo conversation:update`
-            );
             await broadcastConversationUpdate(io, conversationId);
           }
         }

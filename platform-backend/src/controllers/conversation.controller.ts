@@ -351,6 +351,11 @@ export async function createConversationNoteHandler(
   ) {
     noteContent = (note.payload as { content?: string }).content ?? '';
   }
+
+  // Emitir evento socket para que el frontend se actualice en tiempo real
+  const io = getSocketServer();
+  await broadcastConversationUpdate(io, conversationId);
+
   res.status(201).json({
     id: note.id.toString(),
     content: noteContent,
@@ -579,20 +584,32 @@ export async function sendConversationMessageHandler(
   const finalNodeId = nextNodeId ?? conversation.currentFlowNodeId;
   const finalContext = newContext ?? conversation.context;
 
-  await touchConversation(conversationId, {
+  // Asegurar que context sea un string JSON válido
+  let contextValue: string | null = null;
+  if (finalContext) {
+    contextValue =
+      typeof finalContext === 'string'
+        ? finalContext
+        : JSON.stringify(finalContext);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updateData: any = {
     lastActivity: messageRecord.createdAt,
     status: 'ACTIVE',
     botActive: false,
     currentFlowNodeId: finalNodeId,
-    context: finalContext,
-    ...(conversation.assignedToId
-      ? undefined
-      : {
-          assignedTo: {
-            connect: { id: req.user.id },
-          },
-        }),
-  });
+    context: contextValue,
+  };
+
+  // Si no tiene asignado, asignarlo al usuario actual
+  if (!conversation.assignedToId) {
+    updateData.assignedTo = {
+      connect: { id: req.user.id },
+    };
+  }
+
+  await touchConversation(conversationId, updateData);
 
   const io = getSocketServer();
   await broadcastMessageRecord(io, conversationId, messageRecord, [

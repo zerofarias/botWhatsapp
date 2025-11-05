@@ -430,6 +430,31 @@
   background-color: #22c55e;
 }
 
+/* Closed State - Gray */
+
+.conversation-item--closed {
+  background-color: #f3f4f6;
+  border-left: 4px solid #d1d5db;
+  opacity: 0.7;
+}
+
+.conversation-item--closed:hover {
+  background-color: #e5e7eb;
+}
+
+.conversation-item--closed .conversation-item-avatar {
+  background-color: #9ca3af;
+}
+
+.conversation-item--closed .conversation-item-name {
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.conversation-item--closed .conversation-item-preview {
+  color: #9ca3af;
+}
+
 /* Bot Badge */
 
 .conversation-item-bot-badge {

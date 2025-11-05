@@ -215,9 +215,31 @@ export async function touchConversation(
   conversationId: bigint,
   data: Prisma.ConversationUpdateInput
 ) {
+  // Sanitizar el contexto si está presente
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sanitized = { ...data } as any;
+  if (sanitized.context !== undefined) {
+    if (typeof sanitized.context === 'string') {
+      // Si es string, dejar como está (no hacer nada)
+    } else if (sanitized.context === null) {
+      // Si es null, dejar null (no hacer nada)
+    } else if (typeof sanitized.context === 'object') {
+      // Si es objeto, convertir a JSON string
+      try {
+        sanitized.context = JSON.stringify(sanitized.context);
+      } catch {
+        console.error(
+          '[touchConversation] Error stringifying context:',
+          sanitized.context
+        );
+        delete sanitized.context; // Eliminar si no se puede serializar
+      }
+    }
+  }
+
   await prisma.conversation.update({
     where: { id: conversationId },
-    data,
+    data: sanitized,
   });
 }
 
@@ -255,12 +277,27 @@ export async function addConversationNote(
 
 // Listar notas internas de una conversación
 export async function listConversationNotes(conversationId: bigint) {
-  return prisma.conversationEvent.findMany({
+  const events = await prisma.conversationEvent.findMany({
     where: {
       conversationId,
       eventType: 'NOTE',
     },
     orderBy: { createdAt: 'asc' },
+  });
+
+  // Filtrar solo las notas internas de usuario, no los eventos de sistema (send_fail, etc)
+  return events.filter((event) => {
+    if (!event.payload) return true; // Si no tiene payload, es una nota normal
+    try {
+      const payload = JSON.parse(event.payload);
+      // Si el payload tiene 'type', es un evento de sistema, excluirlo
+      if (payload && typeof payload === 'object' && 'type' in payload) {
+        return false; // Excluir eventos de sistema
+      }
+      return true;
+    } catch {
+      return true; // Si no se puede parsear, asumir que es una nota normal
+    }
   });
 }
 

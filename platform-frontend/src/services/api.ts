@@ -34,6 +34,8 @@ export const api = axios.create({
 
 // Si el backend solo usa sesión, no agregues Authorization
 
+// Si el backend solo usa sesión, no agregues Authorization
+
 // Notas internas de conversación
 export async function createConversationNote(
   conversationId: string | number,

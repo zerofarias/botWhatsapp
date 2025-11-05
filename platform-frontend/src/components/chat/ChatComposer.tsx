@@ -79,9 +79,19 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputValue.trim()) return;
-    onSubmit(inputValue);
+    console.log(
+      '[ChatComposer] handleSubmit triggered, inputValue:',
+      inputValue
+    );
+    if (!inputValue.trim()) {
+      console.log('[ChatComposer] handleSubmit: empty input, returning');
+      return;
+    }
+    // Prevenir que onSubmit se llame dos veces en caso de que handleKeyDown también la haya llamado
+    const content = inputValue;
     setInputValue('');
+    console.log('[ChatComposer] handleSubmit calling onSubmit with:', content);
+    onSubmit(content);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -115,12 +125,13 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
       }
     }
 
-    // Manejar Enter para enviar mensaje
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Manejar Enter para enviar mensaje (cuando no hay sugerencias)
+    // Dejar que el formulario maneje el submit para evitar doble envío
+    if (e.key === 'Enter' && !e.shiftKey && !showSuggestions) {
       e.preventDefault();
-      if (!disabled && inputValue.trim()) {
-        onSubmit(inputValue);
-        setInputValue('');
+      const form = (e.target as HTMLTextAreaElement).form;
+      if (form) {
+        form.dispatchEvent(new Event('submit', { bubbles: true }));
       }
     }
   };
@@ -186,30 +197,60 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
             alignSelf: 'flex-end',
           }}
         >
-          <button
-            type="button"
-            className="chat-composer-note-btn"
-            onClick={() => setNoteMode(true)}
-            style={{
-              width: '40px',
-              height: '40px',
-              background: isNoteMode ? '#ffd700' : '#eee',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: isNoteMode ? 'not-allowed' : 'pointer',
-              fontSize: '20px',
-              padding: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: disabled ? 0.6 : 1,
-              transition: 'all 0.2s',
-            }}
-            disabled={isNoteMode || disabled}
-            title="Agregar nota interna"
-          >
-            📝
-          </button>
+          {!isNoteMode && (
+            <button
+              type="button"
+              className="chat-composer-note-btn"
+              onClick={() => setNoteMode(true)}
+              style={{
+                width: '40px',
+                height: '40px',
+                background: '#eee',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '20px',
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: disabled ? 0.6 : 1,
+                transition: 'all 0.2s',
+              }}
+              disabled={disabled}
+              title="Agregar nota interna"
+            >
+              📝
+            </button>
+          )}
+          {isNoteMode && (
+            <button
+              type="button"
+              className="chat-composer-remove-note-btn"
+              onClick={() => {
+                setNoteMode(false);
+                setInputValue('');
+              }}
+              style={{
+                width: '40px',
+                height: '40px',
+                background: '#ffcdd2',
+                border: '2px solid #f44336',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '16px',
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: 1,
+                transition: 'all 0.2s',
+              }}
+              title="Quitar nota"
+            >
+              ✕
+            </button>
+          )}
           <button
             type="button"
             className="chat-composer-shortcut-btn"
@@ -251,8 +292,13 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
             disabled={disabled}
             rows={2}
             style={{
-              background: disabled ? '#f0f0f0' : '#fff',
+              background: isNoteMode
+                ? '#fffde7'
+                : disabled
+                ? '#f0f0f0'
+                : '#fff',
               color: disabled ? '#999' : '#000',
+              border: isNoteMode ? '2px solid #fbc02d' : '1px solid #ddd',
             }}
           />
           {/* Mostrar sugerencias de quick replies */}

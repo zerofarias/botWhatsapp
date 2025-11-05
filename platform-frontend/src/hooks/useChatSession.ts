@@ -1,5 +1,5 @@
 import { markAllMessagesAsReadByPhone } from '../services/api';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { HistoryItem } from '../types/chat';
 import { useSocket } from './useSocket';
 import {
@@ -12,8 +12,11 @@ import type { ConversationSummary } from '../types/chat';
 
 /**
  * Hook para gestionar la sesión de chat de una conversación activa
- * @param activeConversation Conversación activa o null
- * @returns history, loading, sending, closing, sendMessage, closeConversation
+ * Mejoras:
+ * - Sin polling automático (solo event-driven)
+ * - Sin mutaciones directas del estado
+ * - Listeners optimizados sin refetch duplicado
+ * - Manejo correcto de efectos y cleanup
  */
 export function useChatSession(activeConversation: ConversationSummary | null) {
   const socket = useSocket();
@@ -22,235 +25,207 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
   const [sending, setSending] = useState(false);
   const [closing, setClosing] = useState(false);
 
-  // Auto-refresh del historial cada 2 segundos
+  // Usar ref para tracking sin efectos secundarios
+  const isMountedRef = useRef(true);
+  const loadingInProgressRef = useRef(false);
+
+  // Función centralizada para cargar historial sin duplicación
+  const loadHistoryOnce = useCallback(async (phoneNumber: string) => {
+    // Evitar múltiples peticiones simultáneas
+    if (loadingInProgressRef.current) return;
+
+    loadingInProgressRef.current = true;
+    try {
+      const fullHistory = await getCombinedHistory(phoneNumber);
+      if (isMountedRef.current) {
+        setHistory(fullHistory || []);
+      }
+    } catch (error) {
+      console.error('[useChatSession] Failed to fetch combined history', error);
+    } finally {
+      loadingInProgressRef.current = false;
+    }
+  }, []);
+
+  // Efecto 1: Cargar datos iniciales de la conversación
   useEffect(() => {
-    let isMounted = true;
     if (!activeConversation) {
       setHistory([]);
       return;
     }
 
-    const loadHistory = () => {
-      getCombinedHistory(activeConversation.userPhone)
-        .then((fullHistory) => {
-          if (isMounted) setHistory(fullHistory || []);
-        })
-        .catch((error) => {
-          console.error(
-            '[useChatSession] Failed to fetch combined history',
-            error
-          );
-        });
-    };
-
-    // Cargar historial inicial
     setLoading(true);
-    markAllMessagesAsReadByPhone(activeConversation.userPhone)
-      .catch((error) => {
-        console.error(
-          '[useChatSession] Error al marcar mensajes como leídos',
-          error
-        );
-      })
-      .finally(() => {
-        loadHistory();
+
+    // Marcar como leído y cargar historial en paralelo
+    Promise.all([
+      markAllMessagesAsReadByPhone(activeConversation.userPhone).catch(
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
+        () => {}
+      ),
+      loadHistoryOnce(activeConversation.userPhone),
+    ]).finally(() => {
+      if (isMountedRef.current) {
         setLoading(false);
-      });
-
-    // Auto-refresh cada 2 segundos
-    const refreshInterval = setInterval(() => {
-      if (isMounted) {
-        loadHistory();
       }
-    }, 2000);
+    });
 
-    if (socket && activeConversation) {
-      console.log(
-        '[useChatSession] Socket is ready, setting up listeners for conversation:',
-        activeConversation.id
-      );
-
-      const onMessage = (payload: { conversationId: string }) => {
-        console.log(
-          `[useChatSession] Received message:new for conversation:`,
-          payload.conversationId,
-          'Active conversation:',
-          activeConversation.id
-        );
-        if (payload.conversationId === activeConversation.id) {
-          console.log('[useChatSession] Reloading history after message:new');
-          getCombinedHistory(activeConversation.userPhone)
-            .then((fullHistory) => {
-              if (isMounted) setHistory(fullHistory || []);
-            })
-            // eslint-disable-next-line @typescript-eslint/no-empty-function
-            .catch(() => {});
-        }
-      };
-
-      // Escuchar takeover y finish
-      const onTake = (payload: {
-        conversationId: string;
-        assignedTo: number;
-        botActive: boolean;
-      }) => {
-        if (payload.conversationId === activeConversation.id) {
-          alert('Esta conversación fue tomada por un operador.');
-          getCombinedHistory(activeConversation.userPhone)
-            .then((fullHistory) => {
-              if (isMounted) setHistory(fullHistory || []);
-            })
-            .catch(() => {});
-        }
-      };
-
-      const onFinish = (payload: {
-        conversationId: string;
-        status: string;
-        reason: string;
-      }) => {
-        if (payload.conversationId === activeConversation.id) {
-          alert('La conversación fue finalizada.');
-          // Actualizar el status de la conversación activa a CLOSED para bloquear el input
-          if (isMounted && activeConversation) {
-            activeConversation.status = 'CLOSED';
-          }
-          getCombinedHistory(activeConversation.userPhone)
-            .then((fullHistory) => {
-              if (isMounted) setHistory(fullHistory || []);
-            })
-            .catch(() => {});
-        }
-      };
-
-      // Escuchar actualizaciones de conversación (incluyendo cuando END node se ejecuta)
-      const onConversationUpdate = (payload: {
-        id?: string;
-        conversationId?: string;
-        botActive?: boolean;
-        status?: string;
-        [key: string]: unknown;
-      }) => {
-        const payloadId = payload.id || payload.conversationId;
-        if (payloadId === activeConversation.id) {
-          // Actualizar el estado local si el bot se desactivó
-          if (payload.botActive === false && activeConversation.botActive) {
-            activeConversation.botActive = false;
-            console.log(
-              '[useChatSession] Bot desactivado para esta conversación'
-            );
-          }
-          // Recargar el historial para mostrar los últimos mensajes/notas
-          getCombinedHistory(activeConversation.userPhone)
-            .then((fullHistory) => {
-              if (isMounted) setHistory(fullHistory || []);
-            })
-            // eslint-disable-next-line @typescript-eslint/no-empty-function
-            .catch(() => {});
-        }
-      };
-
-      socket.on('message:new', onMessage);
-      socket.on('conversation:take', onTake);
-      socket.on('conversation:finish', onFinish);
-      socket.on('conversation:update', onConversationUpdate);
-
-      return () => {
-        isMounted = false;
-        clearInterval(refreshInterval);
-        socket.off('message:new', onMessage);
-        socket.off('conversation:take', onTake);
-        socket.off('conversation:finish', onFinish);
-        socket.off('conversation:update', onConversationUpdate);
-      };
-    }
     return () => {
-      isMounted = false;
-      clearInterval(refreshInterval);
+      // Cleanup: no hacer nada especial aquí, solo mantener isMounted actualizado
     };
-  }, [activeConversation, socket]);
+  }, [activeConversation, loadHistoryOnce]);
 
-  // Efecto para iniciar el flujo automáticamente cuando se selecciona una conversación
+  // Efecto 2: Setup listeners de socket SOLO (sin polling)
   useEffect(() => {
-    let isMounted = true;
-    if (!activeConversation) {
-      return;
-    }
+    if (!socket || !activeConversation) return;
 
-    // Solo iniciar el flujo si el bot está activo y la conversación no está asignada
+    console.log(
+      '[useChatSession] Setting up socket listeners for conversation:',
+      activeConversation.id
+    );
+
+    // Listener para nuevos mensajes
+    const onMessage = (payload: { conversationId: string }) => {
+      if (payload.conversationId === activeConversation.id) {
+        console.log('[useChatSession] Received message:new event');
+        loadHistoryOnce(activeConversation.userPhone);
+      }
+    };
+
+    // Listener para takeover
+    const onTake = (payload: {
+      conversationId: string;
+      assignedTo: number;
+      botActive: boolean;
+    }) => {
+      if (payload.conversationId === activeConversation.id) {
+        console.log('[useChatSession] Conversation taken over');
+        loadHistoryOnce(activeConversation.userPhone);
+      }
+    };
+
+    // Listener para finish
+    const onFinish = (payload: {
+      conversationId: string;
+      status: string;
+      reason: string;
+    }) => {
+      if (payload.conversationId === activeConversation.id) {
+        console.log('[useChatSession] Conversation finished');
+        loadHistoryOnce(activeConversation.userPhone);
+      }
+    };
+
+    // Listener para actualizaciones (incluyendo END node)
+    const onConversationUpdate = (payload: {
+      id?: string;
+      conversationId?: string;
+      botActive?: boolean;
+      status?: string;
+      [key: string]: unknown;
+    }) => {
+      const payloadId = payload.id || payload.conversationId;
+      if (payloadId === activeConversation.id) {
+        console.log('[useChatSession] Conversation update received');
+        loadHistoryOnce(activeConversation.userPhone);
+      }
+    };
+
+    // Registrar listeners
+    socket.on('message:new', onMessage);
+    socket.on('conversation:take', onTake);
+    socket.on('conversation:finish', onFinish);
+    socket.on('conversation:update', onConversationUpdate);
+
+    return () => {
+      socket.off('message:new', onMessage);
+      socket.off('conversation:take', onTake);
+      socket.off('conversation:finish', onFinish);
+      socket.off('conversation:update', onConversationUpdate);
+    };
+  }, [activeConversation, socket, loadHistoryOnce]);
+
+  // Efecto 3: Iniciar flujo automáticamente si es necesario
+  useEffect(() => {
+    if (!activeConversation) return;
+
     if (activeConversation.botActive && !activeConversation.assignedTo) {
       startConversationFlow(activeConversation.id)
         .then(() => {
-          if (isMounted) {
-            console.log(
-              '[useChatSession] Flujo iniciado para conversación',
-              activeConversation.id
-            );
-            // Recargar el historial después de iniciar el flujo
-            return getCombinedHistory(activeConversation.userPhone);
-          }
-        })
-        .then((fullHistory) => {
-          if (isMounted && fullHistory) {
-            setHistory(fullHistory);
-          }
+          console.log(
+            '[useChatSession] Flow started for conversation',
+            activeConversation.id
+          );
+          // Recargar historial después de iniciar el flujo
+          return loadHistoryOnce(activeConversation.userPhone);
         })
         .catch((error) => {
-          console.error('[useChatSession] Error al iniciar flujo:', error);
+          console.error('[useChatSession] Error starting flow:', error);
         });
     }
+  }, [activeConversation, loadHistoryOnce]);
 
+  // Cleanup mount ref
+  useEffect(() => {
+    isMountedRef.current = true;
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
     };
-  }, [activeConversation]);
+  }, []);
 
-  const sendMessage = async (content: string, isNote: boolean) => {
-    if (!activeConversation) return;
-    setSending(true);
-    try {
-      if (isNote) {
-        const newNote = await createConversationNote(
-          activeConversation.id,
-          content
-        );
-        setHistory((prevHistory) => {
-          const newHistory = [...prevHistory, { type: 'note', ...newNote }];
-          newHistory.sort(
-            (a, b) =>
-              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  // Función para enviar mensaje o nota
+  const sendMessage = useCallback(
+    async (content: string, isNote: boolean) => {
+      if (!activeConversation) return;
+
+      setSending(true);
+      try {
+        if (isNote) {
+          const newNote = await createConversationNote(
+            activeConversation.id,
+            content
           );
-          return newHistory;
-        });
-      } else {
-        await api.post(`/conversations/${activeConversation.id}/messages`, {
-          content,
-        });
-        // Recargar historial después de enviar mensaje
-        const fullHistory = await getCombinedHistory(
-          activeConversation.userPhone
-        );
-        setHistory(fullHistory || []);
+          // Actualizar estado inmediatamente en lugar de recargar todo
+          setHistory((prevHistory) => {
+            const newHistory = [...prevHistory, { type: 'note', ...newNote }];
+            newHistory.sort(
+              (a, b) =>
+                new Date(a.createdAt).getTime() -
+                new Date(b.createdAt).getTime()
+            );
+            return newHistory;
+          });
+        } else {
+          // Enviar mensaje
+          await api.post(`/conversations/${activeConversation.id}/messages`, {
+            content,
+          });
+          // Recargar historial después de enviar (socket también notificará)
+          await loadHistoryOnce(activeConversation.userPhone);
+        }
+      } catch (error) {
+        console.error('[useChatSession] Failed to send message', error);
+        alert('❌ No se pudo enviar el mensaje.');
+      } finally {
+        setSending(false);
       }
-    } catch (error) {
-      console.error('[useChatSession] Failed to send message', error);
-      alert('❌ No se pudo enviar el mensaje.');
-    } finally {
-      setSending(false);
-    }
-  };
+    },
+    [activeConversation, loadHistoryOnce]
+  );
 
-  const closeConversation = async () => {
+  // Función para cerrar conversación
+  const closeConversation = useCallback(async () => {
     if (!activeConversation || activeConversation.status === 'CLOSED') return;
+
     setClosing(true);
     try {
       await api.post(`/conversations/${activeConversation.id}/close`, {});
+      // El socket notificará la actualización
     } catch (error) {
       console.error('[useChatSession] Failed to close conversation', error);
     } finally {
       setClosing(false);
     }
-  };
+  }, [activeConversation]);
 
   return {
     history,

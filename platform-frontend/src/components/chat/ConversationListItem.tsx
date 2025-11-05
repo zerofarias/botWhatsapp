@@ -61,9 +61,13 @@ const ConversationListItem: React.FC<ConversationListItemProps> = ({
 
   const displayName = getDisplayName(conversation);
 
-  // Determinar el estado visual basado en botActive
+  // Determinar el estado visual basado en botActive y status
   const isBotActive = conversation.botActive && !conversation.assignedTo;
-  const statusClass = isBotActive
+  const isClosed = conversation.status === 'CLOSED';
+
+  const statusClass = isClosed
+    ? 'conversation-item--closed'
+    : isBotActive
     ? 'conversation-item--bot-active'
     : !conversation.botActive && conversation.status !== 'CLOSED'
     ? 'conversation-item--ready'
@@ -89,7 +93,7 @@ const ConversationListItem: React.FC<ConversationListItemProps> = ({
         </div>
         <div className="conversation-item-preview">{lastMessageText}</div>
       </div>
-      {isBotActive && (
+      {isBotActive && !isClosed && (
         <div className="conversation-item-bot-badge" title="Bot activo">
           🤖
         </div>
