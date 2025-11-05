@@ -19,13 +19,16 @@
 .chat-page-redesign {
   display: grid;
   grid-template-columns: 350px 1fr;
-  height: 100vh; /* O la altura del contenedor padre */
+  height: 100vh;
+  /* O la altura del contenedor padre */
   width: 100%;
   background-color: var(--chat-bg);
 }
 
 /* ------------------ */
+
 /* Conversation List */
+
 /* ------------------ */
 
 .conversation-list-panel {
@@ -87,7 +90,9 @@
 }
 
 /* ------------------ */
+
 /* Conversation Item */
+
 /* ------------------ */
 
 .conversation-item {
@@ -161,13 +166,16 @@
 }
 
 /* ------------------ */
+
 /* Chat View          */
+
 /* ------------------ */
 
 .chat-view {
   display: flex;
   flex-direction: column;
-  height: 100vh; /* Or parent height */
+  height: 100vh;
+  /* Or parent height */
 }
 
 .chat-view-empty {
@@ -180,7 +188,9 @@
 }
 
 /* ------------------ */
+
 /* Chat Header        */
+
 /* ------------------ */
 
 .chat-header {
@@ -229,7 +239,9 @@
 }
 
 /* ------------------ */
+
 /* Message List       */
+
 /* ------------------ */
 
 .message-list {
@@ -240,7 +252,9 @@
 }
 
 /* ------------------ */
+
 /* Message Bubble     */
+
 /* ------------------ */
 
 .message-bubble-container {
@@ -291,7 +305,9 @@
 }
 
 /* ------------------ */
+
 /* Chat Note          */
+
 /* ------------------ */
 
 .chat-note-bubble {
@@ -308,7 +324,9 @@
 }
 
 /* ------------------ */
+
 /* Chat Composer      */
+
 /* ------------------ */
 
 .chat-composer-container {
@@ -352,7 +370,9 @@
 }
 
 /* ------------------ */
+
 /* Chat Event Bubble  */
+
 /* ------------------ */
 
 .chat-event-bubble {
@@ -367,9 +387,53 @@
 }
 
 .chat-event--start {
-  background-color: #027a48; /* Dark Green */
+  background-color: #027a48;
+  /* Dark Green */
 }
 
 .chat-event--end {
-  background-color: #b42318; /* Dark Red */
+  background-color: #b42318;
+  /* Dark Red */
+}
+
+/* Bot Active State - Yellow */
+
+.conversation-item--bot-active {
+  background-color: #fef3c7;
+  border-left: 4px solid #fbbf24;
+}
+
+.conversation-item--bot-active:hover {
+  background-color: #fde68a;
+}
+
+.conversation-item--bot-active .conversation-item-avatar {
+  background-color: #f59e0b;
+}
+
+.conversation-item--bot-active .conversation-item-name {
+  color: #92400e;
+}
+
+/* Ready State (not bot active) - Green */
+
+.conversation-item--ready {
+  background-color: #dcfce7;
+  border-left: 4px solid #86efac;
+}
+
+.conversation-item--ready:hover {
+  background-color: #bbf7d0;
+}
+
+.conversation-item--ready .conversation-item-avatar {
+  background-color: #22c55e;
+}
+
+/* Bot Badge */
+
+.conversation-item-bot-badge {
+  font-size: 1.2rem;
+  margin-left: 0.5rem;
+  flex-shrink: 0;
 }

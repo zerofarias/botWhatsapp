@@ -52,7 +52,7 @@ import {
 import './flow-builder.css';
 
 const DEFAULT_POSITION: XYPosition = { x: 160, y: 120 };
-const DEFAULT_NODE_TYPE = 'END';
+const DEFAULT_NODE_TYPE = 'default';
 
 /**
  * Retorna la clase CSS para la forma de un nodo basado en su tipo
@@ -62,6 +62,8 @@ function getNodeShapeClass(nodeType: string): string {
     case 'START':
     case 'END':
       return 'node-shape-circle';
+    case 'NOTE':
+      return 'node-shape-note'; // Forma especial para notas (si la quieres diferente)
     case 'CONDITIONAL':
       return 'node-shape-rounded'; // CONDITIONAL tiene su propio estilo personalizado
     default:
@@ -285,7 +287,10 @@ function normalizeNodeFromServer(node: SerializedNode): FlowBuilderNode {
             ? (legacy as any).defaultConditionId
             : uuidv4(),
       };
-
+      if (id)
+        console.log(
+          `[normalizeNode] CONDITIONAL "${id}": sourceVariable="${data.sourceVariable}"`
+        );
       break;
     case 'DELAY':
       data = {
@@ -342,6 +347,16 @@ function normalizeNodeFromServer(node: SerializedNode): FlowBuilderNode {
         value: legacy.value ?? '',
       };
       break;
+    case 'NOTE': {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const noteData = legacy as any;
+      data = {
+        type: 'NOTE',
+        label: noteData.label ?? 'Nota',
+        value: noteData.message ?? noteData.value ?? '',
+      };
+      break;
+    }
     case 'END':
       data = {
         type: 'END',
@@ -544,6 +559,16 @@ function toSerializedNode(node: FlowBuilderNode): SerializedNode {
           flowId: node.data.flowId ?? null,
           parentId: node.data.parentId ?? null,
         };
+      case 'NOTE': {
+        const noteData = node.data as any;
+        return {
+          type: 'NOTE',
+          label: noteData.label,
+          message: typeof noteData.value === 'string' ? noteData.value : '',
+          flowId: noteData.flowId ?? null,
+          parentId: noteData.parentId ?? null,
+        };
+      }
     }
   })();
   // Forzamos el tipo de data a 'any' para cumplir con SerializedNode y evitar error de tipos discriminados
@@ -655,17 +680,17 @@ function createNode(type: FlowNodeType, position: XYPosition): FlowBuilderNode {
         value: '',
       };
       break;
+    case 'END':
+      data = {
+        type: 'END',
+        label: 'Fin',
+      };
+      break;
     case 'NOTE':
       data = {
         type: 'NOTE',
         label: 'Nota',
         value: '',
-      };
-      break;
-    case 'END':
-      data = {
-        type: 'END',
-        label: 'Fin',
       };
       break;
     default:
@@ -776,9 +801,23 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
         }
       }
 
+      const serializedNodes = uniqueNodes.map(toSerializedNode);
+
+      // DEBUG: Log nodos NOTE
+      serializedNodes.forEach((node) => {
+        if (node.data.type === 'NOTE') {
+          console.log('[buildGraphPayload] NOTE node:', {
+            id: node.id,
+            label: (node.data as any).label,
+            value: (node.data as any).value,
+            data: node.data,
+          });
+        }
+      });
+
       return {
         botId,
-        nodes: uniqueNodes.map(toSerializedNode),
+        nodes: serializedNodes,
         edges: referenceEdges.map<SerializedEdge>((edge) => {
           // Extraer sourceHandle desde el conditionId o desde data.conditionId/optionId
           let sourceHandle: string | null = edge.sourceHandle || null;
@@ -802,6 +841,17 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
                 : null,
             data: edge.data,
           };
+
+          // DEBUG: Log cuando el sourceHandle se establece
+          if (sourceHandle) {
+            console.log('[buildGraphPayload] Edge with sourceHandle:', {
+              id: serialized.id,
+              sourceHandle,
+              conditionId: edge.data?.conditionId,
+              optionId: edge.data?.optionId,
+              label: serialized.label,
+            });
+          }
 
           return serialized;
         }),
@@ -833,6 +883,26 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
               `Nodo "${
                 textData.label
               }": variables no disponibles en mensaje: ${result.missingVariables.join(
+                ', '
+              )}`
+            );
+          }
+        }
+
+        if (node.data.type === 'NOTE') {
+          const noteData = node.data as any;
+          const value = noteData.value || '';
+          const availableVarNames = getAvailableVariableNames(
+            node.id,
+            variabilityMap
+          );
+          const result = validateVariableReferences(value, availableVarNames);
+
+          if (!result.valid && result.missingVariables.length > 0) {
+            errors.push(
+              `Nodo "${
+                noteData.label
+              }": variables no disponibles en nota: ${result.missingVariables.join(
                 ', '
               )}`
             );
@@ -940,7 +1010,8 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
       selectedNode.data.type !== 'CONDITIONAL' &&
       selectedNode.data.type !== 'TEXT' &&
       selectedNode.data.type !== 'CAPTURE' &&
-      selectedNode.data.type !== 'SET_VARIABLE'
+      selectedNode.data.type !== 'SET_VARIABLE' &&
+      selectedNode.data.type !== 'NOTE'
     ) {
       return selectedNode;
     }
@@ -981,6 +1052,20 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
               label: edge.label ?? undefined,
               type: DEFAULT_NODE_TYPE,
             } as FlowBuilderEdge;
+
+            // DEBUG: Log cuando se cargan edges con sourceHandle
+            if (normalized.sourceHandle) {
+              console.log(
+                '[loadNodesAndEdges] Edge loaded with sourceHandle:',
+                {
+                  id: normalized.id,
+                  source: normalized.source,
+                  target: normalized.target,
+                  sourceHandle: normalized.sourceHandle,
+                  label: normalized.label,
+                }
+              );
+            }
 
             return normalized;
           })
@@ -1217,13 +1302,14 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
           : nodeDataType.toLowerCase();
         const shapeClass = getNodeShapeClass(nodeDataType);
 
-        // Enriquecer nodos CONDITIONAL, TEXT, CAPTURE y SET_VARIABLE con variables disponibles
+        // Enriquecer nodos CONDITIONAL, TEXT, CAPTURE, SET_VARIABLE y NOTE con variables disponibles
         let enrichedData = node.data;
         if (
           node.data.type === 'CONDITIONAL' ||
           node.data.type === 'TEXT' ||
           node.data.type === 'CAPTURE' ||
-          node.data.type === 'SET_VARIABLE'
+          node.data.type === 'SET_VARIABLE' ||
+          node.data.type === 'NOTE'
         ) {
           const availableVars = getAvailableVariablesForNode(
             node.id,

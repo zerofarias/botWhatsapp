@@ -45,7 +45,34 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
     <form
       className="chat-composer-container chat-composer-row"
       onSubmit={handleSubmit}
+      style={{
+        position: 'relative',
+        opacity: disabled ? 0.5 : 1,
+        pointerEvents: disabled ? 'none' : 'auto',
+      }}
     >
+      {disabled && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(128, 128, 128, 0.3)',
+            borderRadius: '8px',
+            zIndex: 10,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#666',
+            fontWeight: 'bold',
+            fontSize: '14px',
+          }}
+        >
+          Esperando que alguien tome el chat...
+        </div>
+      )}
       <button
         type="button"
         className="chat-composer-note-btn"
@@ -60,8 +87,9 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
           cursor: isNoteMode ? 'not-allowed' : 'pointer',
           color: '#333',
           fontWeight: '500',
+          opacity: disabled ? 0.6 : 1,
         }}
-        disabled={isNoteMode}
+        disabled={isNoteMode || disabled}
       >
         📝 Nota
       </button>
@@ -75,12 +103,21 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
         onKeyDown={handleKeyDown}
         disabled={disabled}
         rows={2}
+        style={{
+          background: disabled ? '#f0f0f0' : '#fff',
+          color: disabled ? '#999' : '#000',
+        }}
       />
       <button
         type="submit"
         className="chat-composer-send-btn"
         disabled={disabled || !inputValue.trim()}
-        style={{ marginLeft: '8px', alignSelf: 'flex-end', height: '40px' }}
+        style={{
+          marginLeft: '8px',
+          alignSelf: 'flex-end',
+          height: '40px',
+          opacity: disabled ? 0.6 : 1,
+        }}
       >
         Enviar
       </button>

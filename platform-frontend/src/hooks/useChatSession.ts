@@ -22,6 +22,7 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
   const [sending, setSending] = useState(false);
   const [closing, setClosing] = useState(false);
 
+  // Auto-refresh del historial cada 2 segundos
   useEffect(() => {
     let isMounted = true;
     if (!activeConversation) {
@@ -29,6 +30,20 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
       return;
     }
 
+    const loadHistory = () => {
+      getCombinedHistory(activeConversation.userPhone)
+        .then((fullHistory) => {
+          if (isMounted) setHistory(fullHistory || []);
+        })
+        .catch((error) => {
+          console.error(
+            '[useChatSession] Failed to fetch combined history',
+            error
+          );
+        });
+    };
+
+    // Cargar historial inicial
     setLoading(true);
     markAllMessagesAsReadByPhone(activeConversation.userPhone)
       .catch((error) => {
@@ -38,29 +53,37 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
         );
       })
       .finally(() => {
-        getCombinedHistory(activeConversation.userPhone)
-          .then((fullHistory) => {
-            if (isMounted) setHistory(fullHistory || []);
-          })
-          .catch((error) => {
-            console.error(
-              '[useChatSession] Failed to fetch combined history',
-              error
-            );
-            if (isMounted) setHistory([]);
-          })
-          .finally(() => {
-            if (isMounted) setLoading(false);
-          });
+        loadHistory();
+        setLoading(false);
       });
 
+    // Auto-refresh cada 2 segundos
+    const refreshInterval = setInterval(() => {
+      if (isMounted) {
+        loadHistory();
+      }
+    }, 2000);
+
     if (socket && activeConversation) {
+      console.log(
+        '[useChatSession] Socket is ready, setting up listeners for conversation:',
+        activeConversation.id
+      );
+
       const onMessage = (payload: { conversationId: string }) => {
+        console.log(
+          `[useChatSession] Received message:new for conversation:`,
+          payload.conversationId,
+          'Active conversation:',
+          activeConversation.id
+        );
         if (payload.conversationId === activeConversation.id) {
+          console.log('[useChatSession] Reloading history after message:new');
           getCombinedHistory(activeConversation.userPhone)
             .then((fullHistory) => {
               if (isMounted) setHistory(fullHistory || []);
             })
+            // eslint-disable-next-line @typescript-eslint/no-empty-function
             .catch(() => {});
         }
       };
@@ -100,19 +123,50 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
         }
       };
 
+      // Escuchar actualizaciones de conversación (incluyendo cuando END node se ejecuta)
+      const onConversationUpdate = (payload: {
+        id?: string;
+        conversationId?: string;
+        botActive?: boolean;
+        status?: string;
+        [key: string]: unknown;
+      }) => {
+        const payloadId = payload.id || payload.conversationId;
+        if (payloadId === activeConversation.id) {
+          // Actualizar el estado local si el bot se desactivó
+          if (payload.botActive === false && activeConversation.botActive) {
+            activeConversation.botActive = false;
+            console.log(
+              '[useChatSession] Bot desactivado para esta conversación'
+            );
+          }
+          // Recargar el historial para mostrar los últimos mensajes/notas
+          getCombinedHistory(activeConversation.userPhone)
+            .then((fullHistory) => {
+              if (isMounted) setHistory(fullHistory || []);
+            })
+            // eslint-disable-next-line @typescript-eslint/no-empty-function
+            .catch(() => {});
+        }
+      };
+
       socket.on('message:new', onMessage);
       socket.on('conversation:take', onTake);
       socket.on('conversation:finish', onFinish);
+      socket.on('conversation:update', onConversationUpdate);
 
       return () => {
         isMounted = false;
+        clearInterval(refreshInterval);
         socket.off('message:new', onMessage);
         socket.off('conversation:take', onTake);
         socket.off('conversation:finish', onFinish);
+        socket.off('conversation:update', onConversationUpdate);
       };
     }
     return () => {
       isMounted = false;
+      clearInterval(refreshInterval);
     };
   }, [activeConversation, socket]);
 

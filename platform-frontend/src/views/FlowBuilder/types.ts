@@ -246,6 +246,13 @@ export interface SetVariableNodeData extends BaseNodeData {
 export interface NoteNodeData extends BaseNodeData {
   type: 'NOTE';
   value: string; // Contenido de la nota interna
+  // Variables disponibles en este punto del flujo (para UI)
+  availableVariables?: Array<{
+    name: string;
+    createdByNodeId?: string;
+    createdByNodeType?: string;
+    createdByNodeLabel?: string;
+  }>;
 }
 
 export interface EndNodeData extends BaseNodeData {

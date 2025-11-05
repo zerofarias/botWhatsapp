@@ -29,11 +29,6 @@ conversationRouter.get('/all-by-phone/:phone', listAllChatsByPhoneHandler);
 conversationRouter.get('/', listConversationsHandler);
 conversationRouter.get('/:id/messages', getConversationMessagesHandler);
 conversationRouter.post('/:id/messages', sendConversationMessageHandler);
-
-// Rutas para notas internas
-conversationRouter.get('/:id/notes', listConversationNotesHandler);
-conversationRouter.post('/:id/notes', createConversationNoteHandler);
-
 conversationRouter.post(
   '/:id/close',
   authorize(['ADMIN', 'SUPERVISOR', 'OPERATOR']),
@@ -59,4 +54,17 @@ conversationRouter.post(
   '/:id/start-flow',
   authorize(['ADMIN', 'SUPERVISOR', 'OPERATOR']),
   startFlowHandler
+);
+
+// Endpoints para notas internas
+conversationRouter.post(
+  '/:id/notes',
+  authorize(['ADMIN', 'SUPERVISOR', 'OPERATOR']),
+  createConversationNoteHandler
+);
+
+conversationRouter.get(
+  '/:id/notes',
+  authorize(['ADMIN', 'SUPERVISOR', 'OPERATOR']),
+  listConversationNotesHandler
 );

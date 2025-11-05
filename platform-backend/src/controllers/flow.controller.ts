@@ -238,6 +238,17 @@ export async function updateFlowNode(req: Request, res: Response) {
     isActive,
   } = req.body ?? {};
 
+  // DEBUG: Log para ver qué se recibe
+  if (type === 'NOTE') {
+    console.log(`[UPDATE NODE] Actualizando nodo NOTE ${id}:`, {
+      id,
+      name,
+      message,
+      type,
+      metadata: rawMetadata,
+    });
+  }
+
   // Sincronizar builder.type con el tipo real del nodo
   let metadata = rawMetadata;
   if (type === 'CONDITIONAL') {
@@ -939,6 +950,18 @@ export async function saveFlowGraph(req: Request, res: Response) {
           console.log(`[DEBUG]   message = "${dataRecord.message}"`);
         }
 
+        // DEBUG: Log para NOTE
+        if (dataRecord.type === 'NOTE') {
+          console.log(
+            `[DEBUG] NOTE node "${nodeId}": data keys = ${Object.keys(
+              dataRecord
+            ).join(', ')}`
+          );
+          console.log(`[DEBUG]   message = "${dataRecord.message}"`);
+          console.log(`[DEBUG]   value = "${dataRecord.value}"`);
+          console.log(`[DEBUG]   label = "${dataRecord.label}"`);
+        }
+
         // DEBUG: Log para CONDITIONAL
         if (dataRecord.type === 'CONDITIONAL') {
           console.log(
@@ -1047,14 +1070,13 @@ export async function saveFlowGraph(req: Request, res: Response) {
           typeof data.label === 'string' && data.label.trim().length
             ? data.label.trim()
             : 'Nodo sin título';
-        const message =
-          flowType === 'NOTE'
-            ? typeof dataRecord.value === 'string'
-              ? dataRecord.value
-              : ''
-            : typeof data.message === 'string'
-            ? data.message
-            : '';
+
+        // Para nodos NOTE, siempre usar el campo message del payload
+        const message = typeof data.message === 'string' ? data.message : '';
+        console.log(
+          `[saveFlowGraph] Node "${nodeId}" (type: ${flowType}): data.message="${message}"`
+        );
+
         const isActive =
           typeof data.isActive === 'boolean' ? data.isActive : true;
 

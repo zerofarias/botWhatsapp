@@ -1,12 +1,21 @@
 import React from 'react';
 
+export interface AvailableVariable {
+  name: string;
+  createdByNodeId?: string;
+  createdByNodeType?: string;
+  createdByNodeLabel?: string;
+}
+
 export interface NoteNodeFormProps {
   value: string;
+  availableVariables?: AvailableVariable[];
   onChange: (data: { value: string }) => void;
 }
 
 export const NoteNodeForm: React.FC<NoteNodeFormProps> = ({
   value,
+  availableVariables = [],
   onChange,
 }) => {
   return (
@@ -44,7 +53,7 @@ export const NoteNodeForm: React.FC<NoteNodeFormProps> = ({
             fontFamily: 'monospace',
             fontSize: 12,
           }}
-          placeholder="Escribe una nota interna aquí..."
+          placeholder="Escribe una nota interna aquí... Usa $$nombreVariable para reutilizar variables"
         />
       </label>
 
@@ -61,6 +70,48 @@ export const NoteNodeForm: React.FC<NoteNodeFormProps> = ({
         <strong>💡 Nota:</strong> El contenido se registrará en el panel de
         administración y en la base de datos, pero no se mostrará al usuario.
       </div>
+
+      {availableVariables && availableVariables.length > 0 && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: 8,
+            background: '#e3f2fd',
+            borderRadius: 4,
+            border: '1px solid #2196f3',
+          }}
+        >
+          <strong
+            style={{ color: '#1976d2', display: 'block', marginBottom: 8 }}
+          >
+            📦 Variables disponibles:
+          </strong>
+          <div style={{ fontSize: 11, color: '#333' }}>
+            {availableVariables.map((variable) => (
+              <div
+                key={variable.name}
+                style={{
+                  marginBottom: 6,
+                  padding: 6,
+                  background: 'white',
+                  borderRadius: 3,
+                  border: '1px solid #bbdefb',
+                }}
+              >
+                <div style={{ fontFamily: 'monospace', fontWeight: 'bold' }}>
+                  $${variable.name}
+                </div>
+                {variable.createdByNodeLabel && (
+                  <div style={{ fontSize: 10, color: '#666', marginTop: 2 }}>
+                    Creada por: {variable.createdByNodeLabel} (
+                    {variable.createdByNodeType})
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

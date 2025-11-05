@@ -77,16 +77,15 @@ export async function getCombinedChatHistoryByPhone(userPhone: string) {
       timestamp: conv.closedAt || null,
     });
   }
-  // Ordenar por fecha
+  // Ordenar por fecha de forma ascendente (más antiguo primero)
   history.sort((a, b) => {
     const timeA = a.createdAt || a.timestamp;
     const timeB = b.createdAt || b.timestamp;
 
-    // Si alguno no tiene fecha, no se puede comparar de forma fiable,
-    // pero para mantener un orden estable, podemos tratarlos como iguales
-    // o moverlos al principio/final. Moverlos al final es más seguro.
+    // Si alguno no tiene fecha, moverlo al final para mantener estabilidad
+    if (!timeA && !timeB) return 0;
     if (!timeA) return 1;
-    if (!timeB) return -1;
+    if (!timeB) return 1;
 
     return new Date(timeA).getTime() - new Date(timeB).getTime();
   });

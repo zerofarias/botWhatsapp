@@ -68,12 +68,12 @@ export async function listConversationMessages(
 
   const messages = await prisma.message.findMany({
     where: { conversationId: id },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: 'asc' },
     take: limit,
     select: messageSelect,
   });
 
-  return messages.reverse();
+  return messages;
 }
 
 type CreateMessageInput = {

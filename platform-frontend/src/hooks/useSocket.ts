@@ -21,6 +21,18 @@ export function useSocket() {
       withCredentials: true,
     });
 
+    instance.on('connect', () => {
+      console.log('[useSocket] Socket connected successfully');
+    });
+
+    instance.on('disconnect', () => {
+      console.log('[useSocket] Socket disconnected');
+    });
+
+    instance.on('connect_error', (error) => {
+      console.error('[useSocket] Connection error:', error);
+    });
+
     setSocket(instance);
 
     return () => {

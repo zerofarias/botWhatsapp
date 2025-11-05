@@ -279,6 +279,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
       nodeForm = (
         <NoteNodeForm
           value={data.value}
+          availableVariables={data.availableVariables}
           onChange={({ value }) => handleUpdate({ value })}
         />
       );

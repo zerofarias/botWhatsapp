@@ -63,7 +63,9 @@ export async function listConversationMessages(
 }
 
 export async function getCombinedHistory(phone: string) {
-  const res = await api.get(`/conversations/history/${phone}`);
+  // Agregar timestamp para desabilitar caché del navegador
+  const timestamp = Date.now();
+  const res = await api.get(`/conversations/history/${phone}?t=${timestamp}`);
   return res.data;
 }
 

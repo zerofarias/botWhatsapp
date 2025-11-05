@@ -295,6 +295,15 @@ export async function getCombinedChatHistoryHandler(
   if (!phone || typeof phone !== 'string') {
     return res.status(400).json({ message: 'Phone is required.' });
   }
+
+  // Desabilitar caché del navegador para este endpoint
+  res.set(
+    'Cache-Control',
+    'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0'
+  );
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+
   // Opcional: verificar permisos del usuario sobre ese teléfono
   try {
     const history = await getCombinedChatHistoryByPhone(phone);
@@ -335,14 +344,7 @@ export async function createConversationNoteHandler(
     req.user.id
   );
   let noteContent = '';
-  if (note.payload && typeof note.payload === 'string') {
-    try {
-      const parsed = JSON.parse(note.payload);
-      noteContent = (parsed as { content?: string }).content ?? '';
-    } catch {
-      // ignore parse error
-    }
-  } else if (
+  if (
     note.payload &&
     typeof note.payload === 'object' &&
     'content' in note.payload
@@ -380,14 +382,7 @@ export async function listConversationNotesHandler(
   res.json(
     notes.map((note) => {
       let noteContent = '';
-      if (note.payload && typeof note.payload === 'string') {
-        try {
-          const parsed = JSON.parse(note.payload);
-          noteContent = (parsed as { content?: string }).content ?? '';
-        } catch {
-          // ignore parse error
-        }
-      } else if (
+      if (
         note.payload &&
         typeof note.payload === 'object' &&
         'content' in note.payload

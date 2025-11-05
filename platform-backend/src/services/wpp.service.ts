@@ -1410,10 +1410,16 @@ async function handleIncomingMessage(
 
         // Si hay acciones (mensajes y notas), enviarlas
         if (chainResult.actions && chainResult.actions.length > 0) {
+          console.log(
+            `[FLOW] Procesando ${chainResult.actions.length} acciones:`,
+            JSON.stringify(chainResult.actions)
+          );
+
           // Procesar mensajes
           const sendMessageAction = chainResult.actions.find(
             (a) => a.type === 'send_message'
           );
+          let hasMessage = false;
           if (
             sendMessageAction &&
             sendMessageAction.payload &&
@@ -1432,37 +1438,82 @@ async function handleIncomingMessage(
               messageText,
               io
             );
+            hasMessage = true;
           }
 
-          // Procesar notas internas
-          const saveNoteAction = chainResult.actions.find(
+          // Procesar TODAS las notas internas (puede haber múltiples)
+          const saveNoteActions = chainResult.actions.filter(
             (a) => a.type === 'save_note'
           );
-          if (
-            saveNoteAction &&
-            saveNoteAction.payload &&
-            typeof saveNoteAction.payload === 'object'
-          ) {
-            const payload = saveNoteAction.payload as Record<string, unknown>;
-            const noteContent = (payload.content as string) ?? '';
-            if (noteContent) {
+          console.log(
+            `[FLOW] Encontradas ${saveNoteActions.length} acciones de save_note`
+          );
+
+          for (const saveNoteAction of saveNoteActions) {
+            if (
+              saveNoteAction &&
+              saveNoteAction.payload &&
+              typeof saveNoteAction.payload === 'object'
+            ) {
+              const payload = saveNoteAction.payload as Record<string, unknown>;
+              const noteContent = (payload.content as string) ?? '';
+              console.log(`[FLOW] Procesando nota: "${noteContent}"`);
+              if (noteContent) {
+                console.log(
+                  `[FLOW] Saving note to conversation: "${noteContent}"`
+                );
+                await addConversationNote(
+                  BigInt(conversationId),
+                  noteContent,
+                  null
+                );
+              } else {
+                console.log(
+                  `[FLOW] ⚠️ Nota vacía detectada en payload:`,
+                  payload
+                );
+              }
+            } else {
               console.log(
-                `[FLOW] Saving note to conversation: "${noteContent}"`
-              );
-              await addConversationNote(
-                BigInt(conversationId),
-                noteContent,
-                null
+                `[FLOW] ⚠️ saveNoteAction no tiene payload válido:`,
+                saveNoteAction
               );
             }
           }
+
+          // Solo emitir conversation:update si hay cambios importantes (sin messages ni notas solas)
+          if (!hasMessage && saveNoteActions.length > 0) {
+            console.log(
+              `[FLOW] Notas procesadas, emitiendo conversation:update`
+            );
+            await broadcastConversationUpdate(io, conversationId);
+          }
         }
+
+        // Verificar si hay acción end_flow para desactivar el bot
+        const endFlowAction = chainResult.actions.find(
+          (a) => a.type === 'end_flow'
+        );
+        const shouldDeactivateBot =
+          endFlowAction?.payload && typeof endFlowAction.payload === 'object'
+            ? (endFlowAction.payload as Record<string, unknown>)
+                .shouldDeactivateBot === true
+            : false;
 
         // Guardar contexto final
         await touchConversation(conversationId, {
           currentFlowNodeId: chainResult.nextNodeId,
           context: JSON.stringify(chainResult.updatedContext),
+          ...(shouldDeactivateBot && { botActive: false }),
         });
+
+        if (shouldDeactivateBot) {
+          console.log(
+            `[FLOW] END node ejecutado, bot desactivado para conversación ${conversationId}`
+          );
+          // Emitir evento de actualización para notificar al frontend
+          await broadcastConversationUpdate(io, conversationId);
+        }
 
         return;
       }
