@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
+import { EditContactModal } from '../components/contacts/EditContactModal';
 
 type AreaItem = {
   id: number;
@@ -14,6 +15,14 @@ type ContactItem = {
   dni: string | null;
   area: AreaItem | null;
   createdAt: string;
+};
+
+type EditingContactItem = {
+  id: number;
+  name: string;
+  phone: string;
+  dni: string | null;
+  areaId: number | null;
 };
 
 type ContactFormState = {
@@ -41,6 +50,8 @@ export default function ContactsPage() {
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
   const [importPayload, setImportPayload] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [editingContact, setEditingContact] =
+    useState<EditingContactItem | null>(null);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -113,6 +124,24 @@ export default function ContactsPage() {
       console.error('[Contacts] Failed to delete contact', err);
       window.alert('No fue posible eliminar el contacto.');
     }
+  };
+
+  const handleEditStart = (contact: ContactItem) => {
+    setEditingContact({
+      id: contact.id,
+      name: contact.name,
+      phone: contact.phone,
+      dni: contact.dni,
+      areaId: contact.area?.id ?? null,
+    });
+  };
+
+  const handleEditClose = () => {
+    setEditingContact(null);
+  };
+
+  const handleEditSuccess = async () => {
+    await fetchAll();
   };
 
   const handleImport = async () => {
@@ -317,6 +346,13 @@ export default function ContactsPage() {
                       <td>
                         <button
                           type="button"
+                          className="link-button link-button--primary"
+                          onClick={() => handleEditStart(contact)}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
                           className="link-button link-button--danger"
                           onClick={() => handleDelete(contact.id)}
                         >
@@ -335,6 +371,15 @@ export default function ContactsPage() {
           )}
         </div>
       </section>
+
+      {editingContact && (
+        <EditContactModal
+          contact={editingContact}
+          areas={areas}
+          onClose={handleEditClose}
+          onSuccess={handleEditSuccess}
+        />
+      )}
     </div>
   );
 }
