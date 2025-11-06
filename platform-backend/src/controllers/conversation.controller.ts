@@ -195,11 +195,7 @@ export async function listAllChatsHandler(req: Request, res: Response) {
       orderBy: { createdAt: 'asc' },
       select: conversationSelect,
     });
-    const mapped = allChats.map((c) => ({
-      ...c,
-      id: c.id.toString(),
-      contact: c.contact ? { ...c.contact, id: c.contact.id.toString() } : null,
-    }));
+    const mapped = allChats.map((c) => mapConversationForResponse(c));
     res.json(mapped);
   } catch (error) {
     res.status(500).json({

@@ -18,6 +18,20 @@ function formatPhone(phone: string) {
   return phone.replace(/@.+$/, '');
 }
 
+function getPhotoUrl(photoUrl?: string | null): string | null {
+  if (!photoUrl) return null;
+
+  // Si ya es una URL completa, devolverla tal cual
+  if (photoUrl.startsWith('http://') || photoUrl.startsWith('https://')) {
+    return photoUrl;
+  }
+
+  // Si es una URL relativa, usar la base del API
+  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+  const baseUrl = apiBase.replace('/api', '');
+  return `${baseUrl}${photoUrl}`;
+}
+
 function buildLastMessagePreview(message: ConversationSummary['lastMessage']) {
   if (!message) return '';
   const prefix =
@@ -60,6 +74,7 @@ const ConversationListItem: React.FC<ConversationListItemProps> = ({
     : 'Sin mensajes';
 
   const displayName = getDisplayName(conversation);
+  const photoUrl = getPhotoUrl(conversation.contact?.photoUrl);
 
   // Determinar el estado visual basado en botActive y status
   const isBotActive = conversation.botActive && !conversation.assignedTo;
@@ -82,9 +97,9 @@ const ConversationListItem: React.FC<ConversationListItemProps> = ({
       onClick={onSelect}
     >
       <div className="conversation-item-avatar">
-        {conversation.contact?.photoUrl ? (
+        {photoUrl ? (
           <img
-            src={conversation.contact.photoUrl}
+            src={photoUrl}
             alt={displayName}
             className="conversation-item-avatar-image"
             onError={(e) => {
@@ -95,7 +110,7 @@ const ConversationListItem: React.FC<ConversationListItemProps> = ({
         ) : null}
         <span
           className={`conversation-item-avatar-fallback${
-            conversation.contact?.photoUrl ? ' hidden' : ''
+            photoUrl ? ' hidden' : ''
           }`}
         >
           {displayName.charAt(0).toUpperCase()}
