@@ -883,15 +883,8 @@ async function ensureConversation(
     { name: contactName }
   );
 
-  // Si obtuvimos una foto de WhatsApp, actualizarla
-  if (contactPhotoUrl) {
-    await (prisma.contact.update as any)({
-      where: { id: contact.id },
-      data: { photoUrl: contactPhotoUrl },
-    }).catch((err: unknown) => {
-      console.warn(`[WPP] Could not update contact photo:`, err);
-    });
-  }
+  // Si obtuvimos una foto de WhatsApp, descargarla y guardarla localmente
+  // Funci�n downloadAndSaveProfilePicture eliminada
 
   const existing = await findOpenConversationByPhone(cleanNumber);
   if (existing) {

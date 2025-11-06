@@ -1,17 +1,7 @@
 import React, { useState } from 'react';
 import type { HistoryItem } from '../../types/chat';
 import ImageViewerModal from './ImageViewerModal';
-
-// Obtener la URL base del API desde la variable de entorno o el proxy
-function getApiBaseUrl(): string {
-  const apiUrl = import.meta.env.VITE_API_URL;
-  if (apiUrl && apiUrl.length) {
-    // Si VITE_API_URL es http://example.com:4001/api, extraer http://example.com:4001
-    return apiUrl.replace(/\/api\/?$/, '');
-  }
-  // En desarrollo, usar el mismo host/puerto (el proxy se encarga)
-  return window.location.origin;
-}
+import { getFullMediaUrl, getApiBaseUrl } from '../../utils/urls';
 
 type MessageBubbleProps = {
   item: HistoryItem;
@@ -68,24 +58,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ item }) => {
     : 'message-bubble--incoming';
 
   // Si la URL es relativa, construir la URL completa usando la base del API
-  const getFullMediaUrl = (url?: string | null) => {
-    if (!url) return '';
-
-    // Si es una URL absoluta, devolverla tal cual
-    if (url.startsWith('http')) {
-      return url;
-    }
-
-    // Si ya tiene /uploads/, usar la base del API
-    if (url.startsWith('/uploads/')) {
-      const apiBase = getApiBaseUrl();
-      return `${apiBase}${url}`;
-    }
-
-    // Si no, construir la ruta completa
-    const apiBase = getApiBaseUrl();
-    return `${apiBase}/uploads/${url}`;
-  };
+  // Nota: getFullMediaUrl es importada desde utils/urls
 
   return (
     <div className={`message-bubble-container ${containerClass}`}>

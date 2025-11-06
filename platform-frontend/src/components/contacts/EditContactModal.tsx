@@ -1,178 +1,120 @@
-import { FormEvent, useEffect, useState } from 'react';
-import { api } from '../../services/api';
-import '../../styles/EditContactModal.css';
+import React from 'react';
 
-type AreaItem = {
-  id: number;
-  name: string;
-  isActive: boolean;
-};
-
-type ContactItem = {
+export interface EditingContactItem {
   id: number;
   name: string;
   phone: string;
   dni: string | null;
-  areaId: number | null | undefined;
-};
-
-interface EditContactModalProps {
-  contact: ContactItem;
-  areas: AreaItem[];
-  onClose: () => void;
-  onSuccess: () => void;
+  areaId: number | null;
 }
 
-export function EditContactModal({
+export interface AreaItem {
+  id: number;
+  name: string;
+}
+
+export interface EditContactModalProps {
+  contact: EditingContactItem | null;
+  areas: AreaItem[];
+  onClose: () => void;
+  onSuccess: () => Promise<void>;
+}
+
+/**
+ * Modal para editar información de un contacto
+ */
+export const EditContactModal: React.FC<EditContactModalProps> = ({
   contact,
   areas,
   onClose,
   onSuccess,
-}: EditContactModalProps) {
-  const [formState, setFormState] = useState({
-    name: contact.name,
-    phone: contact.phone,
-    dni: contact.dni || '',
-    areaId: contact.areaId?.toString() || '',
-  });
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+}) => {
+  const [name, setName] = React.useState(contact?.name ?? '');
+  const [phone, setPhone] = React.useState(contact?.phone ?? '');
+  const [dni, setDni] = React.useState(contact?.dni ?? '');
+  const [areaId, setAreaId] = React.useState(contact?.areaId ?? '');
+  const [saving, setSaving] = React.useState(false);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
+  React.useEffect(() => {
+    if (contact) {
+      setName(contact.name);
+      setPhone(contact.phone);
+      setDni(contact.dni ?? '');
+      setAreaId(contact.areaId ?? '');
+    }
+  }, [contact]);
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setLoading(true);
-    setError(null);
-
+  const handleSave = async () => {
+    if (!contact) return;
+    setSaving(true);
     try {
-      await api.patch(`/contacts/${contact.id}`, {
-        name: formState.name,
-        phone: formState.phone,
-        dni: formState.dni || null,
-        areaId: formState.areaId ? Number(formState.areaId) : null,
-      });
-      onSuccess();
+      await onSuccess();
       onClose();
-    } catch (err) {
-      console.error('[EditContactModal] Failed to update contact', err);
-      setError('No fue posible actualizar el contacto. Intenta de nuevo.');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
+
+  if (!contact) return null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Editar Contacto</h2>
-          <button
-            type="button"
-            className="modal-close"
-            onClick={onClose}
-            aria-label="Cerrar"
+        <h2>Editar Contacto</h2>
+        <div className="form-group">
+          <label>Nombre</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Nombre del contacto"
+          />
+        </div>
+        <div className="form-group">
+          <label>Teléfono</label>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="Número de teléfono"
+          />
+        </div>
+        <div className="form-group">
+          <label>DNI</label>
+          <input
+            type="text"
+            value={dni}
+            onChange={(e) => setDni(e.target.value)}
+            placeholder="Documento de identidad (opcional)"
+          />
+        </div>
+        <div className="form-group">
+          <label>Área</label>
+          <select
+            value={areaId}
+            onChange={(e) =>
+              setAreaId(e.target.value ? Number(e.target.value) : '')
+            }
           >
-            ✕
+            <option value="">Seleccionar área</option>
+            {areas.map((area) => (
+              <option key={area.id} value={area.id}>
+                {area.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="modal-actions">
+          <button onClick={onClose} disabled={saving}>
+            Cancelar
+          </button>
+          <button onClick={handleSave} disabled={saving}>
+            {saving ? 'Guardando...' : 'Guardar'}
           </button>
         </div>
-
-        <form className="form" onSubmit={handleSubmit}>
-          <label className="form__label">
-            Nombre
-            <input
-              type="text"
-              required
-              value={formState.name}
-              onChange={(event) =>
-                setFormState((prev) => ({
-                  ...prev,
-                  name: event.target.value,
-                }))
-              }
-            />
-          </label>
-
-          <label className="form__label">
-            Teléfono
-            <input
-              type="text"
-              required
-              value={formState.phone}
-              onChange={(event) =>
-                setFormState((prev) => ({
-                  ...prev,
-                  phone: event.target.value,
-                }))
-              }
-            />
-          </label>
-
-          <label className="form__label">
-            DNI
-            <input
-              type="text"
-              placeholder="Opcional"
-              value={formState.dni}
-              onChange={(event) =>
-                setFormState((prev) => ({
-                  ...prev,
-                  dni: event.target.value,
-                }))
-              }
-            />
-          </label>
-
-          <label className="form__label">
-            Área
-            <select
-              value={formState.areaId}
-              onChange={(event) =>
-                setFormState((prev) => ({
-                  ...prev,
-                  areaId: event.target.value,
-                }))
-              }
-            >
-              <option value="">Sin asignar</option>
-              {areas.map((area) => (
-                <option key={area.id} value={area.id}>
-                  {area.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {error && <p className="form__error">{error}</p>}
-
-          <div className="form__actions">
-            <button
-              type="submit"
-              className="chat-button chat-button--primary"
-              disabled={loading}
-            >
-              {loading ? 'Guardando…' : 'Guardar cambios'}
-            </button>
-            <button
-              type="button"
-              className="chat-button chat-button--secondary"
-              onClick={onClose}
-              disabled={loading}
-            >
-              Cancelar
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   );
-}
+};
+
+export default EditContactModal;

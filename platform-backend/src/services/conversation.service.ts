@@ -128,8 +128,38 @@ export const conversationSelect = {
       createdAt: true,
       updatedAt: true,
       dni: true,
-      photoUrl: true,
     },
+  },
+  area: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  assignedTo: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  messages: {
+    select: {
+      id: true,
+      conversationId: true,
+      senderType: true,
+      senderId: true,
+      content: true,
+      mediaType: true,
+      mediaUrl: true,
+      externalId: true,
+      isDelivered: true,
+      isRead: true,
+      createdAt: true,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+    take: 1,
   },
 } satisfies Prisma.ConversationSelect;
 

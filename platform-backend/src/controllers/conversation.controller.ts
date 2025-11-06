@@ -195,9 +195,28 @@ export async function listAllChatsHandler(req: Request, res: Response) {
       orderBy: { createdAt: 'asc' },
       select: conversationSelect,
     });
-    const mapped = allChats.map((c) => mapConversationForResponse(c));
+    const mapped = allChats.map((c) => ({
+      ...c,
+      id: c.id.toString(),
+      contact: c.contact ? { ...c.contact, id: c.contact.id.toString() } : null,
+      messages:
+        c.messages?.map((m) => ({
+          ...m,
+          id: m.id.toString(),
+          conversationId: m.conversationId.toString(),
+        })) ?? null,
+      lastMessage:
+        c.messages && c.messages.length > 0
+          ? {
+              ...c.messages[0],
+              id: c.messages[0].id.toString(),
+              conversationId: c.messages[0].conversationId.toString(),
+            }
+          : null,
+    }));
     res.json(mapped);
   } catch (error) {
+    console.error('[listAllChatsHandler] Error:', error);
     res.status(500).json({
       message: 'Error al obtener todas las conversaciones',
       error: String(error),
@@ -211,7 +230,6 @@ interface Contact {
   name?: string;
   phone?: string;
   dni?: string | null;
-  photoUrl?: string | null;
 }
 
 interface Conversation {
@@ -438,14 +456,12 @@ export async function listConversationsHandler(req: Request, res: Response) {
             name: conversation.contact.name,
             phone: conversation.contact.phone,
             dni: conversation.contact.dni,
-            photoUrl: (conversation.contact as any).photoUrl ?? null,
           }
         : {
             id: conversation.contactId ?? null,
             name: conversation.contactName,
             phone: conversation.userPhone,
             dni: null,
-            photoUrl: null,
           },
       area: conversation.area
         ? { id: conversation.area.id, name: conversation.area.name }

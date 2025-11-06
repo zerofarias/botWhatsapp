@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ConversationSummary } from '../../types/chat';
+import { getPhotoUrl } from '../../utils/urls';
 
 // Helper functions (can be moved to a utils file)
 function getDisplayName(conversation: ConversationSummary) {
@@ -16,20 +17,6 @@ function formatPhone(phone: string) {
     return phone;
   }
   return phone.replace(/@.+$/, '');
-}
-
-function getPhotoUrl(photoUrl?: string | null): string | null {
-  if (!photoUrl) return null;
-
-  // Si ya es una URL completa, devolverla tal cual
-  if (photoUrl.startsWith('http://') || photoUrl.startsWith('https://')) {
-    return photoUrl;
-  }
-
-  // Si es una URL relativa, usar la base del API
-  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
-  const baseUrl = apiBase.replace('/api', '');
-  return `${baseUrl}${photoUrl}`;
 }
 
 function buildLastMessagePreview(message: ConversationSummary['lastMessage']) {
@@ -74,7 +61,6 @@ const ConversationListItem: React.FC<ConversationListItemProps> = ({
     : 'Sin mensajes';
 
   const displayName = getDisplayName(conversation);
-  const photoUrl = getPhotoUrl(conversation.contact?.photoUrl);
 
   // Determinar el estado visual basado en botActive y status
   const isBotActive = conversation.botActive && !conversation.assignedTo;
@@ -97,24 +83,7 @@ const ConversationListItem: React.FC<ConversationListItemProps> = ({
       onClick={onSelect}
     >
       <div className="conversation-item-avatar">
-        {photoUrl ? (
-          <img
-            src={photoUrl}
-            alt={displayName}
-            className="conversation-item-avatar-image"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-              e.currentTarget.nextElementSibling?.classList.remove('hidden');
-            }}
-          />
-        ) : null}
-        <span
-          className={`conversation-item-avatar-fallback${
-            photoUrl ? ' hidden' : ''
-          }`}
-        >
-          {displayName.charAt(0).toUpperCase()}
-        </span>
+        {displayName.charAt(0).toUpperCase()}
       </div>
       <div className="conversation-item-content">
         <div className="conversation-item-header">
