@@ -1097,16 +1097,17 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
     void loadNodesAndEdges();
   }, [loadNodesAndEdges]);
 
-  // Auto-guardar cambios con debounce
-  useEffect(() => {
-    if (!hasPendingChanges || loading || !persistGraphRef.current) return;
-
-    const timer = setTimeout(() => {
-      void persistGraphRef.current?.();
-    }, 2000); // Guardar 2 segundos después del último cambio
-
-    return () => clearTimeout(timer);
-  }, [hasPendingChanges, loading]);
+  // DESHABILITADO: Guardado automático
+  // El usuario debe guardar manualmente haciendo clic en el botón "Save"
+  // useEffect(() => {
+  //   if (!hasPendingChanges || loading || !persistGraphRef.current) return;
+  //
+  //   const timer = setTimeout(() => {
+  //     void persistGraphRef.current?.();
+  //   }, 2000); // Guardar 2 segundos después del último cambio
+  //
+  //   return () => clearTimeout(timer);
+  // }, [hasPendingChanges, loading]);
 
   const syncEdgesForNode = useCallback(
     (node: FlowBuilderNode): FlowBuilderEdge[] => {
