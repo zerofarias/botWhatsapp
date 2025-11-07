@@ -14,34 +14,32 @@ import { api } from '../../services/api';
 export function useConversations() {
   const conversations = useChatStore(selectConversations);
   const loading = useChatStore(selectLoading);
-  const { setLoading, setConversations, setError } = useChatStore((state) => ({
-    setLoading: state.setLoading,
-    setConversations: state.setConversations,
-    setError: state.setError,
-  }));
 
   const loadConversations = useCallback(async () => {
     try {
-      setLoading(true);
+      useChatStore.setState({ loading: true });
       const response = await api.get('/conversations', {
         timeout: 5000,
       });
-      setConversations(response.data);
-      setError(null);
+      console.log('📥 Conversations loaded:', response.data);
+
+      // Ensure data is an array
+      const conversations = Array.isArray(response.data) ? response.data : [];
+      useChatStore.setState({ conversations, error: null });
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to load conversations';
-      setError(message);
+      useChatStore.setState({ error: message, conversations: [] });
       console.error('Error loading conversations:', error);
     } finally {
-      setLoading(false);
+      useChatStore.setState({ loading: false });
     }
-  }, [setLoading, setConversations, setError]);
+  }, []);
 
-  // Load conversations on mount
+  // Load conversations on mount only
   useEffect(() => {
     loadConversations();
-  }, [loadConversations]);
+  }, []);
 
   return {
     conversations,

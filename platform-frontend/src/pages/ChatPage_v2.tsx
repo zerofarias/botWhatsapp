@@ -4,35 +4,50 @@
  * Simplified from original 100+ lines
  */
 
-import React, { useEffect, useCallback } from 'react';
-import {
-  useChatStore,
-  selectActiveConversation,
-  selectError,
-} from '../store/chatStore';
+import React, { useEffect, useCallback, useRef } from 'react';
+import { useChatStore } from '../store/chatStore';
 import { initializeSocket } from '../services/socket/SocketManager';
 import { useConversations } from '../hooks/v2/useConversations';
 import { useSocketListeners } from '../hooks/v2/useSocketListeners';
 import ErrorBoundary from '../components/ErrorBoundary';
+import ChatView_v2 from '../components/chat/ChatView_v2';
+import ChatComposer_v2 from '../components/chat/ChatComposer_v2';
 
 const ChatPage: React.FC = () => {
-  // Store state
-  const error = useChatStore(selectError);
-  const activeConversation = useChatStore(selectActiveConversation);
-  const setActiveConversation = useChatStore(
-    (state) => state.setActiveConversation
+  // Refs for tracking initialization
+  const hasInitializedConversation = useRef(false);
+  const socketInitialized = useRef(false);
+
+  // Store state - use simple getters to avoid infinite loops
+  const error = useChatStore((state) => state.error);
+  const activeConversation = useChatStore(
+    (state) =>
+      state.conversations.find((c) => c.id === state.activeConversationId) ||
+      null
   );
-  const setError = useChatStore((state) => state.setError);
 
   // Load conversations
   const { conversations, loading: loadingConversations } = useConversations();
 
   // Initialize socket connection FIRST (before useSocketListeners)
   useEffect(() => {
+    if (socketInitialized.current) return;
+    socketInitialized.current = true;
+
     try {
-      // Get API URL from window or use default
-      const apiUrl = (window as any).__API_URL__ || 'http://localhost:4000';
-      const socketUrl = apiUrl.replace(/\/api\/?$/, '');
+      // Derive socket URL from current window location or VITE_API_URL
+      const viteApiUrl = import.meta.env.VITE_API_URL;
+      let socketUrl: string;
+
+      if (viteApiUrl) {
+        // Remove /api suffix if present
+        socketUrl = viteApiUrl.replace(/\/api\/?$/, '');
+      } else {
+        // Fallback: use current location's protocol + hostname + port 4000
+        socketUrl = `${window.location.protocol}//${window.location.hostname}:4000`;
+      }
+
+      console.log('🔌 Initializing socket with URL:', socketUrl);
 
       const socket = initializeSocket(socketUrl, {
         reconnection: true,
@@ -43,7 +58,9 @@ const ChatPage: React.FC = () => {
       // Connect socket
       socket.connect().catch((error) => {
         console.error('Failed to connect socket:', error);
-        setError('Connection failed. Please refresh the page.');
+        useChatStore.setState({
+          error: 'Connection failed. Please refresh the page.',
+        });
       });
 
       return () => {
@@ -51,30 +68,32 @@ const ChatPage: React.FC = () => {
       };
     } catch (error) {
       console.error('Socket initialization error:', error);
-      setError('Socket initialization failed');
+      useChatStore.setState({ error: 'Socket initialization failed' });
     }
-  }, [setError]);
+  }, []);
 
   // Register socket listeners AFTER socket is initialized
   useSocketListeners();
 
-  // Auto-select first conversation on load
+  // Auto-select first conversation on load (only once)
   useEffect(() => {
-    if (!activeConversation && conversations.length > 0) {
-      setActiveConversation(conversations[0].id);
+    if (
+      !hasInitializedConversation.current &&
+      !activeConversation &&
+      conversations.length > 0
+    ) {
+      hasInitializedConversation.current = true;
+      useChatStore.getState().setActiveConversation(conversations[0].id);
     }
-  }, [conversations, activeConversation, setActiveConversation]);
+  }, [conversations.length, activeConversation]); // Only depend on length and activeConversation to avoid infinite loop
 
-  const handleSelectConversation = useCallback(
-    (conversationId: number) => {
-      setActiveConversation(conversationId);
-    },
-    [setActiveConversation]
-  );
+  const handleSelectConversation = useCallback((conversationId: number) => {
+    useChatStore.getState().setActiveConversation(conversationId);
+  }, []);
 
   const handleDismissError = useCallback(() => {
-    setError(null);
-  }, [setError]);
+    useChatStore.getState().setError(null);
+  }, []);
 
   return (
     <ErrorBoundary>
@@ -134,16 +153,8 @@ const ChatPage: React.FC = () => {
 
           {activeConversation ? (
             <>
-              <div className="flex-1 overflow-y-auto bg-white p-4">
-                <div className="text-center text-gray-500">
-                  Chat view for {activeConversation.contact?.name}
-                </div>
-              </div>
-              <div className="border-t border-gray-300 p-4 bg-white">
-                <div className="text-center text-gray-500">
-                  Message composer component
-                </div>
-              </div>
+              <ChatView_v2 conversationId={activeConversation.id} />
+              <ChatComposer_v2 />
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center bg-gray-50">

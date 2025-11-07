@@ -16,13 +16,7 @@ interface ChatViewProps {
 
 const ChatView_v2: React.FC<ChatViewProps> = ({ conversationId }) => {
   const messages = useChatStore(selectMessages);
-  const { loading, setLoading, setError } = useChatStore(
-    (state: ChatStoreState) => ({
-      loading: state.loading,
-      setLoading: state.setLoading,
-      setError: state.setError,
-    })
-  );
+  const loading = useChatStore((state: ChatStoreState) => state.loading);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
