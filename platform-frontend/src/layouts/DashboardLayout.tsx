@@ -13,6 +13,7 @@ type NavigationLink = {
 const NAVIGATION_LINKS: NavigationLink[] = [
   { to: '/dashboard', label: 'Estado' },
   { to: '/dashboard/chat', label: 'Chat' },
+  { to: '/dashboard/chat2', label: 'Chat2 (v2 BETA)', roles: ['ADMIN'] },
   { to: '/dashboard/bots', label: 'Bots', roles: ['ADMIN', 'SUPERVISOR'] },
   { to: '/dashboard/users', label: 'Usuarios', roles: ['ADMIN'] },
   { to: '/dashboard/areas', label: 'Areas', roles: ['ADMIN'] },
