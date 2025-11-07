@@ -99,6 +99,39 @@ import { Prisma } from '@prisma/client';
 import type { NodeType } from '../types/node-type.js';
 import { prisma } from '../config/prisma.js';
 
+// Simple cache para árboles de flujos
+const flowTreeCache = new Map<
+  string,
+  { tree: FlowNode[]; timestamp: number }
+>();
+const CACHE_TTL = 60000; // 60 segundos
+
+// Función auxiliar para generar clave de cache
+function getCacheKey(
+  createdBy: number,
+  areaId: number | null | undefined,
+  includeInactive: boolean
+): string {
+  return `flow_tree_${createdBy}_${areaId ?? 'null'}_${includeInactive}`;
+}
+
+// Función para invalidar cache de un usuario (cuando se modifica un flujo)
+export function invalidateFlowCache(createdBy: number, areaId?: number | null) {
+  for (const key of flowTreeCache.keys()) {
+    if (key.startsWith(`flow_tree_${createdBy}`)) {
+      // Si se especifica areaId, solo invalidar ese
+      if (
+        areaId !== undefined &&
+        !key.includes(`_${areaId}_`) &&
+        !key.includes(`_null_`)
+      ) {
+        continue;
+      }
+      flowTreeCache.delete(key);
+    }
+  }
+}
+
 const flowSelect = {
   id: true,
   name: true,
@@ -143,6 +176,19 @@ export async function listFlowTree({
   areaId,
   includeInactive = false,
 }: ListFlowsOptions): Promise<FlowNode[]> {
+  // Verificar cache primero
+  const cacheKey = getCacheKey(createdBy, areaId, includeInactive);
+  const cached = flowTreeCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    console.log(`[listFlowTree] Using cached tree for key: ${cacheKey}`);
+    return cached.tree;
+  }
+
+  console.log(
+    `[listFlowTree] Cache miss or expired for key: ${cacheKey}. Fetching from DB...`
+  );
+
   const flows = await prisma.flow.findMany({
     where: {
       createdBy,
@@ -181,6 +227,10 @@ export async function listFlowTree({
 
   // Sort roots by orderIndex
   roots.sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+
+  // Guardar en cache
+  flowTreeCache.set(cacheKey, { tree: roots, timestamp: Date.now() });
+  console.log(`[listFlowTree] Cached tree for key: ${cacheKey}`);
 
   return roots;
 }

@@ -114,9 +114,19 @@ export function useConversations() {
 
       setAbiertas((prev) => {
         const idx = prev.findIndex((c) => c.id === updatedConversation.id);
-        if (idx === -1) return prev;
+        if (idx === -1) {
+          // ✅ CONVERSACIÓN NO EXISTE - CREARLA
+          // Esto sucede cuando llega un mensaje de un número nuevo
+          console.log(
+            '[useConversations] ✅ NUEVA CONVERSACIÓN (no estaba en lista):',
+            updatedConversation.id,
+            'Agregando...'
+          );
+          const updated = [updatedConversation, ...prev];
+          return sortConversations(updated);
+        }
 
-        // Crear nueva lista con la conversación actualizada
+        // Conversación existe - actualizar
         const updated = [...prev];
         updated[idx] = updatedConversation;
         return updated;
@@ -161,12 +171,137 @@ export function useConversations() {
       setCerradas(updateConversation);
     };
 
+    // Listener para nueva conversación creada (desde teléfono)
+    const handleConversationNew = (payload: {
+      conversation: ConversationSummary;
+      source: string;
+    }) => {
+      console.log(
+        '[useConversations] ✅ NEW CONVERSATION INCOMING:',
+        payload.conversation.id,
+        'status:',
+        payload.conversation.status,
+        'botActive:',
+        payload.conversation.botActive,
+        'from:',
+        payload.source
+      );
+
+      // Agregar a la lista de abiertas si no existe
+      setAbiertas((prev) => {
+        const exists = prev.some((c) => c.id === payload.conversation.id);
+        if (exists) {
+          console.log(
+            '[useConversations] Conversation already exists, updating'
+          );
+          return prev;
+        }
+
+        console.log(
+          '[useConversations] ✅ Adding new conversation to list',
+          payload.conversation.id
+        );
+        // Agregar al inicio y ordenar
+        const updated = [payload.conversation, ...prev];
+        return sortConversations(updated);
+      });
+    };
+
+    // Listener para actualizar lastActivity cuando llega un nuevo mensaje
+    const handleMessageNew = (payload: {
+      id: string;
+      conversationId: string;
+    }) => {
+      console.log(
+        '[useConversations] Message received for conversation:',
+        payload.conversationId
+      );
+
+      // Actualizar la conversación con el nuevo lastActivity
+      const updateConversation = (prev: ConversationSummary[]) => {
+        const idx = prev.findIndex((c) => c.id === payload.conversationId);
+        if (idx === -1) return prev;
+
+        const updated = [...prev];
+        updated[idx] = {
+          ...updated[idx],
+          lastActivity: new Date().toISOString(),
+        };
+        // Reordenar para poner esta conversación arriba
+        return sortConversations(updated);
+      };
+
+      setAbiertas(updateConversation);
+      setCerradas(updateConversation);
+    };
+
+    // Listener para cuando una conversación se cierra (finish)
+    const handleConversationFinish = (payload: {
+      conversationId: string;
+      status: string;
+      reason?: string;
+    }) => {
+      console.log(
+        '[useConversations] Conversation finished:',
+        payload.conversationId,
+        'reason:',
+        payload.reason
+      );
+
+      // Mover de abiertas a cerradas
+      setAbiertas((prev) => {
+        const idx = prev.findIndex((c) => c.id === payload.conversationId);
+        if (idx === -1) return prev;
+
+        // Remover de abiertas
+        const filtered = prev.filter((c) => c.id !== payload.conversationId);
+        return filtered;
+      });
+
+      setCerradas((prev) => {
+        const exists = prev.some((c) => c.id === payload.conversationId);
+        if (exists) {
+          // Ya existe, solo actualizar estado
+          const idx = prev.findIndex((c) => c.id === payload.conversationId);
+          const updated = [...prev];
+          updated[idx] = {
+            ...updated[idx],
+            status: 'CLOSED',
+            botActive: false,
+          };
+          return updated;
+        } else {
+          // No existe, buscar en memory o crear entrada actualizada
+          // Por ahora solo actualizar si existe
+          return prev;
+        }
+      });
+    };
+
     socket.on('conversation:update', handleConversationUpdate);
     socket.on('conversation:take', handleConversationTake);
+    socket.on('conversation:new', handleConversationNew);
+    socket.on('message:new', handleMessageNew);
+    socket.on('conversation:finish', handleConversationFinish);
+
+    // DEBUG: Escuchar TODOS los eventos para ver cuáles llegan
+    const allEventsHandler = (data: unknown) => {
+      console.log(
+        '[useConversations] 🔔 EVENTO SOCKET RECIBIDO (catch-all):',
+        data,
+        'timestamp:',
+        new Date().toISOString()
+      );
+    };
+    socket.onAny?.(allEventsHandler);
 
     return () => {
       socket.off('conversation:update', handleConversationUpdate);
       socket.off('conversation:take', handleConversationTake);
+      socket.off('conversation:new', handleConversationNew);
+      socket.off('message:new', handleMessageNew);
+      socket.off('conversation:finish', handleConversationFinish);
+      socket.offAny?.(allEventsHandler);
     };
   }, [socket]);
 

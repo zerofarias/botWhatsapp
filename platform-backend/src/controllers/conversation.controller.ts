@@ -327,11 +327,67 @@ export async function getCombinedChatHistoryHandler(
 
   // Opcional: verificar permisos del usuario sobre ese teléfono
   try {
+    console.log(`[GET /api/conversations/history/${phone}] Starting...`);
     const history = await getCombinedChatHistoryByPhone(phone);
+    console.log(
+      `[GET /api/conversations/history/${phone}] ✅ History loaded: ${
+        history?.length || 0
+      } items`
+    );
     res.json(history);
   } catch (error) {
+    console.error(`[GET /api/conversations/history/${phone}] ❌ ERROR:`, error);
     res.status(500).json({
       message: 'Error al obtener historial combinado',
+      error: String(error),
+    });
+  }
+}
+
+export async function getSingleConversationHistoryHandler(
+  req: Request,
+  res: Response
+) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  const conversationIdParam = req.params.conversationId;
+  let conversationId: bigint;
+  try {
+    conversationId = BigInt(conversationIdParam);
+  } catch {
+    return res.status(400).json({ message: 'Invalid conversation id.' });
+  }
+
+  // Desabilitar caché
+  res.set(
+    'Cache-Control',
+    'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0'
+  );
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+
+  try {
+    console.log(
+      `[GET /api/conversations/${conversationId}/history] Starting...`
+    );
+    const { getSingleConversationHistory } = await import(
+      '../services/conversation.service.js'
+    );
+    const history = await getSingleConversationHistory(conversationId);
+    console.log(
+      `[GET /api/conversations/${conversationId}/history] ✅ History loaded: ${
+        history?.length || 0
+      } items`
+    );
+    res.json(history);
+  } catch (error) {
+    console.error(
+      `[GET /api/conversations/${conversationId}/history] ❌ ERROR:`,
+      error
+    );
+    res.status(500).json({
+      message: 'Error al obtener historial de conversación',
       error: String(error),
     });
   }

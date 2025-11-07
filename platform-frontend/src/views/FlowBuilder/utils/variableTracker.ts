@@ -20,7 +20,7 @@ export type VariableAvailabilityMap = Map<string, AvailableVariable[]>;
  * Extrae el nombre de variable de un nodo que la crea
  */
 function extractVariableFromNode(node: FlowBuilderNode): string | null {
-  const data = node.data as FlowNodeData;
+  const data = node.data as any; // Type any para acceso seguro
 
   if (data.type === 'CAPTURE') {
     return data.responseVariableName || null;
@@ -31,7 +31,11 @@ function extractVariableFromNode(node: FlowBuilderNode): string | null {
   }
 
   if (data.type === 'SET_VARIABLE') {
-    return data.variable || null;
+    const varName = data.variable;
+    console.log(
+      `[variableTracker] SET_VARIABLE node "${node.data.label}": variable="${varName}"`
+    );
+    return varName || null;
   }
 
   return null;
@@ -50,13 +54,11 @@ export function buildVariableAvailabilityMap(
   // Crear índice de nodos para búsqueda rápida
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
-  // Construir mapa de adyacencia del grafo (para orden topológico)
+  // Construir mapa de adyacencia del grafo
   const adjacency = new Map<string, string[]>();
-  const inDegree = new Map<string, number>();
 
   nodes.forEach((node) => {
     adjacency.set(node.id, []);
-    inDegree.set(node.id, 0);
   });
 
   edges.forEach((edge) => {
@@ -68,69 +70,75 @@ export function buildVariableAvailabilityMap(
       if (sourceNeighbors) {
         sourceNeighbors.push(target);
       }
-      inDegree.set(target, (inDegree.get(target) || 0) + 1);
     }
   });
 
-  // Topological sort (Kahn's algorithm)
-  const queue: string[] = [];
-  const sortedNodeIds: string[] = [];
+  // DFS para calcular variables disponibles en cada nodo
+  // Este enfoque maneja ciclos correctamente
+  const variablesAtNode = new Map<string, AvailableVariable[]>();
+  const visited = new Set<string>();
+  const visiting = new Set<string>(); // Para detectar ciclos
 
-  // Encontrar todos los nodos sin entrada (START node típicamente)
-  inDegree.forEach((degree, nodeId) => {
-    if (degree === 0) {
-      queue.push(nodeId);
+  function dfsVariables(nodeId: string): AvailableVariable[] {
+    if (variablesAtNode.has(nodeId)) {
+      return variablesAtNode.get(nodeId) || [];
     }
-  });
 
-  while (queue.length > 0) {
-    const nodeId = queue.shift();
-    if (!nodeId) break;
+    if (visiting.has(nodeId)) {
+      // Ciclo detectado, retornar vacío para evitar recursión infinita
+      return [];
+    }
 
-    sortedNodeIds.push(nodeId);
+    visiting.add(nodeId);
 
-    const neighbors = adjacency.get(nodeId);
-    if (neighbors) {
-      neighbors.forEach((neighbor) => {
-        inDegree.set(neighbor, (inDegree.get(neighbor) || 0) - 1);
-        if (inDegree.get(neighbor) === 0) {
-          queue.push(neighbor);
-        }
+    // Obtener todos los nodos predecesores (que apuntan a este nodo)
+    const predecessors: string[] = [];
+    adjacency.forEach((neighbors, from) => {
+      if (neighbors.includes(nodeId)) {
+        predecessors.push(from);
+      }
+    });
+
+    // Acumular variables de todos los predecesores
+    const vars = new Map<string, AvailableVariable>();
+    predecessors.forEach((predId) => {
+      const predVars = dfsVariables(predId);
+      predVars.forEach((v) => {
+        vars.set(v.name, v);
       });
-    }
+
+      // El predecesor también puede crear una variable
+      const predNode = nodeMap.get(predId);
+      if (predNode) {
+        const varName = extractVariableFromNode(predNode);
+        if (varName) {
+          vars.set(varName, {
+            name: varName,
+            createdByNodeId: predId,
+            createdByNodeType: predNode.data.type,
+            createdByNodeLabel: predNode.data.label,
+          });
+        }
+      }
+    });
+
+    visiting.delete(nodeId);
+    visited.add(nodeId);
+
+    const result = Array.from(vars.values());
+    variablesAtNode.set(nodeId, result);
+    return result;
   }
 
-  // Si no hay orden topológico válido (ciclos), usar orden original
-  if (sortedNodeIds.length !== nodes.length) {
-    sortedNodeIds.length = 0;
-    nodes.forEach((n) => sortedNodeIds.push(n.id));
-  }
-
-  // Rastrear variables disponibles en cada nodo
-  const currentVariables: AvailableVariable[] = [];
-
-  sortedNodeIds.forEach((nodeId) => {
-    const node = nodeMap.get(nodeId);
-    if (!node) return;
-
-    // Inicializar con variables disponibles hasta este punto
-    availabilityMap.set(nodeId, [...currentVariables]);
-
-    // Si este nodo crea una variable, agregarla
-    const variableName = extractVariableFromNode(node);
-    if (variableName) {
-      const availableVar: AvailableVariable = {
-        name: variableName,
-        createdByNodeId: nodeId,
-        createdByNodeType: node.data.type,
-        createdByNodeLabel: node.data.label,
-      };
-      currentVariables.push(availableVar);
-
-      // Actualizar el mapa para este nodo incluyendo su propia variable
-      availabilityMap.set(nodeId, [...currentVariables]);
-    }
+  // Calcular variables para cada nodo
+  nodes.forEach((node) => {
+    const vars = dfsVariables(node.id);
+    availabilityMap.set(node.id, vars);
   });
+
+  console.log(
+    '[variableTracker] DFS completed, variable availability map ready'
+  );
 
   return availabilityMap;
 }

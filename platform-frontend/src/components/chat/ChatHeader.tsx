@@ -121,7 +121,9 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ reason: 'manual_close' }),
               });
-              window.location.reload();
+              // NO hacer reload - dejar que Socket.IO actualice el estado
+              // El evento 'conversation:finish' llegará automáticamente
+              onCloseConversation();
             } catch {
               alert('No se pudo finalizar la conversación.');
             }

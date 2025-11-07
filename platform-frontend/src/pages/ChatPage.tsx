@@ -38,6 +38,7 @@ const ChatPage = () => {
     history,
     loading: loadingHistory,
     closing,
+    sending,
     sendMessage,
     closeConversation,
   } = useChatSession(activeConversation);
@@ -64,19 +65,19 @@ const ChatPage = () => {
   };
 
   const handleSubmitMessage = useCallback(
-    (content: string) => {
+    async (content: string) => {
       console.log('[ChatPage] handleSubmitMessage called with:', {
         content,
         noteMode,
       });
-      sendMessage(content, noteMode).then(() => {
-        if (noteMode) {
-          console.log('[ChatPage] Resetting noteMode');
-          setNoteMode(false);
-        }
-      });
+      const isNote = noteMode; // Capturar el valor actual
+      await sendMessage(content, isNote);
+      if (isNote) {
+        console.log('[ChatPage] Resetting noteMode');
+        setNoteMode(false);
+      }
     },
-    [sendMessage, noteMode]
+    [sendMessage, noteMode] // noteMode necesario para capturar cambios
   );
 
   // Memoizar conversaciones agrupadas y buscadas (sin duplicación)
@@ -180,6 +181,7 @@ const ChatPage = () => {
         setNoteMode={setNoteMode}
         onSendMessage={handleSubmitMessage}
         onCloseConversation={closeConversation}
+        isSending={sending}
       />
       <ImageModal
         imageUrl={selectedImageUrl}

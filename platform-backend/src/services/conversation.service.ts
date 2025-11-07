@@ -91,6 +91,106 @@ export async function getCombinedChatHistoryByPhone(userPhone: string) {
   });
   return history;
 }
+
+/**
+ * Obtiene solo el historial de mensajes y notas de UNA conversación específica
+ * (NO incluye los historiales de otras conversaciones del mismo teléfono)
+ */
+export async function getSingleConversationHistory(
+  conversationId: bigint | number
+) {
+  const id =
+    typeof conversationId === 'bigint'
+      ? conversationId
+      : BigInt(conversationId);
+
+  const conversation = await prisma.conversation.findUnique({
+    where: { id },
+    select: { id: true, createdAt: true, closedAt: true },
+  });
+
+  if (!conversation) return [];
+
+  const history: Array<any> = [];
+
+  // Etiqueta de inicio
+  if (conversation.createdAt) {
+    history.push({
+      type: 'label',
+      label: `Inicio de conversación (${conversation.createdAt.toISOString()})`,
+      conversationId: conversation.id.toString(),
+      timestamp: conversation.createdAt,
+    });
+  }
+
+  // Mensajes de ESTA conversación
+  const messages = await listConversationMessages(id);
+  for (const msg of messages) {
+    history.push({
+      id: msg.id.toString(),
+      conversationId: msg.conversationId.toString(),
+      senderType: msg.senderType,
+      senderId: msg.senderId,
+      content: msg.content,
+      mediaType: msg.mediaType,
+      mediaUrl: msg.mediaUrl,
+      isDelivered: msg.isDelivered,
+      isRead: msg.isRead,
+      externalId: msg.externalId,
+      createdAt: msg.createdAt,
+      type: 'message',
+    });
+  }
+
+  // Notas internas de ESTA conversación
+  const notes = await listConversationNotes(id);
+  for (const note of notes) {
+    let noteContent = '';
+    if (note.payload) {
+      try {
+        const payload = JSON.parse(note.payload);
+        if (payload && typeof payload === 'object' && 'content' in payload) {
+          noteContent = (payload as any).content;
+        }
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+    history.push({
+      id: note.id.toString(),
+      type: 'note',
+      content: noteContent,
+      createdAt: note.createdAt,
+      createdById: note.createdById,
+      conversationId: conversation.id.toString(),
+    });
+  }
+
+  // Etiqueta de fin
+  history.push({
+    type: 'label',
+    label: `Fin de conversación (${
+      conversation.closedAt ? conversation.closedAt.toISOString() : 'abierta'
+    })`,
+    conversationId: conversation.id.toString(),
+    timestamp: conversation.closedAt || null,
+  });
+
+  // Ordenar por fecha
+  history.sort((a, b) => {
+    const timeA = a.createdAt || a.timestamp;
+    const timeB = b.createdAt || b.timestamp;
+
+    if (!timeA && !timeB) return 0;
+    if (!timeA) return 1;
+    if (!timeB) return 1;
+
+    return new Date(timeA).getTime() - new Date(timeB).getTime();
+  });
+
+  return history;
+}
+
 import {
   ConversationEventType,
   ConversationStatus,

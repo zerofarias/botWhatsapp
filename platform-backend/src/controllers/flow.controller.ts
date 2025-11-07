@@ -1626,10 +1626,40 @@ export async function getFlowGraph(req: Request, res: Response) {
 
     const uniqueFlows = Array.from(reactIdToFlow.values());
     const flowIds = uniqueFlows.map((flow) => flow.id);
+
+    // DEBUG
+    console.log('[getFlowGraph] Total flows in DB:', flows.length);
+    console.log('[getFlowGraph] Unique flows after dedup:', uniqueFlows.length);
+    console.log('[getFlowGraph] Flow IDs included:', flowIds);
+    console.log(
+      '[getFlowGraph] All flow IDs in DB:',
+      flows.map((f) => f.id)
+    );
+
+    // Buscar conexiones donde AMBOS nodos (fromId y toId) están en el conjunto completo de flows
     const connections = await prisma.flowConnection.findMany({
       where: {
-        fromId: { in: flowIds },
+        OR: [{ fromId: { in: flowIds } }, { toId: { in: flowIds } }],
       },
+    });
+
+    // Filtrar para incluir solo aquellas donde ambos nodos existen en flows
+    const allFlowIds = new Set(flows.map((f) => f.id));
+    const validConnections = connections.filter((conn) => {
+      return allFlowIds.has(conn.fromId) && allFlowIds.has(conn.toId);
+    });
+
+    // DEBUG
+    console.log(
+      '[getFlowGraph] Connections found (total):',
+      connections.length
+    );
+    console.log(
+      '[getFlowGraph] Valid connections (both nodes exist):',
+      validConnections.length
+    );
+    validConnections.forEach((conn) => {
+      console.log(`  - Connection ${conn.id}: ${conn.fromId} → ${conn.toId}`);
     });
 
     type SerializedEdgeResponse = {
@@ -1809,7 +1839,7 @@ export async function getFlowGraph(req: Request, res: Response) {
       nodes.push(serializedNode);
     }
 
-    const edges = connections
+    const edges = validConnections
       .map((conn): SerializedEdgeResponse | null => {
         const sourceId = flowIdToReactId.get(conn.fromId);
         const targetId = flowIdToReactId.get(conn.toId);

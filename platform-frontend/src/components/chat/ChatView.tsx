@@ -23,8 +23,9 @@ type ChatViewProps = {
   isClosing: boolean;
   isNoteMode: boolean;
   setNoteMode: (value: boolean) => void;
-  onSendMessage: (content: string) => void;
+  onSendMessage: (content: string) => Promise<void>;
   onCloseConversation: () => void;
+  isSending?: boolean;
 };
 
 const ChatView: React.FC<ChatViewProps> = ({
@@ -36,6 +37,7 @@ const ChatView: React.FC<ChatViewProps> = ({
   setNoteMode,
   onSendMessage,
   onCloseConversation,
+  isSending = false,
 }) => {
   useEffect(() => {
     if (conversation) {
@@ -111,6 +113,7 @@ const ChatView: React.FC<ChatViewProps> = ({
         isNoteMode={isNoteMode}
         setNoteMode={setNoteMode}
         onSubmit={onSendMessage}
+        isSending={isSending}
       />
     </section>
   );

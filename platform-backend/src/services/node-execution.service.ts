@@ -28,6 +28,9 @@ type BuilderMetadata = {
   defaultTargetId?: string | null;
   defaultConditionId?: string | null;
   conditions?: BuilderCondition[];
+  // SET_VARIABLE
+  variable?: string;
+  value?: string;
 };
 
 type ConditionOperator =
@@ -464,8 +467,54 @@ export async function executeNode({
       nextNodeId = resolveNextNodeId();
       break;
     }
+    case 'SET_VARIABLE': {
+      // SET_VARIABLE: Crear o modificar una variable con un valor específico
+      const variableName =
+        typeof builderMeta.variable === 'string'
+          ? builderMeta.variable.trim()
+          : null;
+      const valueTemplate =
+        typeof builderMeta.value === 'string' ? builderMeta.value : '';
+
+      if (variableName && variableName.length > 0) {
+        // Interpolar variables en el valor (en caso de que contenga referencias)
+        const resolvedValue = interpolateVariables(
+          valueTemplate,
+          updatedContext
+        );
+
+        // Asignar la variable al contexto
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (updatedContext as any)[variableName] = resolvedValue;
+
+        console.log(
+          `[SET_VARIABLE] Node ${node.id}: Asignando "${variableName}" = "${resolvedValue}"`
+        );
+
+        // Agregar acción para logging/tracking
+        actions.push({
+          type: 'set_variable',
+          payload: {
+            variable: variableName,
+            value: resolvedValue,
+            nodeId: node.id,
+          },
+        });
+      } else {
+        console.warn(
+          `[SET_VARIABLE] Node ${node.id}: Nombre de variable inválido o vacío`
+        );
+      }
+
+      // Continuar al siguiente nodo sin esperar input
+      updatedContext.waitingForInput = false;
+      updatedContext.waitingVariable = null;
+      nextNodeId = resolveNextNodeId();
+      break;
+    }
     default: {
-      // En esta etapa solo manejamos START/TEXT/END. El resto avanza al siguiente nodo.
+      // En esta etapa solo manejamos START/TEXT/CAPTURE/CONDITIONAL/NOTE/END/DELAY/SET_VARIABLE.
+      // El resto avanza al siguiente nodo.
       nextNodeId = resolveNextNodeId();
       break;
     }

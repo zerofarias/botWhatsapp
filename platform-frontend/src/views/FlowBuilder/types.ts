@@ -234,6 +234,7 @@ export interface SetVariableNodeData extends BaseNodeData {
   type: 'SET_VARIABLE';
   variable: string;
   value: string;
+  variableType?: 'string' | 'number' | 'boolean';
   // Variables disponibles en este punto del flujo (para UI)
   availableVariables?: Array<{
     name: string;

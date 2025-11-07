@@ -10,13 +10,19 @@ export interface AvailableVariableUI {
 export interface SetVariableNodeFormProps {
   variable: string;
   value: string;
+  variableType?: 'string' | 'number' | 'boolean';
   availableVariables?: AvailableVariableUI[];
-  onChange: (data: { variable: string; value: string }) => void;
+  onChange: (data: {
+    variable: string;
+    value: string;
+    variableType?: 'string' | 'number' | 'boolean';
+  }) => void;
 }
 
 export const SetVariableNodeForm: React.FC<SetVariableNodeFormProps> = ({
   variable,
   value,
+  variableType = 'string',
   availableVariables = [],
   onChange,
 }) => (
@@ -28,59 +34,107 @@ export const SetVariableNodeForm: React.FC<SetVariableNodeFormProps> = ({
       border: '2px solid #43a047',
     }}
   >
-    <h3 style={{ margin: 0, color: '#43a047' }}>Setear Variable</h3>
-    <label style={{ display: 'block', marginBottom: 12 }}>
-      Nombre de variable:
-      {availableVariables && availableVariables.length > 0 ? (
-        <select
-          value={variable}
-          onChange={(e) => onChange({ variable: e.target.value, value })}
-          style={{ marginLeft: 8, padding: '6px', borderRadius: '4px' }}
-        >
-          <option value="">-- Selecciona una variable --</option>
-          {availableVariables.map((v) => (
-            <option key={v.name} value={v.name}>
-              {v.name} ({v.createdByNodeType})
-            </option>
-          ))}
-        </select>
-      ) : (
-        <input
-          type="text"
-          value={variable}
-          onChange={(e) => onChange({ variable: e.target.value, value })}
-          style={{ marginLeft: 8, display: 'block', marginTop: 6 }}
-          placeholder="nombreVariable"
-        />
-      )}
+    <h3 style={{ margin: 0, color: '#43a047' }}>Crear Nueva Variable</h3>
+
+    <label style={{ display: 'block', marginBottom: 12, marginTop: 12 }}>
+      <strong>Nombre de variable:</strong>
+      <input
+        type="text"
+        value={variable}
+        onChange={(e) =>
+          onChange({ variable: e.target.value, value, variableType })
+        }
+        style={{
+          marginLeft: 8,
+          display: 'block',
+          marginTop: 6,
+          width: '100%',
+          padding: '8px',
+          borderRadius: '4px',
+          border: '1px solid #ccc',
+        }}
+        placeholder="Ej: pedido, nombre_cliente, cantidad"
+      />
+      <small style={{ display: 'block', marginTop: 4, color: '#666' }}>
+        Usa caracteres alfanuméricos y guiones bajos. No uses espacios.
+      </small>
     </label>
+
     <label style={{ display: 'block', marginBottom: 12 }}>
-      Valor (usa $$variableName para reutilizar):
+      <strong>Valor asignado:</strong>
       <input
         type="text"
         value={value}
-        onChange={(e) => onChange({ variable, value: e.target.value })}
-        style={{ marginLeft: 8, display: 'block', marginTop: 6 }}
-        placeholder="$$test1 o un valor fijo"
+        onChange={(e) =>
+          onChange({ variable, value: e.target.value, variableType })
+        }
+        style={{
+          marginLeft: 8,
+          display: 'block',
+          marginTop: 6,
+          width: '100%',
+          padding: '8px',
+          borderRadius: '4px',
+          border: '1px solid #ccc',
+        }}
+        placeholder="Ej: true, 100, o usa ${nombre_var} para referencia"
       />
+      <small style={{ display: 'block', marginTop: 4, color: '#666' }}>
+        Valor fijo o referencia a otra variable usando {'${variable_name}'}
+      </small>
     </label>
+
+    <label style={{ display: 'block', marginBottom: 12 }}>
+      <strong>Tipo de variable:</strong>
+      <select
+        value={variableType}
+        onChange={(e) =>
+          onChange({
+            variable,
+            value,
+            variableType: e.target.value as 'string' | 'number' | 'boolean',
+          })
+        }
+        style={{
+          marginLeft: 8,
+          display: 'block',
+          marginTop: 6,
+          padding: '8px',
+          borderRadius: '4px',
+          border: '1px solid #ccc',
+        }}
+      >
+        <option value="string">String (texto)</option>
+        <option value="number">Number (número)</option>
+        <option value="boolean">Boolean (verdadero/falso)</option>
+      </select>
+    </label>
+
     {availableVariables && availableVariables.length > 0 && (
-      <div style={{ marginTop: 12, fontSize: 12, color: '#555' }}>
-        <p style={{ margin: '6px 0', fontWeight: 'bold' }}>
-          💡 Variables disponibles:
+      <div
+        style={{
+          marginTop: 16,
+          padding: 12,
+          background: '#fff3e0',
+          borderRadius: 4,
+        }}
+      >
+        <p style={{ margin: '0 0 8px 0', fontWeight: 'bold', fontSize: 12 }}>
+          💡 Variables disponibles para referencia:
         </p>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {availableVariables.map((v) => (
             <code
               key={v.name}
               style={{
-                background: '#fff3e0',
+                background: '#ffffff',
                 padding: '4px 8px',
                 borderRadius: 4,
                 fontSize: 11,
+                border: '1px solid #ffb74d',
               }}
             >
-              $${v.name}
+              {`${v.name}`}
             </code>
           ))}
         </div>

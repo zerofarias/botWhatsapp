@@ -1053,19 +1053,15 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
               type: DEFAULT_NODE_TYPE,
             } as FlowBuilderEdge;
 
-            // DEBUG: Log cuando se cargan edges con sourceHandle
-            if (normalized.sourceHandle) {
-              console.log(
-                '[loadNodesAndEdges] Edge loaded with sourceHandle:',
-                {
-                  id: normalized.id,
-                  source: normalized.source,
-                  target: normalized.target,
-                  sourceHandle: normalized.sourceHandle,
-                  label: normalized.label,
-                }
-              );
-            }
+            // DEBUG: Log TODOS los edges (con o sin sourceHandle)
+            console.log('[loadNodesAndEdges] Edge loaded:', {
+              id: normalized.id,
+              source: normalized.source,
+              target: normalized.target,
+              sourceHandle: normalized.sourceHandle,
+              label: normalized.label,
+              hasSourceHandle: !!normalized.sourceHandle,
+            });
 
             return normalized;
           })

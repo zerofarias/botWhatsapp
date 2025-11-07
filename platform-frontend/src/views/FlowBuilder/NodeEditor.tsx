@@ -268,8 +268,15 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
         <SetVariableNodeForm
           variable={data.variable}
           value={data.value}
+          variableType={(data as any).variableType ?? 'string'}
           availableVariables={data.availableVariables}
-          onChange={({ variable, value }) => handleUpdate({ variable, value })}
+          onChange={({ variable, value, variableType }) =>
+            handleUpdate({
+              variable,
+              value,
+              variableType: variableType ?? 'string',
+            })
+          }
         />
       );
       break;

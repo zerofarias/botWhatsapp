@@ -7,6 +7,7 @@ import {
   listConversationsHandler,
   sendConversationMessageHandler,
   getCombinedChatHistoryHandler,
+  getSingleConversationHistoryHandler,
   createConversationNoteHandler,
   listConversationNotesHandler,
   listAllChatsByPhoneHandler,
@@ -22,6 +23,11 @@ conversationRouter.use(authenticate);
 conversationRouter.get('/all', listAllChatsHandler);
 // Historial combinado de chats por teléfono
 conversationRouter.get('/history/:phone', getCombinedChatHistoryHandler);
+// Nuevo endpoint: historial de UNA conversación específica (no mezcla con otras del mismo teléfono)
+conversationRouter.get(
+  '/:conversationId/history',
+  getSingleConversationHistoryHandler
+);
 
 // Nuevo endpoint: todos los chats de un número, abiertos y cerrados
 conversationRouter.get('/all-by-phone/:phone', listAllChatsByPhoneHandler);

@@ -6,6 +6,7 @@ import {
   api,
   createConversationNote,
   getCombinedHistory,
+  getSingleConversationHistory,
   startConversationFlow,
 } from '../services/api';
 import type { ConversationSummary } from '../types/chat';
@@ -28,7 +29,13 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
   // Usar ref para tracking sin efectos secundarios
   const isMountedRef = useRef(true);
   const loadingInProgressRef = useRef(false);
+  const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const flowStartedRef = useRef<Set<string>>(new Set()); // Track conversations where flow was started
+
+  // Batch processing para múltiples mensajes
+  const messageQueueRef = useRef<HistoryItem[]>([]);
+  const batchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const BATCH_DELAY = 50; // ms - agrupa mensajes que llegan en 50ms
 
   // Reset loading state cuando se monta el hook
   useEffect(() => {
@@ -39,45 +46,165 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
       isMountedRef.current = false;
       loadingInProgressRef.current = false;
       flowStartedRef.current.clear(); // Limpiar flows iniciados
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Función para procesar el lote de mensajes acumulados
+  const processBatch = useCallback(() => {
+    if (messageQueueRef.current.length === 0) return;
+
+    const batch = messageQueueRef.current.splice(0);
+    console.log(
+      `[useChatSession] 🔄 Processing batch of ${batch.length} messages`
+    );
+
+    setHistory((prev) => {
+      // Crear mapa de IDs existentes para detección rápida de duplicados
+      const existingIds = new Set<string>();
+      const existingContent = new Map<string, number>(); // content_hash -> timestamp
+
+      prev.forEach((item) => {
+        if (item.type === 'message') {
+          if (item.id) existingIds.add(item.id);
+          const key = `${item.senderType}_${item.content}`;
+          existingContent.set(key, new Date(item.createdAt).getTime());
+        }
+      });
+
+      // Filtrar duplicados del batch
+      const uniqueNew = batch.filter((newItem) => {
+        // Solo procesar items de mensaje
+        if (newItem.type !== 'message') return true;
+
+        if (newItem.id && existingIds.has(newItem.id)) {
+          console.log(
+            '[useChatSession] Skipping duplicate (by ID):',
+            newItem.id
+          );
+          return false;
+        }
+
+        // Verificar contenido duplicado (mismo mensaje en <1s)
+        const key = `${newItem.senderType}_${newItem.content}`;
+        const existingTime = existingContent.get(key);
+        if (
+          existingTime &&
+          Math.abs(new Date(newItem.createdAt).getTime() - existingTime) < 1000
+        ) {
+          console.log('[useChatSession] Skipping duplicate (by content):', key);
+          return false;
+        }
+
+        if (newItem.id) existingIds.add(newItem.id);
+        return true;
+      });
+
+      if (uniqueNew.length === 0) {
+        console.log(
+          '[useChatSession] ⚠️ All messages in batch were duplicates'
+        );
+        return prev;
+      }
+
+      // Agregar nuevos mensajes y sortear UNA SOLA VEZ
+      const merged = [...prev, ...uniqueNew];
+      const sorted = merged.sort((a, b) => {
+        const aTime = a.type === 'label' ? a.timestamp : a.createdAt;
+        const bTime = b.type === 'label' ? b.timestamp : b.createdAt;
+        return new Date(aTime).getTime() - new Date(bTime).getTime();
+      });
+
+      console.log(
+        `[useChatSession] ✅ Added ${uniqueNew.length} messages, history now has ${sorted.length} items`
+      );
+      return sorted;
+    });
+
+    batchTimeoutRef.current = null;
+  }, []);
+
+  // Limpiar timeout si el componente se desmonta
+  useEffect(() => {
+    return () => {
+      if (batchTimeoutRef.current) {
+        clearTimeout(batchTimeoutRef.current);
+      }
+      messageQueueRef.current = [];
     };
   }, []);
 
   // Función centralizada para cargar historial sin duplicación
-  const loadHistoryOnce = useCallback(async (phoneNumber: string) => {
-    // Evitar múltiples peticiones simultáneas
-    if (loadingInProgressRef.current) {
-      console.log('[useChatSession] Load already in progress, skipping');
-      return;
-    }
+  const loadHistoryOnce = useCallback(
+    async (phoneNumber: string, conversationId?: string) => {
+      // Evitar múltiples peticiones simultáneas
+      if (loadingInProgressRef.current) {
+        console.log('[useChatSession] Load already in progress, skipping');
+        return;
+      }
 
-    console.log('[useChatSession] Loading history for:', phoneNumber);
-    loadingInProgressRef.current = true;
+      console.log(
+        '[useChatSession] Loading history for:',
+        phoneNumber,
+        'conversationId:',
+        conversationId
+      );
+      loadingInProgressRef.current = true;
+      setLoading(true);
 
-    try {
-      const fullHistory = await getCombinedHistory(phoneNumber);
-      if (isMountedRef.current) {
-        console.log(
-          '[useChatSession] History loaded:',
-          fullHistory?.length,
-          'items'
+      // Timeout de seguridad para resetear el flag si la request tarda mucho
+      if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = setTimeout(() => {
+        console.warn(
+          '[useChatSession] ⚠️ Load timeout - forcefully resetting loading state'
         );
-        setHistory(fullHistory || []);
+        loadingInProgressRef.current = false;
+        setLoading(false);
+        loadTimeoutRef.current = null;
+      }, 10000); // 10 segundos de timeout
+
+      try {
+        // Si tenemos el ID de conversación, usar el endpoint específico
+        // De lo contrario, cargar historial combinado (legacy)
+        const fullHistory = conversationId
+          ? await getSingleConversationHistory(conversationId)
+          : await getCombinedHistory(phoneNumber);
+
+        if (isMountedRef.current) {
+          console.log(
+            '[useChatSession] History loaded:',
+            fullHistory?.length,
+            'items'
+          );
+          setHistory(fullHistory || []);
+        }
+      } catch (error) {
+        console.error('[useChatSession] Failed to fetch history', error);
+        // En caso de error, asegurar que el estado se resetee
+        if (isMountedRef.current) {
+          setHistory([]);
+        }
+      } finally {
+        if (loadTimeoutRef.current) {
+          clearTimeout(loadTimeoutRef.current);
+          loadTimeoutRef.current = null;
+        }
+        loadingInProgressRef.current = false;
+        if (isMountedRef.current) {
+          setLoading(false);
+        }
       }
-    } catch (error) {
-      console.error('[useChatSession] Failed to fetch combined history', error);
-      // En caso de error, asegurar que el estado se resetee
-      if (isMountedRef.current) {
-        setHistory([]);
-      }
-    } finally {
-      loadingInProgressRef.current = false;
-    }
-  }, []);
+    },
+    []
+  );
 
   // Efecto 1: Cargar datos iniciales de la conversación
   useEffect(() => {
     if (!activeConversation) {
       setHistory([]);
+      setLoading(false);
       return;
     }
 
@@ -87,22 +214,15 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
       'botActive:',
       activeConversation.botActive
     );
-    setLoading(true);
 
     // Marcar como leído y cargar historial en paralelo
-    Promise.all([
-      markAllMessagesAsReadByPhone(activeConversation.userPhone).catch(
-        (error) => {
-          console.warn('[useChatSession] Failed to mark as read:', error);
-        }
-      ),
-      loadHistoryOnce(activeConversation.userPhone),
-    ]).finally(() => {
-      if (isMountedRef.current) {
-        console.log('[useChatSession] Finished loading conversation data');
-        setLoading(false);
+    markAllMessagesAsReadByPhone(activeConversation.userPhone).catch(
+      (error) => {
+        console.warn('[useChatSession] Failed to mark as read:', error);
       }
-    });
+    );
+
+    loadHistoryOnce(activeConversation.userPhone, activeConversation.id);
 
     return () => {
       // Cleanup: no hacer nada especial aquí, solo mantener isMounted actualizado
@@ -118,7 +238,7 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
       activeConversation.id
     );
 
-    // Listener para nuevos mensajes - actualización incremental
+    // Listener para nuevos mensajes - batch processing
     const onMessage = (payload: {
       id: string;
       conversationId: string;
@@ -131,7 +251,7 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
     }) => {
       if (payload.conversationId === activeConversation.id) {
         console.log(
-          '[useChatSession] Received message:new event for message:',
+          '[useChatSession] 📨 Received message:new event for message:',
           payload.id
         );
 
@@ -151,39 +271,23 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
           createdAt: payload.createdAt,
         };
 
-        setHistory((prev) => {
-          // Verificación más robusta de duplicados
-          const exists = prev.some(
-            (item) =>
-              item.type === 'message' &&
-              (item.id === payload.id ||
-                (item.content === payload.content &&
-                  item.senderType === payload.senderType &&
-                  Math.abs(
-                    new Date(item.createdAt).getTime() -
-                      new Date(payload.createdAt).getTime()
-                  ) < 1000))
-          );
+        // Agregar a la cola en lugar de procesar inmediatamente
+        messageQueueRef.current.push(newHistoryItem);
+        console.log(
+          `[useChatSession] 📦 Message queued. Queue size: ${messageQueueRef.current.length}`
+        );
 
-          if (exists) {
-            console.log(
-              '[useChatSession] Duplicate message detected, ignoring:',
-              payload.id
-            );
-            return prev;
-          }
+        // Si ya hay un timeout pendiente, no crear uno nuevo
+        if (batchTimeoutRef.current) {
+          console.log('[useChatSession] Timeout ya pendiente, no crear nuevo');
+          return;
+        }
 
-          console.log(
-            '[useChatSession] Adding new message to history:',
-            payload.id
-          );
-          const sortedHistory = [...prev, newHistoryItem].sort((a, b) => {
-            const aTime = a.type === 'label' ? a.timestamp : a.createdAt;
-            const bTime = b.type === 'label' ? b.timestamp : b.createdAt;
-            return new Date(aTime).getTime() - new Date(bTime).getTime();
-          });
-          return sortedHistory;
-        });
+        // Crear nuevo timeout para procesar el batch
+        batchTimeoutRef.current = setTimeout(() => {
+          console.log('[useChatSession] ⏰ Batch timeout triggered');
+          processBatch();
+        }, BATCH_DELAY);
       }
     };
 
@@ -204,7 +308,7 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
           console.log(
             '[useChatSession] State actually changed, reloading history'
           );
-          loadHistoryOnce(activeConversation.userPhone);
+          loadHistoryOnce(activeConversation.userPhone, activeConversation.id);
         } else {
           console.log(
             '[useChatSession] No significant state change, skipping reload'
@@ -223,7 +327,7 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
         console.log(
           '[useChatSession] Conversation finished, reloading final state'
         );
-        loadHistoryOnce(activeConversation.userPhone);
+        loadHistoryOnce(activeConversation.userPhone, activeConversation.id);
       }
     };
 
@@ -257,7 +361,7 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
           console.log(
             '[useChatSession] Significant change detected, reloading history'
           );
-          loadHistoryOnce(activeConversation.userPhone);
+          loadHistoryOnce(activeConversation.userPhone, activeConversation.id);
         } else {
           console.log('[useChatSession] Minor update, skipping history reload');
         }
@@ -275,8 +379,13 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
       socket.off('conversation:take', onTake);
       socket.off('conversation:finish', onFinish);
       socket.off('conversation:update', onConversationUpdate);
+      // Limpiar timeout pendiente
+      if (batchTimeoutRef.current) {
+        clearTimeout(batchTimeoutRef.current);
+        batchTimeoutRef.current = null;
+      }
     };
-  }, [activeConversation, socket, loadHistoryOnce]);
+  }, [activeConversation, socket, loadHistoryOnce, processBatch]);
 
   // Efecto 3: Iniciar flujo automáticamente si es necesario (solo una vez por conversación)
   useEffect(() => {
@@ -321,9 +430,17 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
   // Función para enviar mensaje o nota
   const sendMessage = useCallback(
     async (content: string, isNote: boolean) => {
-      if (!activeConversation) return;
+      console.log('[useChatSession] 📨 sendMessage called with:', {
+        content,
+        isNote,
+      });
+      if (!activeConversation) {
+        console.error('[useChatSession] No active conversation');
+        return;
+      }
 
       setSending(true);
+      console.log('[useChatSession] 📤 setSending(true)');
       try {
         if (isNote) {
           const newNote = await createConversationNote(
@@ -340,6 +457,7 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
             );
             return newHistory;
           });
+          console.log('[useChatSession] ✅ Note sent');
         } else {
           // Agregar mensaje optimista al historial inmediatamente
           const optimisticMessage: HistoryItem = {
@@ -363,12 +481,36 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
           ]);
 
           try {
-            // Enviar mensaje
-            await api.post(`/conversations/${activeConversation.id}/messages`, {
-              content,
-            });
+            console.log('[useChatSession] 🚀 Sending message via API...');
+            const sendStartTime = Date.now();
+
+            // Crear promise con timeout
+            const sendPromise = api.post(
+              `/conversations/${activeConversation.id}/messages`,
+              { content }
+            );
+
+            const timeoutPromise = new Promise(
+              (_, reject) =>
+                setTimeout(() => {
+                  const elapsed = Date.now() - sendStartTime;
+                  reject(
+                    new Error(
+                      `Send timeout after ${elapsed}ms - API not responding`
+                    )
+                  );
+                }, 20000) // 20 segundos de timeout
+            );
+
+            // Usar Promise.race para aplicar timeout
+            await Promise.race([sendPromise, timeoutPromise]);
+            const elapsed = Date.now() - sendStartTime;
+            console.log(
+              `[useChatSession] ✅ Message sent via API in ${elapsed}ms`
+            );
             // Socket notificará la actualización con el ID real
           } catch (error) {
+            console.error('[useChatSession] ❌ API error:', error);
             // Si falla, remover el mensaje optimista
             setHistory((prevHistory: HistoryItem[]) =>
               prevHistory.filter(
@@ -379,10 +521,12 @@ export function useChatSession(activeConversation: ConversationSummary | null) {
           }
         }
       } catch (error) {
-        console.error('[useChatSession] Failed to send message', error);
+        console.error('[useChatSession] ❌ Failed to send message', error);
         alert('❌ No se pudo enviar el mensaje.');
       } finally {
+        console.log('[useChatSession] 📤 Finally block: setting sending=false');
         setSending(false);
+        console.log('[useChatSession] 📤 setSending(false) called');
       }
     },
     [activeConversation]

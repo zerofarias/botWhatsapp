@@ -213,7 +213,10 @@ export default function DashboardOverview() {
           areaBreakdown,
         });
       } catch (error) {
-        console.error('[Dashboard] Failed to refresh conversation stats', error);
+        console.error(
+          '[Dashboard] Failed to refresh conversation stats',
+          error
+        );
         setStatsError(
           'No se pudieron obtener las estadisticas de conversaciones.'
         );
@@ -228,6 +231,7 @@ export default function DashboardOverview() {
     socket.on('conversation:update', refreshStats);
     socket.on('conversation:incoming', refreshStats);
     socket.on('conversation:closed', refreshStats);
+    socket.on('conversation:new', refreshStats);
 
     return () => {
       socket.off('session:status', onStatus);
@@ -236,6 +240,7 @@ export default function DashboardOverview() {
       socket.off('conversation:update', refreshStats);
       socket.off('conversation:incoming', refreshStats);
       socket.off('conversation:closed', refreshStats);
+      socket.off('conversation:new', refreshStats);
     };
   }, [socket]);
 

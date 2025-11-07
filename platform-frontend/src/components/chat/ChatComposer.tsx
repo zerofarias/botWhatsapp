@@ -12,13 +12,15 @@ import '../../styles/chat-composer-note.css';
  * @param disabled Si el input está bloqueado
  * @param isNoteMode Si está en modo nota
  * @param setNoteMode Cambia el modo nota
- * @param onSubmit Envía el mensaje
+ * @param onSubmit Envía el mensaje (async)
+ * @param isSending Si está enviando un mensaje (deshabilita botón)
  */
 type ChatComposerProps = {
   disabled: boolean;
   isNoteMode: boolean;
   setNoteMode: (value: boolean) => void;
-  onSubmit: (content: string) => void;
+  onSubmit: (content: string) => Promise<void>;
+  isSending?: boolean;
 };
 
 const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -26,6 +28,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
   isNoteMode,
   setNoteMode,
   onSubmit,
+  isSending = false,
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [allQuickReplies, setAllQuickReplies] = useState<QuickReply[]>([]);
@@ -77,7 +80,7 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
     setSelectedSuggestionIndex(0);
   }, [suggestions]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log(
       '[ChatComposer] handleSubmit triggered, inputValue:',
@@ -91,7 +94,12 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
     const content = inputValue;
     setInputValue('');
     console.log('[ChatComposer] handleSubmit calling onSubmit with:', content);
-    onSubmit(content);
+    try {
+      await onSubmit(content);
+      console.log('[ChatComposer] ✅ Message sent successfully');
+    } catch (error) {
+      console.error('[ChatComposer] ❌ Error sending message:', error);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -377,15 +385,15 @@ const ChatComposer: React.FC<ChatComposerProps> = ({
         <button
           type="submit"
           className="chat-composer-send-btn"
-          disabled={disabled || !inputValue.trim()}
+          disabled={disabled || !inputValue.trim() || isSending}
           style={{
             marginLeft: '8px',
             alignSelf: 'flex-end',
             height: '40px',
-            opacity: disabled ? 0.6 : 1,
+            opacity: disabled || isSending ? 0.6 : 1,
           }}
         >
-          Enviar
+          {isSending ? 'Enviando...' : 'Enviar'}
         </button>
       </form>
       <QuickReplyEditor

@@ -71,6 +71,17 @@ export async function getCombinedHistory(phone: string) {
   return res.data;
 }
 
+export async function getSingleConversationHistory(
+  conversationId: string | number
+) {
+  // Agregar timestamp para desabilitar caché del navegador
+  const timestamp = Date.now();
+  const res = await api.get(
+    `/conversations/${conversationId}/history?t=${timestamp}`
+  );
+  return res.data;
+}
+
 /**
  * Inicia el flujo de una conversación ejecutando el nodo START
  */
