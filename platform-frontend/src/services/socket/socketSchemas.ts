@@ -5,17 +5,49 @@
 
 import { z } from 'zod';
 
-// Message schema
+// Message schema - Flexible to handle backend format variations
 export const MessageSchema = z.object({
   id: z
-    .union([z.number(), z.string()])
-    .transform((val) => (typeof val === 'string' ? parseInt(val, 10) : val)),
-  conversationId: z.number(),
+    .union([z.number(), z.string(), z.bigint()])
+    .transform((val) => {
+      if (typeof val === 'string') return parseInt(val, 10);
+      if (typeof val === 'bigint') return Number(val);
+      return val;
+    })
+    .pipe(z.number()),
+  conversationId: z
+    .union([z.number(), z.string(), z.bigint()])
+    .transform((val) => {
+      if (typeof val === 'string') return parseInt(val, 10);
+      if (typeof val === 'bigint') return Number(val);
+      return val;
+    })
+    .pipe(z.number()),
   content: z.string().min(1),
-  sender: z.enum(['user', 'bot', 'contact']),
-  timestamp: z.number(),
+  // Accept both v1 format (senderType) and v2 format (sender)
+  sender: z
+    .enum(['user', 'bot', 'contact', 'OPERATOR', 'CONTACT', 'BOT'])
+    .transform((val) => val.toLowerCase() as 'user' | 'bot' | 'contact')
+    .or(
+      z
+        .string()
+        .transform((val) => val.toLowerCase() as 'user' | 'bot' | 'contact')
+    ),
+  timestamp: z
+    .union([z.number(), z.string().datetime()])
+    .transform((val) => {
+      if (typeof val === 'string') return new Date(val).getTime();
+      return val;
+    })
+    .pipe(z.number()),
+  // Optional fields from both formats
+  senderType: z.string().optional(),
+  senderId: z.union([z.number(), z.string(), z.null()]).optional(),
   status: z.enum(['sent', 'delivered', 'read', 'error']).optional(),
   mediaUrl: z.string().url().optional(),
+  mediaType: z.string().nullable().optional(),
+  externalId: z.string().nullable().optional(),
+  createdAt: z.string().datetime().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 

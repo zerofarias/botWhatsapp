@@ -8,8 +8,6 @@ import { getSocketManager } from '../../services/socket/SocketManager';
 import { useChatStore } from '../../store/chatStore';
 
 export function useSocketListeners() {
-  const store = useChatStore();
-
   useEffect(() => {
     try {
       const socket = getSocketManager();
@@ -20,36 +18,133 @@ export function useSocketListeners() {
         return;
       }
 
+      // Get the store state once, without reactive subscription
+      const store = useChatStore.getState();
+
       // Message listeners
-      const unsubMessage = socket.on('message:new', (message) => {
-        console.log('📨 New message received:', message.id);
-        store.addMessage(message);
+      const unsubMessage = socket.on('message:new', (payload) => {
+        console.log('📨 New message received:', payload);
+
+        // Normalize message to v2 format
+        const normalizedMessage = {
+          id:
+            typeof payload.id === 'string'
+              ? parseInt(payload.id, 10)
+              : payload.id,
+          conversationId:
+            typeof payload.conversationId === 'string'
+              ? parseInt(payload.conversationId, 10)
+              : payload.conversationId,
+          content: payload.content,
+          sender: (payload.sender ||
+            payload.senderType?.toLowerCase() ||
+            'contact') as 'user' | 'bot' | 'contact',
+          timestamp:
+            typeof payload.timestamp === 'string'
+              ? new Date(payload.timestamp).getTime()
+              : payload.timestamp || new Date(payload.createdAt).getTime(),
+          status: 'sent' as const,
+          mediaUrl: payload.mediaUrl || undefined,
+          metadata: payload.metadata || {
+            senderType: payload.senderType,
+            senderId: payload.senderId,
+          },
+        };
+
+        console.log('✅ Normalized message:', normalizedMessage);
+        useChatStore.getState().addMessage(normalizedMessage);
       });
 
-      const unsubMessageUpdated = socket.on('message:updated', (message) => {
-        console.log('✏️ Message updated:', message.id);
-        store.updateMessage(message.id, message);
+      const unsubMessageUpdated = socket.on('message:updated', (payload) => {
+        console.log('✏️ Message updated:', payload);
+
+        const messageId =
+          typeof payload.id === 'string'
+            ? parseInt(payload.id, 10)
+            : payload.id;
+        const normalizedUpdate = {
+          id: messageId,
+          conversationId:
+            typeof payload.conversationId === 'string'
+              ? parseInt(payload.conversationId, 10)
+              : payload.conversationId,
+          content: payload.content,
+          sender: (payload.sender ||
+            payload.senderType?.toLowerCase() ||
+            'contact') as 'user' | 'bot' | 'contact',
+          timestamp:
+            typeof payload.timestamp === 'string'
+              ? new Date(payload.timestamp).getTime()
+              : payload.timestamp || new Date(payload.createdAt).getTime(),
+          status: payload.status || ('delivered' as const),
+        };
+
+        useChatStore.getState().updateMessage(messageId, normalizedUpdate);
       });
 
       const unsubMessageDeleted = socket.on('message:deleted', (payload) => {
         console.log('🗑️ Message deleted:', payload.messageId);
-        store.deleteMessage(payload.messageId);
+
+        const messageId =
+          typeof payload.messageId === 'string'
+            ? parseInt(payload.messageId, 10)
+            : payload.messageId;
+        useChatStore.getState().deleteMessage(messageId);
       });
 
       // Conversation listeners
       const unsubConversationUpdated = socket.on(
         'conversation:updated',
-        (conversation) => {
-          console.log('📝 Conversation updated:', conversation.id);
-          store.updateConversation(conversation.id, conversation);
+        (payload) => {
+          console.log('📝 Conversation updated:', payload.id);
+
+          const normalizedConversation = {
+            ...payload,
+            id:
+              typeof payload.id === 'string'
+                ? parseInt(payload.id, 10)
+                : payload.id,
+            botId:
+              typeof payload.botId === 'string'
+                ? parseInt(payload.botId, 10)
+                : payload.botId,
+            contactId:
+              typeof payload.contactId === 'string'
+                ? parseInt(payload.contactId, 10)
+                : payload.contactId,
+          };
+
+          useChatStore
+            .getState()
+            .updateConversation(
+              normalizedConversation.id,
+              normalizedConversation
+            );
         }
       );
 
       const unsubConversationCreated = socket.on(
         'conversation:created',
-        (conversation) => {
-          console.log('✨ Conversation created:', conversation.id);
-          store.addConversation(conversation);
+        (payload) => {
+          console.log('✨ Conversation created:', payload.id);
+
+          const normalizedConversation = {
+            ...payload,
+            id:
+              typeof payload.id === 'string'
+                ? parseInt(payload.id, 10)
+                : payload.id,
+            botId:
+              typeof payload.botId === 'string'
+                ? parseInt(payload.botId, 10)
+                : payload.botId,
+            contactId:
+              typeof payload.contactId === 'string'
+                ? parseInt(payload.contactId, 10)
+                : payload.contactId,
+          };
+
+          useChatStore.getState().addConversation(normalizedConversation);
         }
       );
 
@@ -57,14 +152,29 @@ export function useSocketListeners() {
         'conversation:deleted',
         (payload) => {
           console.log('❌ Conversation deleted:', payload.conversationId);
-          // Optionally remove from store
+
+          const conversationId =
+            typeof payload.conversationId === 'string'
+              ? parseInt(payload.conversationId, 10)
+              : payload.conversationId;
+
+          // Optionally remove from store or mark as deleted
+          useChatStore.setState((state) => ({
+            conversations: state.conversations.filter(
+              (c) => c.id !== conversationId
+            ),
+            activeConversationId:
+              state.activeConversationId === conversationId
+                ? null
+                : state.activeConversationId,
+          }));
         }
       );
 
       // Flow listeners
       const unsubFlowStarted = socket.on('flow:started', (payload) => {
         console.log('🚀 Flow started:', payload.flowId);
-        store.setError(null);
+        useChatStore.setState({ error: null });
       });
 
       const unsubFlowEnded = socket.on('flow:ended', (payload) => {
@@ -98,7 +208,7 @@ export function useSocketListeners() {
       console.error('Error registering socket listeners:', error);
       return;
     }
-  }, [store]);
+  }, []);
 
   return null;
 }

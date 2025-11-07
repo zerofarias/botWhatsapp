@@ -22,10 +22,22 @@ const ChatComposer_v2: React.FC = () => {
       e.preventDefault();
 
       if (!content.trim() || !activeConversation) {
+        console.warn(
+          '[ChatComposer_v2] Missing content or activeConversation',
+          {
+            content: content.trim(),
+            activeConversation,
+          }
+        );
         return;
       }
 
       const trimmedContent = content.trim();
+      console.debug('[ChatComposer_v2] Submitting message:', {
+        conversationId: activeConversation.id,
+        contentLength: trimmedContent.length,
+        botId: activeConversation.botId,
+      });
       setContent('');
 
       // Send message

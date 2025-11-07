@@ -12,6 +12,7 @@ import { useSocketListeners } from '../hooks/v2/useSocketListeners';
 import ErrorBoundary from '../components/ErrorBoundary';
 import ChatView_v2 from '../components/chat/ChatView_v2';
 import ChatComposer_v2 from '../components/chat/ChatComposer_v2';
+import './ChatPage_v2.css';
 
 const ChatPage: React.FC = () => {
   // Refs for tracking initialization
@@ -97,39 +98,40 @@ const ChatPage: React.FC = () => {
 
   return (
     <ErrorBoundary>
-      <div className="flex h-screen bg-gray-100">
+      <div className="chat-page-v2-container">
         {/* Conversation List */}
-        <div className="w-64 bg-white border-r border-gray-300 flex flex-col">
-          <div className="p-4 border-b border-gray-300">
-            <h2 className="text-xl font-bold text-gray-800">Conversations</h2>
+        <div className="conversation-list-panel-v2">
+          <div className="conversation-list-header-v2">
+            <h2>Conversations</h2>
           </div>
 
           {loadingConversations ? (
-            <div className="flex items-center justify-center flex-1">
-              <div className="text-gray-500">Loading...</div>
+            <div className="chat-loading">
+              <div>Loading conversations...</div>
             </div>
           ) : conversations.length === 0 ? (
-            <div className="flex items-center justify-center flex-1">
-              <div className="text-gray-500">No conversations</div>
+            <div className="conversation-empty-state">
+              <div>No conversations</div>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto">
+            <div className="conversation-list-items-v2">
               {conversations.map((conversation) => (
                 <button
                   key={conversation.id}
                   onClick={() => handleSelectConversation(conversation.id)}
-                  className={`w-full p-4 text-left border-b border-gray-200 hover:bg-gray-50 transition ${
-                    activeConversation?.id === conversation.id
-                      ? 'bg-blue-50 border-l-4 border-l-blue-500'
-                      : ''
+                  className={`conversation-item-button-v2 ${
+                    activeConversation?.id === conversation.id ? 'active' : ''
                   }`}
                 >
-                  <div className="font-semibold text-gray-800">
-                    {conversation.contact?.name ||
-                      `Contact ${conversation.contactId}`}
+                  <div className="conversation-item-name">
+                    {typeof conversation.contact?.name === 'string'
+                      ? conversation.contact.name
+                      : `Contact ${conversation.contactId}`}
                   </div>
-                  <div className="text-sm text-gray-500 truncate">
-                    {conversation.lastMessage || 'No messages'}
+                  <div className="conversation-item-preview">
+                    {typeof conversation.lastMessage === 'string'
+                      ? conversation.lastMessage
+                      : 'No messages'}
                   </div>
                 </button>
               ))}
@@ -138,14 +140,11 @@ const ChatPage: React.FC = () => {
         </div>
 
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col">
+        <div className="chat-area-v2">
           {error && (
-            <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 flex justify-between items-center">
+            <div className="chat-error-banner-v2">
               <span>{error}</span>
-              <button
-                onClick={handleDismissError}
-                className="text-red-700 hover:text-red-900"
-              >
+              <button onClick={handleDismissError} title="Dismiss">
                 ✕
               </button>
             </div>
@@ -157,10 +156,8 @@ const ChatPage: React.FC = () => {
               <ChatComposer_v2 />
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center bg-gray-50">
-              <div className="text-gray-500">
-                Select a conversation to start
-              </div>
+            <div className="chat-area-empty-v2">
+              <div>Select a conversation to start</div>
             </div>
           )}
         </div>

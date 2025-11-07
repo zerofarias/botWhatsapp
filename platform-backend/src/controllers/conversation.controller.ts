@@ -644,60 +644,74 @@ export async function sendConversationMessageHandler(
     createdAt: outbound ? resolveMessageDate(outbound) : new Date(),
   });
 
-  // Lógica para determinar el siguiente nodo y contexto
-
-  // Implementación real: Determinar el siguiente nodo y contexto según el trigger/mensaje recibido
-  // Supongamos que existe una función getNextNodeAndContext que recibe el nodo actual, el mensaje y el contexto actual
-  // y retorna el siguiente nodo y el nuevo contexto
-  const { nextNodeId, newContext } = await getNextNodeAndContext({
-    currentNodeId: conversation.currentFlowNodeId,
-    message: bodyContent,
-    context: conversation.context,
-    botId: conversation.botId,
-    conversationId,
-  });
-
-  // Si la función no retorna un nodo válido, se mantiene el actual y el contexto
-  const finalNodeId = nextNodeId ?? conversation.currentFlowNodeId;
-  const finalContext = newContext ?? conversation.context;
-
-  // Asegurar que context sea un string JSON válido
-  let contextValue: string | null = null;
-  if (finalContext) {
-    contextValue =
-      typeof finalContext === 'string'
-        ? finalContext
-        : JSON.stringify(finalContext);
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const updateData: any = {
-    lastActivity: messageRecord.createdAt,
-    status: 'ACTIVE',
-    botActive: false,
-    currentFlowNodeId: finalNodeId,
-    context: contextValue,
-  };
-
-  // Si no tiene asignado, asignarlo al usuario actual
-  if (!conversation.assignedToId) {
-    updateData.assignedTo = {
-      connect: { id: req.user.id },
-    };
-  }
-
-  await touchConversation(conversationId, updateData);
-
-  const io = getSocketServer();
-  await broadcastMessageRecord(io, conversationId, messageRecord, [
-    req.user.id,
-  ]);
-  await broadcastConversationUpdate(io, conversationId);
-
+  // 🚀 RESPOND IMMEDIATELY to client (before background processing)
   res.status(201).json({
     id: messageRecord.id.toString(),
     createdAt: messageRecord.createdAt,
     isDelivered: messageRecord.isDelivered,
+  });
+
+  // 🔄 BACKGROUND PROCESSING - Fire and forget (no await)
+  // This prevents blocking the HTTP response while still updating state
+  process.nextTick(async () => {
+    try {
+      // Lógica para determinar el siguiente nodo y contexto
+      const { nextNodeId, newContext } = await getNextNodeAndContext({
+        currentNodeId: conversation.currentFlowNodeId,
+        message: bodyContent,
+        context: conversation.context,
+        botId: conversation.botId,
+        conversationId,
+      });
+
+      // Si la función no retorna un nodo válido, se mantiene el actual y el contexto
+      const finalNodeId = nextNodeId ?? conversation.currentFlowNodeId;
+      const finalContext = newContext ?? conversation.context;
+
+      // Asegurar que context sea un string JSON válido
+      let contextValue: string | null = null;
+      if (finalContext) {
+        contextValue =
+          typeof finalContext === 'string'
+            ? finalContext
+            : JSON.stringify(finalContext);
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const updateData: any = {
+        lastActivity: messageRecord.createdAt,
+        status: 'ACTIVE',
+        botActive: false,
+        currentFlowNodeId: finalNodeId,
+        context: contextValue,
+      };
+
+      // Si no tiene asignado, asignarlo al usuario actual
+      if (!conversation.assignedToId) {
+        updateData.assignedTo = {
+          connect: { id: req.user!.id },
+        };
+      }
+
+      await touchConversation(conversationId, updateData);
+
+      const io = getSocketServer();
+      await broadcastMessageRecord(io, conversationId, messageRecord, [
+        req.user!.id,
+      ]);
+      await broadcastConversationUpdate(io, conversationId);
+
+      console.log(
+        `[sendConversationMessageHandler] ✅ Background processing completed for message ${messageRecord.id}`
+      );
+    } catch (error) {
+      console.error(
+        `[sendConversationMessageHandler] ❌ Background processing failed for message ${messageRecord.id}:`,
+        error
+      );
+      // Client already has message confirmation, so we don't fail the request
+      // Just log the error for debugging
+    }
   });
 }
 

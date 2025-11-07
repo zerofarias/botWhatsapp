@@ -7,15 +7,9 @@ import { useCallback, useRef } from 'react';
 import { useChatStore } from '../../store/chatStore';
 import { api } from '../../services/api';
 
-const SEND_TIMEOUT = 20000; // 20 seconds
+const SEND_TIMEOUT = 5000; // 5 seconds (reduced from 20s since backend now responds immediately)
 
 export function useMessageSender() {
-  const { setSending, setError, addMessage } = useChatStore((state) => ({
-    setSending: state.setSending,
-    setError: state.setError,
-    addMessage: state.addMessage,
-  }));
-
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const sendMessage = useCallback(
@@ -25,14 +19,19 @@ export function useMessageSender() {
       botId?: number
     ): Promise<{ success: boolean; messageId?: string | number }> => {
       try {
-        setSending(true);
-        setError(null);
+        useChatStore.setState({ sending: true, error: null });
 
         const controller = new AbortController();
         timeoutRef.current = setTimeout(() => controller.abort(), SEND_TIMEOUT);
 
-        const response = await api.post('/api/messages', {
+        const url = `/conversations/${conversationId}/messages`;
+        console.debug('[useMessageSender] Sending message to:', url, {
           conversationId,
+          content,
+          botId,
+        });
+
+        const response = await api.post(url, {
           content,
           botId,
           signal: controller.signal,
@@ -45,7 +44,7 @@ export function useMessageSender() {
         const message = response.data;
 
         // Add message to store (socket might also add it, but this ensures local update)
-        addMessage({
+        useChatStore.getState().addMessage({
           id: message.id,
           conversationId,
           content,
@@ -67,18 +66,18 @@ export function useMessageSender() {
           }
         }
 
-        setError(errorMessage);
+        useChatStore.setState({ error: errorMessage });
         console.error('Error sending message:', error);
         return { success: false };
       } finally {
-        setSending(false);
+        useChatStore.setState({ sending: false });
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
           timeoutRef.current = null;
         }
       }
     },
-    [setSending, setError, addMessage]
+    []
   );
 
   return { sendMessage };
