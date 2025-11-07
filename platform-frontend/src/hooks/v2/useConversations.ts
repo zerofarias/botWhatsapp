@@ -23,7 +23,7 @@ export function useConversations() {
   const loadConversations = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/conversations', {
+      const response = await api.get('/conversations', {
         timeout: 5000,
       });
       setConversations(response.data);

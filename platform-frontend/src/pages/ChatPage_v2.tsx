@@ -19,18 +19,15 @@ const ChatPage: React.FC = () => {
   // Store state
   const error = useChatStore(selectError);
   const activeConversation = useChatStore(selectActiveConversation);
-  const { setActiveConversation, setError } = useChatStore((state) => ({
-    setActiveConversation: state.setActiveConversation,
-    setError: state.setError,
-  }));
+  const setActiveConversation = useChatStore(
+    (state) => state.setActiveConversation
+  );
+  const setError = useChatStore((state) => state.setError);
 
   // Load conversations
   const { conversations, loading: loadingConversations } = useConversations();
 
-  // Register socket listeners
-  useSocketListeners();
-
-  // Initialize socket connection
+  // Initialize socket connection FIRST (before useSocketListeners)
   useEffect(() => {
     try {
       // Get API URL from window or use default
@@ -57,6 +54,9 @@ const ChatPage: React.FC = () => {
       setError('Socket initialization failed');
     }
   }, [setError]);
+
+  // Register socket listeners AFTER socket is initialized
+  useSocketListeners();
 
   // Auto-select first conversation on load
   useEffect(() => {

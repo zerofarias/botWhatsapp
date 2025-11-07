@@ -14,6 +14,12 @@ export function useSocketListeners() {
     try {
       const socket = getSocketManager();
 
+      // Only register listeners if socket exists and is connected
+      if (!socket) {
+        console.warn('⚠️ Socket manager not available yet');
+        return;
+      }
+
       // Message listeners
       const unsubMessage = socket.on('message:new', (message) => {
         console.log('📨 New message received:', message.id);

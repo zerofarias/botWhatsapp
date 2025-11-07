@@ -190,7 +190,11 @@ export const selectError = (state: ChatStoreState) => state.error;
 export const selectMessages = (state: ChatStoreState) => state.messages;
 export const selectConversations = (state: ChatStoreState) =>
   state.conversations;
-export const selectActiveConversation = (state: ChatStoreState) =>
-  state.getActiveConversation();
+export const selectActiveConversation = (state: ChatStoreState) => {
+  const conversation = state.conversations.find(
+    (c) => c.id === state.activeConversationId
+  );
+  return conversation || null;
+};
 export const selectSocketConnected = (state: ChatStoreState) =>
   state.socketConnected;

@@ -208,9 +208,11 @@ export function initializeSocket(
 
 export function getSocketManager(): SocketManager {
   if (!socketManager) {
-    throw new Error(
-      'Socket manager not initialized. Call initializeSocket first.'
+    console.warn(
+      '⚠️ Socket manager not initialized. Call initializeSocket first.'
     );
+    // Don't throw - return null check instead
+    return null as any; // Caller should check
   }
   return socketManager;
 }
