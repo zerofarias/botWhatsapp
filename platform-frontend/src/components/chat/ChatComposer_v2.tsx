@@ -1,21 +1,122 @@
 /**
  * ChatComposer v2 - Send messages with clean state management
  * Uses Zustand store and hooks directly, no props
+ * WhatsApp Web style composer
+ * Includes note mode and quick replies functionality
  */
 
-import React, { useState, useCallback } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from 'react';
 import {
   useChatStore,
   selectActiveConversation,
   selectSending,
 } from '../../store/chatStore';
 import { useMessageSender } from '../../hooks/v2/useMessageSender';
+import { createConversationNote } from '../../services/api';
+import {
+  quickReplyService,
+  type QuickReply,
+} from '../../services/quickReply.service';
+import QuickReplyEditor from '../QuickReplyEditor';
+import './ChatComposer_v2.css';
 
 const ChatComposer_v2: React.FC = () => {
   const [content, setContent] = useState('');
+  const [isNoteMode, setIsNoteMode] = useState(false);
+  const [allQuickReplies, setAllQuickReplies] = useState<QuickReply[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
+  const [showQuickReplyEditor, setShowQuickReplyEditor] = useState(false);
+
   const activeConversation = useChatStore(selectActiveConversation);
   const sending = useChatStore(selectSending);
   const { sendMessage } = useMessageSender();
+
+  // Load quick replies on component mount
+  useEffect(() => {
+    const loadQuickReplies = async () => {
+      try {
+        const replies = await quickReplyService.list();
+        setAllQuickReplies(replies);
+      } catch (error) {
+        console.error('Error loading quick replies:', error);
+      }
+    };
+    loadQuickReplies();
+  }, []);
+
+  // Get suggestions based on input
+  const suggestions = useMemo(() => {
+    if (!content.includes('/')) {
+      return [];
+    }
+
+    const lastSlashIndex = content.lastIndexOf('/');
+    const searchTerm = content.substring(lastSlashIndex + 1).toLowerCase();
+
+    if (searchTerm === '') {
+      return allQuickReplies.slice(0, 5);
+    }
+
+    return allQuickReplies
+      .filter(
+        (reply) =>
+          reply.title.toLowerCase().includes(searchTerm) ||
+          (reply.shortcut &&
+            reply.shortcut.toLowerCase().includes(searchTerm)) ||
+          reply.content.toLowerCase().includes(searchTerm)
+      )
+      .slice(0, 5);
+  }, [content, allQuickReplies]);
+
+  // Show suggestions when typing /
+  useEffect(() => {
+    setShowSuggestions(suggestions.length > 0 && content.includes('/'));
+    setSelectedSuggestionIndex(0);
+  }, [suggestions.length, content]);
+
+  const sendNoteInternally = useCallback(
+    async (noteContent: string) => {
+      if (!activeConversation) return;
+
+      try {
+        await createConversationNote(activeConversation.id, noteContent);
+        console.debug('[ChatComposer_v2] Internal note created successfully');
+      } catch (error) {
+        console.error('[ChatComposer_v2] Error creating internal note:', error);
+        useChatStore.setState({
+          error: 'Error al crear la nota interna',
+        });
+      }
+    },
+    [activeConversation]
+  );
+
+  const handleSelectSuggestion = useCallback(
+    (reply: QuickReply) => {
+      const lastSlashIndex = content.lastIndexOf('/');
+      const beforeSlash = content.substring(0, lastSlashIndex);
+      const newValue = beforeSlash + reply.content;
+      setContent(newValue);
+      setShowSuggestions(false);
+    },
+    [content]
+  );
+
+  const handleQuickReplySaved = useCallback(async (reply: QuickReply) => {
+    try {
+      const replies = await quickReplyService.list();
+      setAllQuickReplies(replies);
+    } catch (error) {
+      console.error('Error reloading quick replies:', error);
+    }
+  }, []);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -37,67 +138,185 @@ const ChatComposer_v2: React.FC = () => {
         conversationId: activeConversation.id,
         contentLength: trimmedContent.length,
         botId: activeConversation.botId,
+        isNoteMode,
       });
+
       setContent('');
 
-      // Send message
-      await sendMessage(
-        activeConversation.id,
-        trimmedContent,
-        activeConversation.botId
-      );
+      if (isNoteMode) {
+        // Send internal note
+        await sendNoteInternally(trimmedContent);
+        setIsNoteMode(false);
+      } else {
+        // Send regular message
+        await sendMessage(
+          activeConversation.id,
+          trimmedContent,
+          activeConversation.botId
+        );
+      }
     },
-    [content, activeConversation, sendMessage]
+    [content, activeConversation, sendMessage, sendNoteInternally, isNoteMode]
   );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // Send on Ctrl+Enter or Cmd+Enter
+      // Handle suggestions navigation
+      if (showSuggestions && suggestions.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setSelectedSuggestionIndex((prev) =>
+            prev < suggestions.length - 1 ? prev + 1 : 0
+          );
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setSelectedSuggestionIndex((prev) =>
+            prev > 0 ? prev - 1 : suggestions.length - 1
+          );
+          return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          const selected = suggestions[selectedSuggestionIndex];
+          if (selected) {
+            handleSelectSuggestion(selected);
+          }
+          return;
+        }
+        if (e.key === 'Escape') {
+          setShowSuggestions(false);
+          return;
+        }
+      }
+
+      // Send on Enter (Shift+Enter keeps newline)
+      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        handleSubmit(e as any);
+        return;
+      }
+
+      // Fallback shortcut: Ctrl/Cmd + Enter
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
         handleSubmit(e as any);
       }
     },
-    [handleSubmit]
+    [
+      handleSubmit,
+      showSuggestions,
+      suggestions,
+      selectedSuggestionIndex,
+      handleSelectSuggestion,
+    ]
   );
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="border-t border-gray-300 bg-white p-4 space-y-2"
-    >
-      <textarea
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="Type a message... (Ctrl+Enter to send)"
-        disabled={sending || !activeConversation}
-        className="w-full px-4 py-2 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-        rows={3}
+    <>
+      <form onSubmit={handleSubmit} className="chat-composer-v2">
+        <div className="chat-composer-v2-footer">
+          {/* Note Mode Button */}
+          {!isNoteMode && (
+            <button
+              type="button"
+              className="chat-composer-v2-btn-icon"
+              onClick={() => setIsNoteMode(true)}
+              disabled={sending || !activeConversation}
+              title="Agregar nota interna"
+            >
+              📝
+            </button>
+          )}
+
+          {/* Remove Note Mode Button */}
+          {isNoteMode && (
+            <button
+              type="button"
+              className="chat-composer-v2-btn-icon chat-composer-v2-btn-remove-note"
+              onClick={() => {
+                setIsNoteMode(false);
+                setContent('');
+              }}
+              title="Quitar nota"
+            >
+              ✕
+            </button>
+          )}
+
+          {/* Quick Reply Creator Button */}
+          <button
+            type="button"
+            className="chat-composer-v2-btn-icon"
+            onClick={() => setShowQuickReplyEditor(true)}
+            disabled={sending || !activeConversation}
+            title="Crear nuevo atajo rápido"
+          >
+            ⚡
+          </button>
+
+          <div className="chat-composer-v2-input-wrapper">
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                isNoteMode
+                  ? 'Escribe una nota interna...'
+                  : 'Escribe un mensaje o / para atajos...'
+              }
+              disabled={sending || !activeConversation}
+              className={`chat-composer-v2-textarea ${
+                isNoteMode ? 'note-mode' : ''
+              }`}
+              rows={1}
+            />
+
+            {/* Quick Reply Suggestions */}
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="chat-composer-v2-suggestions">
+                {suggestions.map((reply, index) => (
+                  <div
+                    key={reply.id}
+                    className={`chat-composer-v2-suggestion ${
+                      index === selectedSuggestionIndex ? 'selected' : ''
+                    }`}
+                    onClick={() => handleSelectSuggestion(reply)}
+                  >
+                    <div className="suggestion-title">{reply.title}</div>
+                    <div className="suggestion-content">
+                      {reply.content.substring(0, 50)}...
+                    </div>
+                    {reply.shortcut && (
+                      <div className="suggestion-shortcut">
+                        /{reply.shortcut}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={!content.trim() || sending || !activeConversation}
+            className="chat-composer-v2-btn-send"
+            title={isNoteMode ? 'Guardar nota (Enter)' : 'Enviar (Enter)'}
+          >
+            {sending ? '⏳' : isNoteMode ? '💾' : '➤'}
+          </button>
+        </div>
+      </form>
+
+      {/* Quick Reply Editor Modal */}
+      <QuickReplyEditor
+        isOpen={showQuickReplyEditor}
+        onClose={() => setShowQuickReplyEditor(false)}
+        onSave={handleQuickReplySaved}
       />
-
-      <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => setContent('')}
-          disabled={!content || sending}
-          className="px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Clear
-        </button>
-        <button
-          type="submit"
-          disabled={!content.trim() || sending || !activeConversation}
-          className="px-4 py-2 text-white bg-blue-500 hover:bg-blue-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
-        >
-          {sending ? 'Sending...' : 'Send'}
-        </button>
-      </div>
-
-      {sending && (
-        <div className="text-sm text-blue-600">⏳ Message is being sent...</div>
-      )}
-    </form>
+    </>
   );
 };
 

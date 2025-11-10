@@ -132,7 +132,7 @@ model Flow {
   parentId            Int?             @map("parent_id")
   areaId              Int?             @map("area_id")
   orderIndex          Int              @default(0) @map("order_index")
-  metadata            Json?
+  metadata            String?          @db.LongText
   isActive            Boolean          @default(true) @map("is_active")
   createdBy           Int              @map("created_by")
   createdAt           DateTime         @default(now()) @map("created_at")
@@ -169,29 +169,31 @@ model FlowConnection {
 }
 
 model Conversation {
-  id                BigInt              @id @default(autoincrement())
-  userPhone         String              @map("user_phone")
-  contactName       String?             @map("contact_name")
-  contactId         Int?                @map("contact_id")
-  areaId            Int?                @map("area_id")
-  assignedToId      Int?                @map("assigned_to")
-  status            ConversationStatus  @default(PENDING)
-  botActive         Boolean             @default(true) @map("bot_active")
-  lastActivity      DateTime            @default(now()) @map("last_activity")
-  lastBotMessageAt  DateTime?           @map("last_bot_message_at")
-  closedAt          DateTime?           @map("closed_at")
-  closedReason      String?             @map("closed_reason")
-  closedById        Int?                @map("closed_by")
-  createdAt         DateTime            @default(now()) @map("created_at")
-  updatedAt         DateTime            @updatedAt @map("updated_at")
-  currentFlowNodeId Int?                @map("current_flow_node_id")
-  context           String?             @map("context") @db.LongText
-  botId             Int?                @map("bot_id")
+  id                BigInt                       @id @default(autoincrement())
+  userPhone         String                       @map("user_phone")
+  contactName       String?                      @map("contact_name")
+  contactId         Int?                         @map("contact_id")
+  areaId            Int?                         @map("area_id")
+  assignedToId      Int?                         @map("assigned_to")
+  status            ConversationStatus           @default(PENDING)
+  progressStatus    ConversationProgressStatus   @default(PENDING) @map("progress_status")
+  botActive         Boolean                      @default(true) @map("bot_active")
+  lastActivity      DateTime                     @default(now()) @map("last_activity")
+  lastBotMessageAt  DateTime?                    @map("last_bot_message_at")
+  closedAt          DateTime?                    @map("closed_at")
+  closedReason      String?                      @map("closed_reason")
+  closedById        Int?                         @map("closed_by")
+  createdAt         DateTime                     @default(now()) @map("created_at")
+  updatedAt         DateTime                     @updatedAt @map("updated_at")
+  currentFlowNodeId Int?                         @map("current_flow_node_id")
+  context           String?                      @map("context") @db.LongText
+  botId             Int?                         @map("bot_id")
   events            ConversationEvent[]
-  area              Area?               @relation(fields: [areaId], references: [id])
-  assignedTo        User?               @relation("ConversationAssignedTo", fields: [assignedToId], references: [id])
-  closedBy          User?               @relation("ConversationClosedBy", fields: [closedById], references: [id])
-  contact           Contact?            @relation(fields: [contactId], references: [id])
+  orders            Order[]
+  area              Area?                        @relation(fields: [areaId], references: [id])
+  assignedTo        User?                        @relation("ConversationAssignedTo", fields: [assignedToId], references: [id])
+  closedBy          User?                        @relation("ConversationClosedBy", fields: [closedById], references: [id])
+  contact           Contact?                     @relation(fields: [contactId], references: [id])
   messages          Message[]
 
   @@index([userPhone], map: "idx_conversations_user_phone")
@@ -254,6 +256,8 @@ model Contact {
   name          String
   phone         String         @unique
   dni           String?        @db.VarChar(20)
+  address1      String?        @map("address1") @db.VarChar(255)
+  address2      String?        @map("address2") @db.VarChar(255)
   areaId        Int?           @map("area_id")
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
@@ -299,6 +303,45 @@ model QuickReply {
   @@map("quick_replies")
 }
 
+model Order {
+  id                  Int             @id @default(autoincrement())
+  conversationId      BigInt          @unique @map("conversation_id")
+  conversation        Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  clientPhone         String          @map("client_phone")
+  clientName          String?         @map("client_name")
+  tipoConversacion    String          @map("tipo_conversacion")
+  itemsJson           String          @map("items_json") @db.LongText
+  notas               String?         @map("notas") @db.Text
+  especificaciones    String?         @map("especificaciones") @db.Text
+  status              OrderStatus     @default(PENDING) @map("status")
+  closeReason         String?         @map("close_reason")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  closedAt            DateTime?       @map("closed_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  @@index([status], map: "idx_orders_status")
+  @@index([clientPhone], map: "idx_orders_client_phone")
+  @@index([createdAt], map: "idx_orders_created_at")
+  @@map("orders")
+}
+
+model FlowData {
+  id              Int         @id @default(autoincrement())
+  botId           Int         @map("bot_id")
+  conversationId  BigInt      @map("conversation_id")
+  dataType        String      @map("data_type")
+  variables       String      @map("variables") @db.LongText
+  phoneNumber     String?     @map("phone_number")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  @@index([botId], map: "idx_flow_data_bot")
+  @@index([dataType], map: "idx_flow_data_type")
+  @@index([conversationId], map: "idx_flow_data_conversation")
+  @@index([createdAt], map: "idx_flow_data_created_at")
+  @@map("flow_data")
+}
+
 enum UserRole {
   ADMIN      @map("admin")
   SUPERVISOR @map("supervisor")
@@ -319,6 +362,21 @@ enum ConversationStatus {
   ACTIVE  @map("active")
   PAUSED  @map("paused")
   CLOSED  @map("closed")
+}
+
+enum ConversationProgressStatus {
+  PENDING        @map("pending")
+  IN_PREPARATION @map("in_preparation")
+  COMPLETED      @map("completed")
+  CANCELLED      @map("cancelled")
+  INACTIVE       @map("inactive")
+}
+
+enum OrderStatus {
+  PENDING     @map("pending")
+  CONFIRMADO  @map("confirmado")
+  COMPLETADO  @map("completado")
+  CANCELADO   @map("cancelado")
 }
 
 enum MessageSender {
@@ -345,4 +403,5 @@ enum NodeType {
   SET_VARIABLE
   END
   SCHEDULE
+  DATA_LOG
 }

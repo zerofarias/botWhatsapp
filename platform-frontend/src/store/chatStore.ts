@@ -6,6 +6,11 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { ContactGroup } from '../hooks/v2/useContactGroups';
+import type {
+  ConversationProgressStatus,
+  ConversationStatus,
+} from '../types/chat';
 
 // Types
 export interface Message {
@@ -14,8 +19,12 @@ export interface Message {
   content: string;
   sender: 'user' | 'bot' | 'contact';
   timestamp: number;
+  senderId?: number | null;
+  senderName?: string | null;
+  senderUsername?: string | null;
   status?: 'sent' | 'delivered' | 'read' | 'error';
   mediaUrl?: string;
+  mediaType?: string; // Para soporte multimedia: image/jpeg, audio/mpeg, etc.
   metadata?: Record<string, any>;
 }
 
@@ -27,11 +36,16 @@ export interface Conversation {
   lastMessage?: string;
   lastMessageTime?: number;
   unreadCount: number;
+  status?: ConversationStatus;
+  progressStatus?: ConversationProgressStatus;
   contact?: {
     id: number;
     name: string;
     phone: string;
     avatar?: string;
+    dni?: string | null;
+    address1?: string | null;
+    address2?: string | null;
   };
 }
 
@@ -45,6 +59,7 @@ export interface ChatStoreState {
   // Data State
   conversations: Conversation[];
   activeConversationId: number | null;
+  selectedContactGroup: ContactGroup | null; // Para agrupar mensajes por contacto
   messages: Message[];
   messageHistory: Map<number, Message[]>;
 
@@ -64,6 +79,10 @@ export interface ChatStoreState {
   setActiveConversation: (id: number | null) => void;
   addConversation: (conversation: Conversation) => void;
   updateConversation: (id: number, updates: Partial<Conversation>) => void;
+
+  // Contact group actions
+  setSelectedContactGroup: (contactGroup: ContactGroup | null) => void;
+  loadContactGroupMessages: (contactGroup: ContactGroup) => void;
 
   // Message actions
   setMessages: (messages: Message[]) => void;
@@ -95,6 +114,7 @@ export const useChatStore = create<ChatStoreState>()(
     // Initial data state
     conversations: [],
     activeConversationId: null,
+    selectedContactGroup: null,
     messages: [],
     messageHistory: new Map(),
 
@@ -129,21 +149,77 @@ export const useChatStore = create<ChatStoreState>()(
       })),
 
     // Message actions
-    setMessages: (messages) => set({ messages }),
+    setMessages: (messages) =>
+      set((state) => {
+        const currentConversationId = state.activeConversationId;
+        let newHistory = state.messageHistory;
+        if (currentConversationId != null) {
+          newHistory = new Map(state.messageHistory);
+          newHistory.set(currentConversationId, messages);
+        }
+        return {
+          messages,
+          ...(newHistory === state.messageHistory
+            ? {}
+            : { messageHistory: newHistory }),
+        };
+      }),
     addMessage: (message) =>
-      set((state) => ({
-        messages: [...state.messages, message],
-      })),
+      set((state) => {
+        const newHistory = new Map(state.messageHistory);
+        const existing = newHistory.get(message.conversationId) || [];
+        newHistory.set(message.conversationId, [...existing, message]);
+
+        const shouldAppend =
+          state.activeConversationId === message.conversationId;
+
+        return {
+          messageHistory: newHistory,
+          messages: shouldAppend
+            ? [...state.messages, message]
+            : state.messages,
+        };
+      }),
     updateMessage: (id, updates) =>
-      set((state) => ({
-        messages: state.messages.map((m) =>
+      set((state) => {
+        const updatedMessages = state.messages.map((m) =>
           m.id === id ? { ...m, ...updates } : m
-        ),
-      })),
+        );
+
+        const newHistory = new Map(state.messageHistory);
+        newHistory.forEach((msgs, conversationId) => {
+          let changed = false;
+          const nextMsgs = msgs.map((msg) => {
+            if (msg.id === id) {
+              changed = true;
+              return { ...msg, ...updates };
+            }
+            return msg;
+          });
+          if (changed) {
+            newHistory.set(conversationId, nextMsgs);
+          }
+        });
+
+        return {
+          messages: updatedMessages,
+          messageHistory: newHistory,
+        };
+      }),
     deleteMessage: (id) =>
-      set((state) => ({
-        messages: state.messages.filter((m) => m.id !== id),
-      })),
+      set((state) => {
+        const filteredMessages = state.messages.filter((m) => m.id !== id);
+        const newHistory = new Map(state.messageHistory);
+        newHistory.forEach((msgs, conversationId) => {
+          const nextMsgs = msgs.filter((msg) => msg.id !== id);
+          newHistory.set(conversationId, nextMsgs);
+        });
+
+        return {
+          messages: filteredMessages,
+          messageHistory: newHistory,
+        };
+      }),
     setMessageHistory: (conversationId, messages) =>
       set((state) => {
         const newHistory = new Map(state.messageHistory);
@@ -162,6 +238,35 @@ export const useChatStore = create<ChatStoreState>()(
     setHasMoreHistory: (hasMore) => set({ hasMoreHistory: hasMore }),
     setHistoryPage: (page) => set({ historyPage: page }),
     setTotalMessages: (total) => set({ totalMessages: total }),
+
+    // Contact group actions
+    setSelectedContactGroup: (contactGroup) =>
+      set({ selectedContactGroup: contactGroup }),
+
+    loadContactGroupMessages: (contactGroup) => {
+      // Cargar mensajes de todas las conversaciones del contacto desde el servidor
+      const conversationIds = contactGroup.conversations.map((c) => c.id);
+
+      // Por ahora, usar los mensajes del cache
+      // En el futuro, aquí harías fetch('/api/conversations/messages/bulk', { conversationIds })
+      const state = get();
+      const allMessages: Message[] = [];
+
+      conversationIds.forEach((conversationId) => {
+        const messages = state.messageHistory.get(conversationId) || [];
+        allMessages.push(...messages);
+      });
+
+      // Ordenar cronológicamente y actualizar estado
+      const sortedMessages = allMessages.sort(
+        (a, b) => a.timestamp - b.timestamp
+      );
+      set({
+        selectedContactGroup: contactGroup,
+        messages: sortedMessages,
+        activeConversationId: null, // Clear single conversation since we're showing grouped
+      });
+    },
 
     // Utility
     getActiveConversation: () => {
@@ -198,3 +303,27 @@ export const selectActiveConversation = (state: ChatStoreState) => {
 };
 export const selectSocketConnected = (state: ChatStoreState) =>
   state.socketConnected;
+
+// Selector para obtener mensajes agrupados por contacto
+export const selectContactGroupMessages = (
+  state: ChatStoreState
+): Message[] => {
+  if (!state.selectedContactGroup) {
+    return [];
+  }
+
+  // Obtener todos los IDs de conversaciones del contacto seleccionado
+  const conversationIds = state.selectedContactGroup.conversations.map(
+    (c) => c.id
+  );
+
+  // Obtener mensajes de todas las conversaciones del contacto desde messageHistory
+  const allMessages: Message[] = [];
+  conversationIds.forEach((conversationId) => {
+    const messages = state.messageHistory.get(conversationId) || [];
+    allMessages.push(...messages);
+  });
+
+  // Ordenar mensajes cronológicamente
+  return allMessages.sort((a, b) => a.timestamp - b.timestamp);
+};

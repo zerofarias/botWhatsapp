@@ -19,6 +19,8 @@ export interface ConversationSnapshot {
     name: string;
     phone: string;
     dni?: string;
+    address1?: string | null;
+    address2?: string | null;
   } | null;
   areaId: number | null;
   assignedToId: number | null;
@@ -40,6 +42,8 @@ export const ConversationSnapshotSchema = z.object({
       name: z.string(),
       phone: z.string(),
       dni: z.string().optional(),
+      address1: z.string().nullable().optional(),
+      address2: z.string().nullable().optional(),
     })
     .nullable(),
   areaId: z.number().nullable(),

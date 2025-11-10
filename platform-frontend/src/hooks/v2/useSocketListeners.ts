@@ -1,4 +1,4 @@
-/**
+﻿/**
  * useSocketListeners v2 - Register socket event handlers
  * Replaces socket listener logic from old useChatSession
  */
@@ -14,7 +14,7 @@ export function useSocketListeners() {
 
       // Only register listeners if socket exists and is connected
       if (!socket) {
-        console.warn('⚠️ Socket manager not available yet');
+        console.warn('ÔÜá´©Å Socket manager not available yet');
         return;
       }
 
@@ -23,9 +23,13 @@ export function useSocketListeners() {
 
       // Message listeners
       const unsubMessage = socket.on('message:new', (payload) => {
-        console.log('📨 New message received:', payload);
+        console.log('­ƒô¿ New message received:', payload);
 
         // Normalize message to v2 format
+        const parsedSenderId =
+          typeof payload.senderId === 'string'
+            ? parseInt(payload.senderId, 10)
+            : payload.senderId ?? null;
         const normalizedMessage = {
           id:
             typeof payload.id === 'string'
@@ -39,29 +43,39 @@ export function useSocketListeners() {
           sender: (payload.sender ||
             payload.senderType?.toLowerCase() ||
             'contact') as 'user' | 'bot' | 'contact',
+          senderId: parsedSenderId,
+          senderName: payload.senderName ?? null,
+          senderUsername: payload.senderUsername ?? null,
           timestamp:
             typeof payload.timestamp === 'string'
               ? new Date(payload.timestamp).getTime()
               : payload.timestamp || new Date(payload.createdAt).getTime(),
           status: 'sent' as const,
           mediaUrl: payload.mediaUrl || undefined,
-          metadata: payload.metadata || {
+          metadata: {
             senderType: payload.senderType,
-            senderId: payload.senderId,
+            senderId: parsedSenderId,
+            senderName: payload.senderName ?? null,
+            senderUsername: payload.senderUsername ?? null,
+            ...(payload.metadata || {}),
           },
         };
 
-        console.log('✅ Normalized message:', normalizedMessage);
+        console.log('Ô£à Normalized message:', normalizedMessage);
         useChatStore.getState().addMessage(normalizedMessage);
       });
 
       const unsubMessageUpdated = socket.on('message:updated', (payload) => {
-        console.log('✏️ Message updated:', payload);
+        console.log('Ô£Å´©Å Message updated:', payload);
 
         const messageId =
           typeof payload.id === 'string'
             ? parseInt(payload.id, 10)
             : payload.id;
+        const updateSenderId =
+          typeof payload.senderId === 'string'
+            ? parseInt(payload.senderId, 10)
+            : payload.senderId ?? null;
         const normalizedUpdate = {
           id: messageId,
           conversationId:
@@ -72,6 +86,9 @@ export function useSocketListeners() {
           sender: (payload.sender ||
             payload.senderType?.toLowerCase() ||
             'contact') as 'user' | 'bot' | 'contact',
+          senderId: updateSenderId,
+          senderName: payload.senderName ?? null,
+          senderUsername: payload.senderUsername ?? null,
           timestamp:
             typeof payload.timestamp === 'string'
               ? new Date(payload.timestamp).getTime()
@@ -83,7 +100,7 @@ export function useSocketListeners() {
       });
 
       const unsubMessageDeleted = socket.on('message:deleted', (payload) => {
-        console.log('🗑️ Message deleted:', payload.messageId);
+        console.log('­ƒùæ´©Å Message deleted:', payload.messageId);
 
         const messageId =
           typeof payload.messageId === 'string'
@@ -96,7 +113,7 @@ export function useSocketListeners() {
       const unsubConversationUpdated = socket.on(
         'conversation:updated',
         (payload) => {
-          console.log('📝 Conversation updated:', payload.id);
+          console.log('­ƒôØ Conversation updated:', payload.id);
 
           const normalizedConversation = {
             ...payload,
@@ -112,6 +129,10 @@ export function useSocketListeners() {
               typeof payload.contactId === 'string'
                 ? parseInt(payload.contactId, 10)
                 : payload.contactId,
+            progressStatus:
+              typeof payload.progressStatus === 'string'
+                ? payload.progressStatus.toUpperCase()
+                : payload.progressStatus,
           };
 
           useChatStore
@@ -126,7 +147,7 @@ export function useSocketListeners() {
       const unsubConversationCreated = socket.on(
         'conversation:created',
         (payload) => {
-          console.log('✨ Conversation created:', payload.id);
+          console.log('Ô£¿ Conversation created:', payload.id);
 
           const normalizedConversation = {
             ...payload,
@@ -142,6 +163,10 @@ export function useSocketListeners() {
               typeof payload.contactId === 'string'
                 ? parseInt(payload.contactId, 10)
                 : payload.contactId,
+            progressStatus:
+              typeof payload.progressStatus === 'string'
+                ? payload.progressStatus.toUpperCase()
+                : payload.progressStatus,
           };
 
           useChatStore.getState().addConversation(normalizedConversation);
@@ -151,7 +176,7 @@ export function useSocketListeners() {
       const unsubConversationDeleted = socket.on(
         'conversation:deleted',
         (payload) => {
-          console.log('❌ Conversation deleted:', payload.conversationId);
+          console.log('ÔØî Conversation deleted:', payload.conversationId);
 
           const conversationId =
             typeof payload.conversationId === 'string'
@@ -173,22 +198,22 @@ export function useSocketListeners() {
 
       // Flow listeners
       const unsubFlowStarted = socket.on('flow:started', (payload) => {
-        console.log('🚀 Flow started:', payload.flowId);
+        console.log('­ƒÜÇ Flow started:', payload.flowId);
         useChatStore.setState({ error: null });
       });
 
       const unsubFlowEnded = socket.on('flow:ended', (payload) => {
-        console.log('🛑 Flow ended:', payload.flowId);
+        console.log('­ƒøæ Flow ended:', payload.flowId);
       });
 
       // Typing indicators
       const unsubTypingStarted = socket.on('typing:started', (payload) => {
         // Could add to store if needed for "typing..." UI
-        console.log('⌨️ Typing started:', payload.sender);
+        console.log('Ôî¿´©Å Typing started:', payload.sender);
       });
 
       const unsubTypingEnded = socket.on('typing:ended', (payload) => {
-        console.log('⌨️ Typing ended:', payload.sender);
+        console.log('Ôî¿´©Å Typing ended:', payload.sender);
       });
 
       // Cleanup on unmount

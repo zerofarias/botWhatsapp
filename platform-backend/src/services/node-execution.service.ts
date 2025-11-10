@@ -2,6 +2,38 @@
 import { prisma } from '../config/prisma.js';
 import type { ConversationContext } from './flow.service';
 
+/**
+ * Interfaz para datos de contacto que se pueden obtener de la conversación
+ */
+export interface ContactGlobalData {
+  userPhone?: string | null;
+  contactName?: string | null;
+  dni?: string | null;
+  email?: string | null;
+  areaId?: number | null;
+  conversationStatus?: string | null;
+}
+
+/**
+ * Enriquece el contexto con variables globales del contacto
+ * Las variables globales son accesibles en todos los nodos del flujo
+ */
+export function enrichContextWithGlobalVariables(
+  context: ConversationContext,
+  contactData: ContactGlobalData
+): ConversationContext {
+  return {
+    ...context,
+    GLOBAL_numTelefono: contactData.userPhone ?? '',
+    GLOBAL_nombre: contactData.contactName ?? '',
+    GLOBAL_nombreContacto: contactData.contactName ?? '',
+    GLOBAL_dni: contactData.dni ?? '',
+    GLOBAL_email: contactData.email ?? '',
+    GLOBAL_areaId: contactData.areaId ?? '',
+    GLOBAL_conversationStatus: contactData.conversationStatus ?? '',
+  };
+}
+
 type BuilderCondition = {
   id?: string;
   label?: string;
@@ -151,7 +183,7 @@ function normalizeOperator(raw?: string): ConditionOperator {
  * Reemplaza $$variableName con el valor de la variable en el contexto
  * Ejemplo: "Hola $$nombre" con context {nombre: "Juan"} -> "Hola Juan"
  */
-function interpolateVariables(
+export function interpolateVariables(
   message: string,
   context: ConversationContext
 ): string {
@@ -536,11 +568,11 @@ export async function executeNode({
  */
 export async function executeNodeChain({
   botId,
-  startNodeId,
+  nodeId,
   context,
   capturedVariableName,
-}: ExecuteNodeInput & { startNodeId?: number }): Promise<ExecuteNodeResult> {
-  let currentNodeId = startNodeId ?? null;
+}: ExecuteNodeInput): Promise<ExecuteNodeResult> {
+  let currentNodeId: number | null = nodeId ?? null;
   let currentContext = context;
   let allActions: Array<{ type: string; payload?: unknown }> = [];
   let iterations = 0;
@@ -556,73 +588,92 @@ export async function executeNodeChain({
     }
 
     // Ejecutar el nodo actual
-    const result = await executeNode({
-      botId,
-      nodeId: currentNodeId,
-      context: currentContext,
-      capturedVariableName,
-    });
+    try {
+      const result = await executeNode({
+        botId,
+        nodeId: currentNodeId,
+        context: currentContext,
+        capturedVariableName,
+      });
 
-    allActions = allActions.concat(result.actions);
-    currentContext = result.updatedContext;
-    capturedVariableName = null; // Solo usar en la primera iteración
+      allActions = allActions.concat(result.actions);
+      currentContext = result.updatedContext;
+      capturedVariableName = null; // Solo usar en la primera iteración
 
-    // Contar mensajes enviados
-    const sendMessageActions = result.actions.filter(
-      (a) => a.type === 'send_message'
-    );
-    if (sendMessageActions.length > 0) {
-      messageCount++;
-    }
-
-    // Procesar delays
-    console.log(
-      `[executeNodeChain] Actions de node ${currentNodeId}:`,
-      JSON.stringify(result.actions)
-    );
-    const delayAction = result.actions.find((a) => a.type === 'delay');
-    console.log(
-      `[executeNodeChain] DelayAction encontrado?`,
-      !!delayAction,
-      delayAction
-    );
-
-    if (
-      delayAction &&
-      delayAction.payload &&
-      typeof (delayAction.payload as Record<string, unknown>).seconds ===
-        'number'
-    ) {
-      const delaySeconds = (delayAction.payload as Record<string, unknown>)
-        .seconds as number;
-      console.log(
-        `[executeNodeChain] ⏳ INICIANDO DELAY de ${delaySeconds} segundos (${new Date().toISOString()})`
+      // Contar mensajes enviados
+      const sendMessageActions = result.actions.filter(
+        (a) => a.type === 'send_message'
       );
-      // Esperar los segundos especificados
-      await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000));
-      console.log(
-        `[executeNodeChain] ✅ DELAY completado (${new Date().toISOString()})`
-      );
-    } else {
-      console.log(`[executeNodeChain] No delay action found or invalid format`);
-    }
+      if (sendMessageActions.length > 0) {
+        messageCount++;
+      }
 
-    // Si el contexto indica que espera input, detener la cadena
-    if (currentContext.waitingForInput) {
+      // Procesar delays
       console.log(
-        `[executeNodeChain] Esperando input para variable: ${currentContext.waitingVariable}`
+        `[executeNodeChain] Actions de node ${currentNodeId}:`,
+        JSON.stringify(result.actions)
       );
+      const delayAction = result.actions.find((a) => a.type === 'delay');
+      console.log(
+        `[executeNodeChain] DelayAction encontrado?`,
+        !!delayAction,
+        delayAction
+      );
+
+      if (
+        delayAction &&
+        delayAction.payload &&
+        typeof (delayAction.payload as Record<string, unknown>).seconds ===
+          'number'
+      ) {
+        const delaySeconds = (delayAction.payload as Record<string, unknown>)
+          .seconds as number;
+        console.log(
+          `[executeNodeChain] ⏳ INICIANDO DELAY de ${delaySeconds} segundos (${new Date().toISOString()})`
+        );
+        // Esperar los segundos especificados
+        await new Promise((resolve) =>
+          setTimeout(resolve, delaySeconds * 1000)
+        );
+        console.log(
+          `[executeNodeChain] ✅ DELAY completado (${new Date().toISOString()})`
+        );
+      } else {
+        console.log(
+          `[executeNodeChain] No delay action found or invalid format`
+        );
+      }
+
+      // Si el contexto indica que espera input, detener la cadena
+      if (currentContext.waitingForInput) {
+        console.log(
+          `[executeNodeChain] Esperando input para variable: ${currentContext.waitingVariable}`
+        );
+        break;
+      }
+
+      // Si no hay siguiente nodo, detener
+      if (!result.nextNodeId) {
+        console.log(`[executeNodeChain] No hay siguiente nodo, finalizando`);
+        currentNodeId = null;
+        break;
+      }
+
+      currentNodeId = result.nextNodeId;
+    } catch (nodeError) {
+      console.error(
+        `[executeNodeChain] Error executing node ${currentNodeId}:`,
+        nodeError instanceof Error
+          ? {
+              message: nodeError.message,
+              stack: nodeError.stack,
+              cause: (nodeError as any).cause,
+            }
+          : nodeError
+      );
+      // Stop the chain on error
       break;
     }
-
-    // Si no hay siguiente nodo, detener
-    if (!result.nextNodeId) {
-      console.log(`[executeNodeChain] No hay siguiente nodo, finalizando`);
-      currentNodeId = null;
-      break;
-    }
-
-    currentNodeId = result.nextNodeId;
   }
 
   if (iterations >= MAX_ITERATIONS) {

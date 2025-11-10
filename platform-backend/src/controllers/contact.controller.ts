@@ -75,7 +75,7 @@ export async function listContactsHandler(_req: Request, res: Response) {
 }
 
 export async function createContactHandler(req: Request, res: Response) {
-  const { name, phone, dni, areaId } = req.body ?? {};
+  const { name, phone, dni, areaId, address1, address2 } = req.body ?? {};
 
   if (!name || !phone) {
     return res.status(400).json({
@@ -89,6 +89,8 @@ export async function createContactHandler(req: Request, res: Response) {
       phone,
       dni,
       areaId: typeof areaId === 'number' ? areaId : null,
+      address1: typeof address1 === 'string' ? address1 : null,
+      address2: typeof address2 === 'string' ? address2 : null,
     });
     return res.status(201).json(contact);
   } catch (error) {
@@ -116,6 +118,18 @@ export async function updateContactHandler(req: Request, res: Response) {
           ? undefined
           : typeof req.body.areaId === 'number'
           ? req.body.areaId
+          : null,
+      address1:
+        req.body?.address1 === undefined
+          ? undefined
+          : typeof req.body.address1 === 'string'
+          ? req.body.address1
+          : null,
+      address2:
+        req.body?.address2 === undefined
+          ? undefined
+          : typeof req.body.address2 === 'string'
+          ? req.body.address2
           : null,
     });
     return res.json(updated);

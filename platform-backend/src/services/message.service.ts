@@ -44,6 +44,13 @@ const messageSelect = Prisma.validator<Prisma.MessageSelect>()({
   conversationId: true,
   senderType: true,
   senderId: true,
+  sender: {
+    select: {
+      id: true,
+      name: true,
+      username: true,
+    },
+  },
   content: true,
   mediaType: true,
   mediaUrl: true,

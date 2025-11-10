@@ -13,6 +13,7 @@ import { RedirectAgentNodeForm } from '../../components/flow-nodes/RedirectAgent
 import { AINodeForm } from '../../components/flow-nodes/AINodeForm';
 import { SetVariableNodeForm } from '../../components/flow-nodes/SetVariableNodeForm';
 import { NoteNodeForm } from '../../components/flow-nodes/NoteNodeForm';
+import { DataLogNodeForm } from '../../components/flow-nodes/DataLogNodeForm';
 import { EndNodeForm } from '../../components/flow-nodes/EndNodeForm';
 //
 
@@ -288,6 +289,23 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
           value={data.value}
           availableVariables={data.availableVariables}
           onChange={({ value }) => handleUpdate({ value })}
+        />
+      );
+      break;
+    }
+    case 'DATA_LOG': {
+      const data = node.data;
+      nodeForm = (
+        <DataLogNodeForm
+          dataType={(data as any).dataType ?? 'otro'}
+          description={(data as any).description ?? ''}
+          availableVariables={data.availableVariables}
+          onChange={({ dataType, description }) =>
+            handleUpdate({
+              dataType: dataType as any,
+              description,
+            })
+          }
         />
       );
       break;

@@ -6,10 +6,12 @@
 import { useCallback, useRef } from 'react';
 import { useChatStore } from '../../store/chatStore';
 import { api } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 const SEND_TIMEOUT = 5000; // 5 seconds (reduced from 20s since backend now responds immediately)
 
 export function useMessageSender() {
+  const { user } = useAuth();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const sendMessage = useCallback(
@@ -49,9 +51,18 @@ export function useMessageSender() {
           conversationId,
           content,
           sender: 'user',
+          senderId: user?.id ?? null,
+          senderName: user?.name ?? null,
+          senderUsername: user?.username ?? null,
           timestamp: Date.now(),
           status: 'sent',
-          metadata: message.metadata,
+          metadata: {
+            senderType: 'OPERATOR',
+            senderId: user?.id ?? null,
+            senderName: user?.name ?? null,
+            senderUsername: user?.username ?? null,
+            ...message.metadata,
+          },
         });
 
         return { success: true, messageId: message.id };
@@ -77,7 +88,7 @@ export function useMessageSender() {
         }
       }
     },
-    []
+    [user?.id, user?.name, user?.username]
   );
 
   return { sendMessage };

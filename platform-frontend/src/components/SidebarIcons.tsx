@@ -9,14 +9,17 @@ import {
   FaAddressBook,
   FaSitemap,
   FaRobot,
+  FaShoppingCart,
 } from 'react-icons/fa';
 
 export const sidebarIcons: Record<string, JSX.Element> = {
   Estado: <FaHome />,
   Chat: <FaComments />,
+  Chat2: <FaComments />,
   Flujos: <FaProjectDiagram />,
   'Flow Builder': <FaSitemap />,
   Bots: <FaRobot />,
+  Pedidos: <FaShoppingCart />,
   Usuarios: <FaUsers />,
   Areas: <FaSitemap />,
   Contactos: <FaAddressBook />,

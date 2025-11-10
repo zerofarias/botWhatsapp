@@ -1,24 +1,16 @@
 import React, { useState } from 'react';
+import { FiUserPlus } from 'react-icons/fi';
 import type { ConversationSummary } from '../../types/chat';
 import AddContactModal from './AddContactModal';
 
-// Helper functions from ChatPage (to be moved to utils)
-function getDisplayName(conversation: ConversationSummary) {
+const getDisplayName = (conversation: ConversationSummary) => {
   const name = conversation.contact?.name ?? conversation.contactName ?? '';
-  if (name.trim().length) {
+  if (name.trim().length > 0) {
     return name.trim();
   }
   return conversation.userPhone;
-}
+};
 
-/**
- * Props para ChatHeader
- * @param conversation Conversación activa
- * @param onCloseConversation Handler para finalizar
- * @param isClosing Si está cerrando
- * @param isBotActive Si el bot está gestionando
- * @param onTakeBot Handler para tomar la conversación
- */
 type ChatHeaderProps = {
   conversation: ConversationSummary;
   onCloseConversation: () => void;
@@ -36,6 +28,8 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
 }) => {
   const [showAddContactModal, setShowAddContactModal] = useState(false);
   const displayName = getDisplayName(conversation);
+  const shouldShowAddContactButton =
+    !conversation.contact || !conversation.contact.id;
 
   return (
     <header className="chat-header">
@@ -56,45 +50,49 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
             displayName.charAt(0).toUpperCase()
           )}
         </div>
+
         <div className="chat-header-details">
           <div className="name">
             {displayName}
-            {conversation.contact?.dni && (
+            {conversation.contact?.dni ? (
               <span className="chat-header-dni">
                 {' '}
-                • DNI: {conversation.contact.dni}
+                DNI: {conversation.contact.dni}
               </span>
-            )}
+            ) : null}
           </div>
           <div className="status">
             {conversation.status}
-            {isBotActive && (
+            {isBotActive ? (
               <span
                 style={{ marginLeft: 8, color: '#eab308', fontWeight: 600 }}
               >
                 (Bot activo)
               </span>
-            )}
-            {!isBotActive && conversation.assignedTo && (
+            ) : conversation.assignedTo ? (
               <span
                 style={{ marginLeft: 8, color: '#22c55e', fontWeight: 600 }}
               >
                 (Operador)
               </span>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
+
       <div className="chat-header-actions">
-        {!conversation.contact || !conversation.contact.id ? (
+        {shouldShowAddContactButton && (
           <button
             onClick={() => setShowAddContactModal(true)}
-            className="btn-add-contact"
-            title="Agregar este número como contacto"
+            className="chat-header-icon-btn"
+            title="Agregar este numero como contacto"
+            aria-label="Agregar este numero como contacto"
+            type="button"
           >
-            + Contacto
+            <FiUserPlus size={18} />
           </button>
-        ) : null}
+        )}
+
         {isBotActive && onTakeBot && (
           <button
             onClick={onTakeBot}
@@ -112,6 +110,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
             Tomar
           </button>
         )}
+
         <button
           onClick={async () => {
             try {
@@ -121,11 +120,9 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ reason: 'manual_close' }),
               });
-              // NO hacer reload - dejar que Socket.IO actualice el estado
-              // El evento 'conversation:finish' llegará automáticamente
               onCloseConversation();
             } catch {
-              alert('No se pudo finalizar la conversación.');
+              alert('No se pudo finalizar la conversacion.');
             }
           }}
           disabled={isClosing || conversation.status === 'CLOSED'}
@@ -138,29 +135,26 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
         isOpen={showAddContactModal}
         onClose={() => setShowAddContactModal(false)}
         phoneNumber={conversation.userPhone}
-        onSubmit={async (name, dni) => {
-          try {
-            const response = await fetch('/api/contacts', {
-              method: 'POST',
-              credentials: 'include',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                name,
-                phone: conversation.userPhone,
-                dni: dni || null,
-              }),
-            });
+        onSubmit={async ({ name, dni, address1, address2 }) => {
+          const response = await fetch('/api/contacts', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name,
+              phone: conversation.userPhone,
+              dni: dni || null,
+              address1: address1 || null,
+              address2: address2 || null,
+            }),
+          });
 
-            if (!response.ok) {
-              const errorData = await response.json();
-              throw new Error(errorData.error || 'Error al agregar contacto');
-            }
-
-            // Recargar para reflejar el nuevo contacto
-            window.location.reload();
-          } catch (error) {
-            throw error;
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Error al agregar contacto');
           }
+
+          window.location.reload();
         }}
       />
     </header>

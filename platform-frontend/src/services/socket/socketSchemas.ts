@@ -5,6 +5,63 @@
 
 import { z } from 'zod';
 
+const normalizeSender = (value: unknown): 'user' | 'bot' | 'contact' => {
+  if (!value || typeof value !== 'string') {
+    return 'contact';
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (['user', 'operator', 'agent', 'admin'].includes(normalized)) {
+    return 'user';
+  }
+
+  if (['bot', 'system', 'assistant'].includes(normalized)) {
+    return 'bot';
+  }
+
+  return 'contact';
+};
+
+const parseTimestamp = (value: unknown): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    // Numeric string: "1707423773000"
+    if (/^-?\d+$/.test(trimmed)) {
+      return Number(trimmed);
+    }
+
+    // Try ISO first, fallback to replacing space with T
+    const parsed =
+      Date.parse(trimmed) ||
+      Date.parse(trimmed.replace(' ', 'T').replace(' ', 'T'));
+
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+
+  return Date.now();
+};
+
+const parseMediaUrl = (value: unknown): string | undefined => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  return undefined;
+};
+
 // Message schema - Flexible to handle backend format variations
 export const MessageSchema = z.object({
   id: z
@@ -26,25 +83,21 @@ export const MessageSchema = z.object({
   content: z.string().min(1),
   // Accept both v1 format (senderType) and v2 format (sender)
   sender: z
-    .enum(['user', 'bot', 'contact', 'OPERATOR', 'CONTACT', 'BOT'])
-    .transform((val) => val.toLowerCase() as 'user' | 'bot' | 'contact')
-    .or(
-      z
-        .string()
-        .transform((val) => val.toLowerCase() as 'user' | 'bot' | 'contact')
-    ),
+    .union([z.string(), z.null(), z.undefined()])
+    .transform(normalizeSender),
   timestamp: z
-    .union([z.number(), z.string().datetime()])
-    .transform((val) => {
-      if (typeof val === 'string') return new Date(val).getTime();
-      return val;
-    })
-    .pipe(z.number()),
+    .union([z.number(), z.string(), z.date(), z.null(), z.undefined()])
+    .transform(parseTimestamp),
   // Optional fields from both formats
   senderType: z.string().optional(),
   senderId: z.union([z.number(), z.string(), z.null()]).optional(),
+  senderName: z.union([z.string(), z.null()]).optional(),
+  senderUsername: z.union([z.string(), z.null()]).optional(),
   status: z.enum(['sent', 'delivered', 'read', 'error']).optional(),
-  mediaUrl: z.string().url().optional(),
+  mediaUrl: z
+    .union([z.string(), z.null(), z.undefined()])
+    .transform(parseMediaUrl)
+    .optional(),
   mediaType: z.string().nullable().optional(),
   externalId: z.string().nullable().optional(),
   createdAt: z.string().datetime().optional(),
@@ -62,6 +115,7 @@ export const ConversationSchema = z.object({
   lastMessage: z.string().optional(),
   lastMessageTime: z.number().optional(),
   unreadCount: z.number().default(0),
+  progressStatus: z.string().optional(),
   contact: z
     .object({
       id: z.number(),

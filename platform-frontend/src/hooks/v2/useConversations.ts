@@ -10,6 +10,7 @@ import {
   selectLoading,
 } from '../../store/chatStore';
 import { api } from '../../services/api';
+import type { ConversationProgressStatus } from '../../types/chat';
 
 export function useConversations() {
   const conversations = useChatStore(selectConversations);
@@ -38,11 +39,17 @@ export function useConversations() {
                 ? parseInt(conv.contactId, 10)
                 : conv.contactId;
 
+            const progressStatus =
+              typeof conv.progressStatus === 'string'
+                ? (conv.progressStatus.toUpperCase() as ConversationProgressStatus)
+                : undefined;
+
             return {
               ...conv,
               id,
               botId,
               contactId,
+              progressStatus: progressStatus ?? 'PENDING',
               // Ensure lastMessage is a string, not an object
               lastMessage:
                 typeof conv.lastMessage === 'string'
@@ -63,10 +70,18 @@ export function useConversations() {
     }
   }, []);
 
-  // Load conversations on mount only
+  // Load conversations on mount and keep polling to refresh list
   useEffect(() => {
     loadConversations();
-  }, []);
+  }, [loadConversations]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadConversations();
+    }, 15000); // refresh every 15s to capture new incoming chats
+
+    return () => clearInterval(interval);
+  }, [loadConversations]);
 
   return {
     conversations,

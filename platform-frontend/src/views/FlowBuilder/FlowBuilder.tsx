@@ -363,6 +363,14 @@ function normalizeNodeFromServer(node: SerializedNode): FlowBuilderNode {
         label: legacy.label ?? 'Fin',
       };
       break;
+    case 'DATA_LOG':
+      data = {
+        type: 'DATA_LOG',
+        label: legacy.label ?? 'Guardar Datos',
+        dataType: (legacy as any).dataType ?? 'otro',
+        description: (legacy as any).description ?? undefined,
+      };
+      break;
     default: {
       const fallback: any = legacy;
       data = {
@@ -552,6 +560,15 @@ function toSerializedNode(node: FlowBuilderNode): SerializedNode {
           flowId: node.data.flowId ?? null,
           parentId: node.data.parentId ?? null,
         };
+      case 'DATA_LOG':
+        return {
+          type: 'DATA_LOG',
+          label: node.data.label,
+          dataType: (node.data as any).dataType ?? 'otro',
+          description: (node.data as any).description ?? undefined,
+          flowId: node.data.flowId ?? null,
+          parentId: node.data.parentId ?? null,
+        };
       case 'END':
         return {
           type: 'END',
@@ -691,6 +708,14 @@ function createNode(type: FlowNodeType, position: XYPosition): FlowBuilderNode {
         type: 'NOTE',
         label: 'Nota',
         value: '',
+      };
+      break;
+    case 'DATA_LOG':
+      data = {
+        type: 'DATA_LOG',
+        label: 'Guardar Datos',
+        dataType: 'otro',
+        description: '',
       };
       break;
     default:
@@ -1052,16 +1077,6 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
               label: edge.label ?? undefined,
               type: DEFAULT_NODE_TYPE,
             } as FlowBuilderEdge;
-
-            // DEBUG: Log TODOS los edges (con o sin sourceHandle)
-            console.log('[loadNodesAndEdges] Edge loaded:', {
-              id: normalized.id,
-              source: normalized.source,
-              target: normalized.target,
-              sourceHandle: normalized.sourceHandle,
-              label: normalized.label,
-              hasSourceHandle: !!normalized.sourceHandle,
-            });
 
             return normalized;
           })

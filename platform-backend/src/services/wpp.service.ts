@@ -1,4 +1,4 @@
-// Exportar función para obtener snapshot de conversación
+﻿// Exportar función para obtener snapshot de conversación
 export async function fetchConversationSnapshot(
   conversationId: bigint | number
 ): Promise<ConversationSnapshot | null> {
@@ -12,6 +12,7 @@ export async function fetchConversationSnapshot(
       areaId: true,
       assignedToId: true,
       status: true,
+      progressStatus: true,
       botActive: true,
       lastActivity: true,
       updatedAt: true,
@@ -21,6 +22,8 @@ export async function fetchConversationSnapshot(
           name: true,
           phone: true,
           dni: true,
+          address1: true,
+          address2: true,
         },
       },
     },
@@ -37,14 +40,51 @@ export async function fetchConversationSnapshot(
           name: record.contact.name,
           phone: record.contact.phone,
           dni: record.contact.dni,
+          address1: record.contact.address1 ?? null,
+          address2: record.contact.address2 ?? null,
         }
       : null,
     areaId: record.areaId,
     assignedToId: record.assignedToId,
     status: record.status,
+    progressStatus: record.progressStatus,
     botActive: record.botActive,
     lastActivity: record.lastActivity.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+// Nueva función para obtener la CONVERSACIÓN COMPLETA con TODOS los datos
+// (para usar en eventos de socket que necesitan datos completos)
+export async function fetchConversationSnapshot_Full(
+  conversationId: bigint | number
+): Promise<any> {
+  const { conversationSelect } = await import('./conversation.service.js');
+
+  const record = await prisma.conversation.findUnique({
+    where: { id: BigInt(conversationId) },
+    select: conversationSelect,
+  });
+
+  if (!record) return null;
+
+  // Transformar a formato que espera el frontend
+  return {
+    ...record,
+    id: record.id.toString(),
+    contact: record.contact
+      ? { ...record.contact, id: record.contact.id.toString() }
+      : null,
+    area: record.area,
+    assignedTo: record.assignedTo,
+    lastMessage:
+      record.messages && record.messages.length > 0
+        ? {
+            ...record.messages[0],
+            id: record.messages[0].id.toString(),
+            conversationId: record.messages[0].conversationId.toString(),
+          }
+        : null,
   };
 }
 
@@ -99,7 +139,12 @@ import {
 } from './message.service.js';
 import { findOrCreateContactByPhone } from './contact.service.js';
 import { listFlowTree, type FlowNode } from './flow.service.js';
-import { executeNodeChain } from './node-execution.service.js';
+import {
+  executeNodeChain,
+  enrichContextWithGlobalVariables,
+  interpolateVariables,
+} from './node-execution.service.js';
+import { beginTrackedTask } from '../utils/shutdown-manager.js';
 
 import {
   checkIfWithinWorkingHours,
@@ -174,10 +219,13 @@ type ConversationSnapshot = {
     name: string;
     phone: string;
     dni: string | null;
+    address1: string | null;
+    address2: string | null;
   } | null;
   areaId: number | null;
   assignedToId: number | null;
   status: string;
+  progressStatus: string;
   botActive: boolean;
   lastActivity: string;
   updatedAt: string;
@@ -188,6 +236,8 @@ type MessageEventPayload = {
   conversationId: string;
   senderType: MessageSender;
   senderId: number | null;
+  senderName: string | null;
+  senderUsername: string | null;
   content: string;
   mediaType: string | null;
   mediaUrl: string | null;
@@ -767,6 +817,8 @@ function formatMessageRecord(
     conversationId: BigInt(conversationId).toString(),
     senderType: message.senderType,
     senderId: message.senderId ?? null,
+    senderName: message.sender?.name ?? null,
+    senderUsername: message.sender?.username ?? null,
     content: message.content,
     mediaType: message.mediaType ?? null,
     mediaUrl: message.mediaUrl ?? null,
@@ -823,8 +875,12 @@ export async function broadcastMessageRecord(
   // Emitir a todos los rooms específicos
   rooms.forEach((room) => emitToRoom(io, room, 'message:new', payload));
 
-  // NO emitir broadcast duplicado - solo a rooms específicos
-  // io.emit('message:new', payload);
+  // TAMBIÉN emitir globalmente para que llegue a clientes que no están en el room
+  // (ej: usuarios que cerraron el chat pero siguen conectados)
+  io.emit('message:new', payload);
+  console.log(
+    `[SOCKET] Global broadcast of message:new for conversation ${conversationId}`
+  );
 }
 
 function extractPhoneNumber(whatsappId: string): string {
@@ -880,11 +936,23 @@ async function ensureConversation(
 
   const { contact, created: contactCreated } = await findOrCreateContactByPhone(
     cleanNumber,
-    { name: contactName }
+    { name: contactName, photoUrl: contactPhotoUrl }
   );
 
+  // TODO: Función downloadAndSaveProfilePicture fue eliminada
   // Si obtuvimos una foto de WhatsApp, descargarla y guardarla localmente
-  // Funci�n downloadAndSaveProfilePicture eliminada
+  // if (contactPhotoUrl) {
+  //   const localPhotoUrl = await downloadAndSaveProfilePicture(
+  //     contactPhotoUrl,
+  //     contactName || cleanNumber
+  //   );
+  //   if (localPhotoUrl) {
+  //     await (prisma.contact.update as any)({
+  //       where: { id: contact.id },
+  //       data: { photoUrl: localPhotoUrl },
+  //     });
+  //   }
+  // }
 
   const existing = await findOpenConversationByPhone(cleanNumber);
   if (existing) {
@@ -932,14 +1000,147 @@ async function ensureConversation(
     botId,
   });
 
-  await broadcastConversationUpdate(io, created.id);
+  console.log(
+    `[CONVERSATION] New conversation created with ID: ${created.id}, fetching snapshot...`
+  );
+
+  const snapshot = await fetchConversationSnapshot_Full(created.id);
+  if (!snapshot) {
+    console.error(
+      `[CONVERSATION] ❌ Failed to fetch snapshot for conversation ${created.id}`
+    );
+    return {
+      conversation: created,
+      created: true,
+      contact,
+      contactCreated: true,
+    };
+  }
+
+  console.log(
+    `[CONVERSATION] ✅ Snapshot fetched successfully for conversation ${created.id}`
+  );
+
+  // Emitir evento global de actualización
+  if (io) {
+    io.emit('conversation:update', snapshot);
+    io.emit('conversation:new', {
+      conversation: snapshot,
+      source: 'incoming_message',
+    });
+    console.log(
+      `[CONVERSATION] 📢 Emitted conversation:update for ${created.id}`
+    );
+  }
+
+  // Emitir evento de conversación entrante
   await broadcastConversationEvent(io, created.id, 'conversation:incoming');
+
+  // Emitir evento global para que se vea la nueva conversación en todas partes
+  if (io) {
+    io.emit('conversation:new', {
+      conversation: snapshot,
+      source: 'incoming_message',
+    });
+    console.log(
+      `[CONVERSATION] ✅ Emitted conversation:new for ${created.id} to ALL clients`
+    );
+  }
+
   return {
     conversation: created,
     created: true,
     contact,
     contactCreated: true,
   };
+}
+
+export async function resolveTemplateVariables(
+  conversationId: bigint,
+  rawText: string
+): Promise<string> {
+  if (!rawText) {
+    return rawText;
+  }
+
+  const needsCurlyInterpolation = rawText.includes('{');
+  const needsFlowInterpolation = /\$\$(\w+)/.test(rawText);
+
+  if (!needsCurlyInterpolation && !needsFlowInterpolation) {
+    return rawText;
+  }
+
+  const convWithContext = await prisma.conversation.findUnique({
+    where: { id: BigInt(conversationId) },
+    select: {
+      context: true,
+      userPhone: true,
+      contactName: true,
+      contact: {
+        select: {
+          name: true,
+          phone: true,
+          dni: true,
+        },
+      },
+      areaId: true,
+      status: true,
+    },
+  });
+
+  if (!convWithContext) {
+    return rawText;
+  }
+
+  let parsedContext: Record<string, unknown> = {};
+  const rawContext = convWithContext.context;
+
+  if (typeof rawContext === 'string' && rawContext.length) {
+    try {
+      parsedContext = JSON.parse(rawContext);
+    } catch (parseError) {
+      console.warn(
+        '[resolveTemplateVariables] Failed to parse conversation context JSON:',
+        parseError
+      );
+    }
+  } else if (
+    rawContext &&
+    typeof rawContext === 'object' &&
+    !Array.isArray(rawContext)
+  ) {
+    parsedContext = rawContext as Record<string, unknown>;
+  }
+
+  const hydratedContext = enrichContextWithGlobalVariables(
+    parsedContext as any,
+    {
+      userPhone:
+        convWithContext.userPhone ??
+        convWithContext.contact?.phone ??
+        undefined,
+      contactName:
+        convWithContext.contact?.name ??
+        convWithContext.contactName ??
+        undefined,
+      dni: convWithContext.contact?.dni ?? undefined,
+      areaId: convWithContext.areaId ?? undefined,
+      conversationStatus: convWithContext.status ?? undefined,
+    }
+  );
+
+  let finalText = rawText;
+  if (needsCurlyInterpolation) {
+    finalText = finalText.replace(/\{(\w+)\}/g, (match, variableName) =>
+      String((hydratedContext as any)[variableName] ?? match)
+    );
+  }
+
+  if (needsFlowInterpolation) {
+    finalText = interpolateVariables(finalText, hydratedContext as any);
+  }
+
+  return finalText;
 }
 
 async function sendReply(
@@ -957,25 +1158,10 @@ async function sendReply(
       ? replyOrEvaluation
       : replyOrEvaluation.reply;
 
-  if (finalReplyText.includes('{')) {
-    const convWithContext = await prisma.conversation.findUnique({
-      where: { id: BigInt(conversationId) },
-      select: { context: true },
-    });
-    const context =
-      convWithContext?.context &&
-      typeof convWithContext.context === 'object' &&
-      !Array.isArray(convWithContext.context)
-        ? convWithContext.context
-        : {};
-
-    finalReplyText = finalReplyText.replace(
-      /\{(\w+)\}/g,
-      (match, variableName) => {
-        return String((context as any)[variableName] ?? match);
-      }
-    );
-  }
+  finalReplyText = await resolveTemplateVariables(
+    conversationId,
+    finalReplyText
+  );
 
   let outbound: Message | null = null;
 
@@ -1290,9 +1476,12 @@ async function handleIncomingMessage(
     lastActivity: record.createdAt,
   };
 
+  // Detectar si hay cambio de status significativo
+  let statusChanged = false;
   if (conversation.status === 'PENDING') {
     touchData.status = 'ACTIVE';
     conversation = { ...conversation, status: 'ACTIVE' };
+    statusChanged = true;
   }
 
   await touchConversation(conversationId, touchData);
@@ -1305,7 +1494,19 @@ async function handleIncomingMessage(
   };
 
   await broadcastMessageRecord(io, conversationId, record, [ownerUserId]);
-  await broadcastConversationUpdate(io, conversationId);
+
+  // Solo emitir conversation:update si hay cambios significativos en metadata
+  // Evita race conditions donde el frontend recarga todo el historial innecesariamente
+  if (statusChanged || ensureResult.created) {
+    console.log(
+      '[WPP] Status changed or new conversation, broadcasting update'
+    );
+    await broadcastConversationUpdate(io, conversationId);
+  } else {
+    console.log(
+      '[WPP] Only message received, no conversation:update event emitted'
+    );
+  }
 
   if (!conversation.botActive) {
     return;
@@ -1382,72 +1583,278 @@ async function handleIncomingMessage(
     select: { currentFlowNodeId: true, context: true },
   });
   const currentId = convState?.currentFlowNodeId;
+  console.log('[FLOW] State before routing:', {
+    conversationId,
+    currentFlowNodeId: convState?.currentFlowNodeId,
+    hasContext: Boolean(convState?.context),
+  });
 
   const previousNodeId = currentId;
-  if (previousNodeId) {
-    const previousNode = flattenFlowTree(flows).find(
-      (n) => n.id === previousNodeId
+
+  // Si no hay previousNodeId (conversación sin nodo actual), iniciar desde START
+  if (!previousNodeId) {
+    console.log(
+      '[FLOW] No previous node ID, attempting to start from START node'
     );
-    const builderMeta =
-      previousNode?.metadata && typeof previousNode.metadata === 'object'
-        ? (previousNode.metadata as any).builder
-        : null;
-    const variableName =
-      builderMeta?.responseVariableName ?? builderMeta?.saveResponseToVariable;
+    const allNodes = flattenFlowTree(flows);
+    const startNode = allNodes.find(
+      (node) => node.type === 'START' && node.isActive
+    );
 
-    if (variableName && typeof variableName === 'string') {
-      const currentContext =
-        convState?.context && typeof convState.context === 'string'
-          ? JSON.parse(convState.context)
-          : typeof convState.context === 'object' &&
-            !Array.isArray(convState.context)
-          ? convState.context
-          : {};
-
-      const newContext = {
-        ...currentContext,
-        [variableName]: body,
-      };
-
-      await touchConversation(conversationId, {
-        context: JSON.stringify(newContext),
+    if (startNode) {
+      console.log('[FLOW] Found START node for continuation:', startNode.id);
+      const connection = await prisma.flowConnection.findFirst({
+        where: { fromId: startNode.id },
       });
 
-      // Después de capturar la respuesta, buscar y ejecutar el siguiente nodo automáticamente
+      if (connection && connection.toId) {
+        console.log(
+          '[FLOW] Found connection from START to node:',
+          connection.toId
+        );
+        const firstNode = allNodes.find((n) => n.id === connection.toId);
+
+        if (firstNode && firstNode.isActive) {
+          console.log(
+            '[FLOW] Executing first node after START:',
+            firstNode.id,
+            firstNode.name
+          );
+
+          // Enriquecer contexto con variables globales
+          const initialContext: import('../services/flow.service').ConversationContext =
+            {
+              lastMessage: typeof body === 'string' ? body : String(body ?? ''),
+              previousNode: startNode.id,
+              updatedAt: new Date().toISOString(),
+            };
+
+          const enrichedContext = enrichContextWithGlobalVariables(
+            initialContext,
+            {
+              userPhone: conversation.userPhone ?? undefined,
+              contactName:
+                contact?.name ?? conversation.contactName ?? undefined,
+              dni: contact?.dni ?? undefined,
+              // Otros datos de contacto si están disponibles
+            }
+          );
+
+          // Ejecutar el nodo con contexto enriquecido
+          if (!conversation.botId) {
+            console.log(`[FLOW] Invalid botId`);
+            return;
+          }
+
+          try {
+            const chainResult = await executeNodeChain({
+              botId: conversation.botId,
+              nodeId: firstNode.id,
+              context: enrichedContext,
+            });
+            console.log('[FLOW] executeNodeChain result (start):', {
+              conversationId,
+              startNodeId: firstNode.id,
+              nextNodeId: chainResult.nextNodeId,
+              actions: chainResult.actions?.map((a) => a.type),
+            });
+
+            if (chainResult.actions && chainResult.actions.length > 0) {
+              console.log(
+                `[FLOW] Procesando ${chainResult.actions.length} acciones:`,
+                JSON.stringify(chainResult.actions)
+              );
+
+              // Actualizar el contexto en la conversación
+              await touchConversation(conversationId, {
+                context: JSON.stringify(chainResult.updatedContext),
+                currentFlowNodeId: chainResult.nextNodeId,
+              });
+              console.log('[FLOW] Conversation updated after start:', {
+                conversationId,
+                currentFlowNodeId: chainResult.nextNodeId,
+              });
+
+              // Procesar mensajes
+              const sendMessageAction = chainResult.actions.find(
+                (a) => a.type === 'send_message'
+              );
+              if (
+                sendMessageAction &&
+                sendMessageAction.payload &&
+                typeof sendMessageAction.payload === 'object'
+              ) {
+                const payload = sendMessageAction.payload as Record<
+                  string,
+                  unknown
+                >;
+                const messageText = (payload.message as string) ?? '';
+                await sendReply(
+                  ownerUserId,
+                  client,
+                  conversationId,
+                  message,
+                  messageText,
+                  io
+                );
+              }
+            }
+            return;
+          } catch (error) {
+            console.error(
+              '[FLOW] Error executing node chain from START:',
+              error
+            );
+            // Fallback to primary menu if START node execution fails
+            if (primaryMenu) {
+              await sendReply(
+                ownerUserId,
+                client,
+                conversationId,
+                message,
+                primaryMenu,
+                io
+              );
+            }
+            return;
+          }
+        }
+      }
+    }
+
+    // Fallback to primary menu if START node logic fails (should not reach here)
+    if (primaryMenu) {
+      await sendReply(
+        ownerUserId,
+        client,
+        conversationId,
+        message,
+        primaryMenu,
+        io
+      );
+    }
+
+    if (externalId) {
+      markMessageAsCompleted(externalId);
+    }
+    return;
+  }
+
+  // Si hay previousNodeId, intentar continuar la cadena automáticamente
+  if (previousNodeId) {
+    console.log(
+      `[FLOW] Continuing from node ${previousNodeId}, executing next node automatically`
+    );
+
+    try {
       const nextConnection = await prisma.flowConnection.findFirst({
         where: { fromId: previousNodeId },
       });
 
       if (nextConnection && nextConnection.toId) {
         console.log(
-          `[FLOW] Auto-executing next node after response capture: ${nextConnection.toId}`
+          `[FLOW] Found connection: ${previousNodeId} -> ${nextConnection.toId}`
         );
 
-        // Usar executeNodeChain para ejecutar nodos en cadena con soporte para delays
         if (!conversation.botId) {
           console.log(`[FLOW] Invalid botId`);
           return;
         }
 
+        // Obtener contexto actual
+        const currentContextRaw =
+          convState?.context && typeof convState.context === 'string'
+            ? JSON.parse(convState.context)
+            : typeof convState.context === 'object' &&
+              !Array.isArray(convState.context)
+            ? convState.context
+            : {};
+
+        const workingContext: Record<string, unknown> =
+          currentContextRaw && typeof currentContextRaw === 'object'
+            ? { ...currentContextRaw }
+            : {};
+
+        let capturedVariableName: string | null = null;
+        const waitingForInput = Boolean(
+          (workingContext as any).waitingForInput
+        );
+        const waitingVariable =
+          waitingForInput &&
+          typeof (workingContext as any).waitingVariable === 'string'
+            ? ((workingContext as any).waitingVariable as string)
+            : null;
+
+        if (waitingVariable) {
+          const valueToCapture = finalContent;
+
+          (workingContext as any)[waitingVariable] = valueToCapture;
+
+          if (
+            workingContext.variables &&
+            typeof workingContext.variables === 'object' &&
+            !Array.isArray(workingContext.variables)
+          ) {
+            (workingContext.variables as Record<string, unknown>)[
+              waitingVariable
+            ] = valueToCapture;
+          } else {
+            workingContext.variables = { [waitingVariable]: valueToCapture };
+          }
+
+          (workingContext as any).waitingForInput = false;
+          (workingContext as any).waitingVariable = null;
+          capturedVariableName = waitingVariable;
+          console.log('[FLOW] Captured variable from message:', {
+            conversationId,
+            waitingVariable,
+            value: valueToCapture,
+          });
+        }
+
+        // Enriquecer el contexto con variables globales del contacto
+        const enrichedContext = enrichContextWithGlobalVariables(
+          workingContext as any,
+          {
+            userPhone: conversation.userPhone,
+            contactName: conversation.contactName,
+            dni: contact?.dni ?? undefined,
+            conversationStatus: conversation.status,
+          }
+        );
+
         const chainResult = await executeNodeChain({
           botId: conversation.botId,
           nodeId: nextConnection.toId,
-          startNodeId: nextConnection.toId,
           context:
-            newContext as unknown as import('../services/flow.service').ConversationContext,
+            enrichedContext as unknown as import('../services/flow.service').ConversationContext,
+          capturedVariableName,
+        });
+        console.log('[FLOW] executeNodeChain result (continuation):', {
+          conversationId,
+          nextNodeId: chainResult.nextNodeId,
+          actions: chainResult.actions?.map((a) => a.type),
         });
 
-        // Si hay acciones (mensajes y notas), enviarlas
+        await touchConversation(conversationId, {
+          context: JSON.stringify(chainResult.updatedContext),
+          currentFlowNodeId: chainResult.nextNodeId,
+        });
+        console.log('[FLOW] Conversation updated after continuation:', {
+          conversationId,
+          currentFlowNodeId: chainResult.nextNodeId,
+        });
+
         if (chainResult.actions && chainResult.actions.length > 0) {
           console.log(
-            `[FLOW] Procesando ${chainResult.actions.length} acciones:`,
+            `[FLOW] Procesando ${chainResult.actions.length} acciones`,
             JSON.stringify(chainResult.actions)
           );
+
           // Procesar mensajes
           const sendMessageAction = chainResult.actions.find(
             (a) => a.type === 'send_message'
           );
-          let hasMessage = false;
           if (
             sendMessageAction &&
             sendMessageAction.payload &&
@@ -1466,10 +1873,9 @@ async function handleIncomingMessage(
               messageText,
               io
             );
-            hasMessage = true;
           }
 
-          // Procesar TODAS las notas internas (puede haber múltiples)
+          // Procesar notas
           const saveNoteActions = chainResult.actions.filter(
             (a) => a.type === 'save_note'
           );
@@ -1490,11 +1896,6 @@ async function handleIncomingMessage(
                 );
               }
             }
-          }
-
-          // Solo emitir conversation:update si hay cambios importantes (sin messages ni notas solas)
-          if (!hasMessage && saveNoteActions.length > 0) {
-            await broadcastConversationUpdate(io, conversationId);
           }
         }
 
@@ -1519,15 +1920,32 @@ async function handleIncomingMessage(
           console.log(
             `[FLOW] END node ejecutado, bot desactivado para conversación ${conversationId}`
           );
-          // Emitir evento de actualización para notificar al frontend
           await broadcastConversationUpdate(io, conversationId);
+
+          if (io) {
+            const snapshot = await fetchConversationSnapshot(conversationId);
+            if (snapshot) {
+              io.emit('conversation:end_flow', {
+                conversationId,
+                botActive: false,
+                snapshot,
+              });
+            }
+          }
         }
 
         return;
       }
+    } catch (error) {
+      console.error(
+        '[FLOW] Error executing node chain from previous node:',
+        error
+      );
+      // Continue with fallback logic
     }
   }
 
+  // Fallback: usar evaluateFlowSelection si no hay continuación automática
   let evaluation = evaluateFlowSelection(flows, normalizedBody, currentId);
 
   if (!evaluation) {
@@ -1670,9 +2088,11 @@ function attachMessageHandlers(
 ) {
   client.onMessage(async (message) => {
     const externalId = extractMessageExternalId(message);
+    const finishTrackedTask = beginTrackedTask('incoming-message');
     try {
       const cache = sessions.get(ownerUserId);
       if (!cache || cache.paused) {
+        finishTrackedTask();
         return;
       }
       await handleIncomingMessage(ownerUserId, message, client, io);
@@ -1688,6 +2108,8 @@ function attachMessageHandlers(
         message: error instanceof Error ? error.message : String(error),
       });
       await upsertBotSession(ownerUserId, { status: 'ERROR' });
+    } finally {
+      finishTrackedTask();
     }
   });
 }

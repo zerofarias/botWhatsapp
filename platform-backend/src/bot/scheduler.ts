@@ -11,6 +11,7 @@ import {
   sendTextFromSession,
   extractMessageExternalId,
   resolveMessageDate,
+  resolveTemplateVariables,
 } from '../services/wpp.service.js';
 
 const AUTO_CLOSE_REASON = 'auto_inactivity';
@@ -75,19 +76,24 @@ async function closeInactiveConversations(io: SocketIOServer) {
         sessionOwners.add(ownerId)
       );
 
+      const renderedMessage = await resolveTemplateVariables(
+        conversationId,
+        env.autoCloseMessage
+      );
+
       let messageRecorded = false;
       for (const ownerId of sessionOwners) {
         const outbound = await sendTextFromSession(
           ownerId,
           conversation.userPhone,
-          env.autoCloseMessage
+          renderedMessage
         );
         if (outbound) {
           const messageRecord = await createConversationMessage({
             conversationId,
             senderType: 'BOT',
             senderId: null,
-            content: env.autoCloseMessage,
+            content: renderedMessage,
             isDelivered: true,
             externalId: extractMessageExternalId(outbound),
             createdAt: resolveMessageDate(outbound),
@@ -105,7 +111,7 @@ async function closeInactiveConversations(io: SocketIOServer) {
           conversationId,
           senderType: 'BOT',
           senderId: null,
-          content: env.autoCloseMessage,
+          content: renderedMessage,
           isDelivered: false,
         });
         await broadcastMessageRecord(io, conversationId, messageRecord);

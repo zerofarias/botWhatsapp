@@ -77,7 +77,7 @@ import { getNextNodeAndContext } from '../services/flow.service';
  *         description: Error al crear conversación
  */
 
-import { ConversationStatus } from '@prisma/client';
+import { ConversationProgressStatus, ConversationStatus } from '@prisma/client';
 import type { Request, Response } from 'express';
 import { prisma } from '../config/prisma.js';
 import { getSocketServer } from '../lib/socket.js';
@@ -95,6 +95,7 @@ import {
 import {
   createConversationMessage,
   listConversationMessages,
+  type ConversationMessage,
 } from '../services/message.service.js';
 import {
   broadcastMessageRecord,
@@ -103,8 +104,19 @@ import {
   resolveMessageDate,
   broadcastConversationEvent,
   broadcastConversationUpdate,
+  resolveTemplateVariables,
 } from '../services/wpp.service.js';
 import { executeNode } from '../services/node-execution.service.js';
+
+const PROGRESS_STATUS_MESSAGES: Record<ConversationProgressStatus, string> = {
+  PENDING: 'Su pedido está pendiente. En breve le daremos novedades.',
+  IN_PREPARATION: 'Su pedido está en preparación.',
+  COMPLETED: 'Su pedido está completado.',
+  CANCELLED:
+    'Su pedido ha sido cancelado. Si necesita ayuda contáctenos nuevamente.',
+  INACTIVE:
+    'Cerramos esta conversación por inactividad. Escríbanos si necesita continuar.',
+};
 
 // Controladores de conversación
 export async function takeConversationHandler(req: Request, res: Response) {
@@ -579,6 +591,8 @@ export async function getConversationMessagesHandler(
       conversationId: message.conversationId.toString(),
       senderType: message.senderType,
       senderId: message.senderId,
+      senderName: message.sender?.name ?? null,
+      senderUsername: message.sender?.username ?? null,
       content: message.content,
       mediaType: message.mediaType,
       mediaUrl: message.mediaUrl,
@@ -621,10 +635,15 @@ export async function sendConversationMessageHandler(
     return res.status(403).json({ message: 'Forbidden' });
   }
 
+  const hydratedContent = await resolveTemplateVariables(
+    conversationId,
+    bodyContent
+  );
+
   const outbound = await sendTextFromSession(
     req.user.id,
     conversation.userPhone,
-    bodyContent
+    hydratedContent
   );
   if (!outbound) {
     await addConversationEvent(conversationId, 'NOTE', {
@@ -638,7 +657,7 @@ export async function sendConversationMessageHandler(
     conversationId,
     senderType: 'OPERATOR',
     senderId: req.user.id,
-    content: bodyContent,
+    content: hydratedContent,
     isDelivered: Boolean(outbound),
     externalId: outbound ? extractMessageExternalId(outbound) : null,
     createdAt: outbound ? resolveMessageDate(outbound) : new Date(),
@@ -653,61 +672,77 @@ export async function sendConversationMessageHandler(
 
   // 🔄 BACKGROUND PROCESSING - Fire and forget (no await)
   // This prevents blocking the HTTP response while still updating state
-  process.nextTick(async () => {
+  // Use setImmediate instead of process.nextTick to ensure request context is fully released
+  setImmediate(async () => {
     try {
-      // Lógica para determinar el siguiente nodo y contexto
-      const { nextNodeId, newContext } = await getNextNodeAndContext({
-        currentNodeId: conversation.currentFlowNodeId,
-        message: bodyContent,
-        context: conversation.context,
-        botId: conversation.botId,
-        conversationId,
-      });
-
-      // Si la función no retorna un nodo válido, se mantiene el actual y el contexto
-      const finalNodeId = nextNodeId ?? conversation.currentFlowNodeId;
-      const finalContext = newContext ?? conversation.context;
-
-      // Asegurar que context sea un string JSON válido
-      let contextValue: string | null = null;
-      if (finalContext) {
-        contextValue =
-          typeof finalContext === 'string'
-            ? finalContext
-            : JSON.stringify(finalContext);
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const updateData: any = {
-        lastActivity: messageRecord.createdAt,
-        status: 'ACTIVE',
-        botActive: false,
-        currentFlowNodeId: finalNodeId,
-        context: contextValue,
-      };
-
-      // Si no tiene asignado, asignarlo al usuario actual
-      if (!conversation.assignedToId) {
-        updateData.assignedTo = {
-          connect: { id: req.user!.id },
-        };
-      }
-
-      await touchConversation(conversationId, updateData);
-
+      // Skip flow processing for now - only handle socket broadcasts
+      // This is safer and avoids Prisma connection issues
       const io = getSocketServer();
-      await broadcastMessageRecord(io, conversationId, messageRecord, [
-        req.user!.id,
-      ]);
-      await broadcastConversationUpdate(io, conversationId);
+      if (io) {
+        await broadcastMessageRecord(io, conversationId, messageRecord, [
+          req.user!.id,
+        ]);
+        await broadcastConversationUpdate(io, conversationId);
+        console.log(
+          `[sendConversationMessageHandler] ✅ Background socket broadcast completed for message ${messageRecord.id}`
+        );
+      }
 
-      console.log(
-        `[sendConversationMessageHandler] ✅ Background processing completed for message ${messageRecord.id}`
-      );
+      // Try to update conversation context, but don't fail if it errors
+      try {
+        // Lógica para determinar el siguiente nodo y contexto
+        const { nextNodeId, newContext } = await getNextNodeAndContext({
+          currentNodeId: conversation.currentFlowNodeId,
+          message: bodyContent,
+          context: conversation.context,
+          botId: conversation.botId,
+          conversationId,
+        });
+
+        // Si la función no retorna un nodo válido, se mantiene el actual y el contexto
+        const finalNodeId = nextNodeId ?? conversation.currentFlowNodeId;
+        const finalContext = newContext ?? conversation.context;
+
+        // Asegurar que context sea un string JSON válido
+        let contextValue: string | null = null;
+        if (finalContext) {
+          contextValue =
+            typeof finalContext === 'string'
+              ? finalContext
+              : JSON.stringify(finalContext);
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const updateData: any = {
+          lastActivity: messageRecord.createdAt,
+          status: 'ACTIVE',
+          botActive: false,
+          currentFlowNodeId: finalNodeId,
+          context: contextValue,
+        };
+
+        // Si no tiene asignado, asignarlo al usuario actual
+        if (!conversation.assignedToId) {
+          updateData.assignedTo = {
+            connect: { id: req.user!.id },
+          };
+        }
+
+        await touchConversation(conversationId, updateData);
+        console.log(
+          `[sendConversationMessageHandler] ✅ Background context update completed for message ${messageRecord.id}`
+        );
+      } catch (contextError) {
+        console.warn(
+          `[sendConversationMessageHandler] ⚠️ Background context update failed (non-critical):`,
+          contextError instanceof Error ? contextError.message : contextError
+        );
+        // Don't fail - context update is optional
+      }
     } catch (error) {
       console.error(
-        `[sendConversationMessageHandler] ❌ Background processing failed for message ${messageRecord.id}:`,
-        error
+        `[sendConversationMessageHandler] ❌ Background processing error for message ${messageRecord.id}:`,
+        error instanceof Error ? error.message : error
       );
       // Client already has message confirmation, so we don't fail the request
       // Just log the error for debugging
@@ -715,6 +750,111 @@ export async function sendConversationMessageHandler(
   });
 }
 
+export async function updateConversationProgressStatusHandler(
+  req: Request,
+  res: Response
+) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const conversationIdParam = req.params.id;
+  let conversationId: bigint;
+  try {
+    conversationId = BigInt(conversationIdParam);
+  } catch {
+    return res.status(400).json({ message: 'Invalid conversation id.' });
+  }
+
+  const rawStatus = req.body?.status;
+  if (!rawStatus || typeof rawStatus !== 'string') {
+    return res.status(400).json({ message: 'Status is required.' });
+  }
+
+  const normalizedStatus =
+    rawStatus.toUpperCase() as ConversationProgressStatus;
+  const allowedStatuses = Object.values(ConversationProgressStatus);
+  if (!allowedStatuses.includes(normalizedStatus)) {
+    return res.status(400).json({ message: 'Invalid status value.' });
+  }
+
+  const conversation = await ensureConversationAccess(req.user, conversationId);
+  if (!conversation) {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
+
+  const [updatedConversation] = await Promise.all([
+    prisma.conversation.update({
+      where: { id: conversationId },
+      data: { progressStatus: normalizedStatus },
+      select: conversationSelect,
+    }),
+    addConversationEvent(
+      conversationId,
+      'STATUS_CHANGE',
+      {
+        status: normalizedStatus,
+        updatedBy: req.user.id,
+        type: 'progress_status',
+      },
+      req.user.id
+    ),
+  ]);
+
+  let messageRecord: ConversationMessage | null = null;
+  const shouldSendMessage = req.body?.sendMessage !== false;
+  const customMessage =
+    typeof req.body?.message === 'string' && req.body.message.trim().length
+      ? req.body.message.trim()
+      : PROGRESS_STATUS_MESSAGES[normalizedStatus];
+
+  if (shouldSendMessage && customMessage) {
+    const hydratedContent = await resolveTemplateVariables(
+      conversationId,
+      customMessage
+    );
+    const outbound = await sendTextFromSession(
+      req.user.id,
+      conversation.userPhone,
+      hydratedContent
+    );
+
+    if (!outbound) {
+      await addConversationEvent(conversationId, 'NOTE', {
+        type: 'send_fail',
+        reason: 'whatsapp_session_unavailable',
+        content: hydratedContent,
+      });
+    }
+
+    messageRecord = await createConversationMessage({
+      conversationId,
+      senderType: 'OPERATOR',
+      senderId: req.user.id,
+      content: hydratedContent,
+      isDelivered: Boolean(outbound),
+      externalId: outbound ? extractMessageExternalId(outbound) : null,
+      createdAt: outbound ? resolveMessageDate(outbound) : new Date(),
+    });
+
+    const io = getSocketServer();
+    if (io) {
+      await broadcastMessageRecord(io, conversationId, messageRecord, [
+        req.user.id,
+      ]);
+    }
+  }
+
+  const io = getSocketServer();
+  if (io) {
+    await broadcastConversationUpdate(io, conversationId);
+  }
+
+  return res.json({
+    conversation: mapConversationForResponse(updatedConversation),
+    messageId: messageRecord ? messageRecord.id.toString() : null,
+  });
+}
 /**
  * Inicia el flujo de una conversación ejecutando el nodo START
  * POST /conversations/:id/start-flow

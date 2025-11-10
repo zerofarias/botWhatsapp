@@ -15,6 +15,7 @@ import {
   takeConversationHandler,
   finishConversationHandler,
   startFlowHandler,
+  updateConversationProgressStatusHandler,
 } from '../controllers/conversation.controller.js';
 
 export const conversationRouter = Router();
@@ -39,6 +40,11 @@ conversationRouter.post(
   '/:id/close',
   authorize(['ADMIN', 'SUPERVISOR', 'OPERATOR']),
   closeConversationHandler
+);
+conversationRouter.post(
+  '/:id/progress-status',
+  authorize(['ADMIN', 'SUPERVISOR', 'OPERATOR']),
+  updateConversationProgressStatusHandler
 );
 
 // Endpoint para tomar la conversación

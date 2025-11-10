@@ -7,6 +7,8 @@ const contactSelect = Prisma.validator<Prisma.ContactSelect>()({
   name: true,
   phone: true,
   dni: true,
+  address1: true,
+  address2: true,
   photoUrl: true,
   areaId: true,
   createdAt: true,
@@ -31,6 +33,8 @@ type ContactInput = {
   phone: string;
   dni?: string | null;
   areaId?: number | null;
+  address1?: string | null;
+  address2?: string | null;
 };
 
 type ContactUpdateInput = {
@@ -38,6 +42,8 @@ type ContactUpdateInput = {
   phone?: string;
   dni?: string | null;
   areaId?: number | null;
+  address1?: string | null;
+  address2?: string | null;
 };
 
 type ContactImportEntry = {
@@ -45,6 +51,8 @@ type ContactImportEntry = {
   phone?: string | null;
   dni?: string | null;
   area?: string | number | null;
+  address1?: string | null;
+  address2?: string | null;
 };
 
 function normalizePhone(value: string) {
@@ -62,6 +70,11 @@ function sanitizeDni(value: string | null | undefined) {
     throw new Error('El DNI debe contener 7 u 8 digitos numericos.');
   }
   return trimmed;
+}
+
+function sanitizeAddress(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length ? trimmed : null;
 }
 
 async function resolveAreaId(area: string | number | null | undefined) {
@@ -125,6 +138,8 @@ export async function createContact(input: ContactInput) {
       phone,
       dni,
       areaId: input.areaId ?? null,
+      address1: sanitizeAddress(input.address1),
+      address2: sanitizeAddress(input.address2),
     },
     select: contactSelect,
   });
@@ -162,6 +177,14 @@ export async function updateContact(id: number, input: ContactUpdateInput) {
       : { disconnect: true };
   }
 
+  if (input.address1 !== undefined) {
+    data.address1 = sanitizeAddress(input.address1);
+  }
+
+  if (input.address2 !== undefined) {
+    data.address2 = sanitizeAddress(input.address2);
+  }
+
   return prisma.contact.update({
     where: { id },
     data,
@@ -190,6 +213,8 @@ export async function importContactsFromArray(entries: ContactImportEntry[]) {
 
     const areaId = await resolveAreaId(entry.area ?? null);
     const dniValue = entry.dni ? sanitizeDni(entry.dni) : null;
+    const addr1 = sanitizeAddress(entry.address1);
+    const addr2 = sanitizeAddress(entry.address2);
 
     const record = await prisma.contact.upsert({
       where: { phone },
@@ -197,12 +222,16 @@ export async function importContactsFromArray(entries: ContactImportEntry[]) {
         name,
         dni: dniValue,
         areaId,
+        address1: addr1,
+        address2: addr2,
       },
       create: {
         name,
         phone,
         dni: dniValue,
         areaId,
+        address1: addr1,
+        address2: addr2,
       },
       select: contactSelect,
     });
@@ -262,6 +291,8 @@ export async function findOrCreateContactByPhone(
     areaId?: number | null;
     dni?: string | null;
     photoUrl?: string | null;
+    address1?: string | null;
+    address2?: string | null;
   }
 ) {
   const phone = normalizePhone(phoneValue);
@@ -279,6 +310,8 @@ export async function findOrCreateContactByPhone(
       phone,
       dni: defaults?.dni ? sanitizeDni(defaults.dni) : null,
       areaId: defaults?.areaId ?? null,
+      address1: sanitizeAddress(defaults?.address1),
+      address2: sanitizeAddress(defaults?.address2),
     },
     select: contactSelect,
   });

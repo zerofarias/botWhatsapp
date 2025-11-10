@@ -5,14 +5,28 @@
  */
 
 import React, { useEffect, useCallback, useRef } from 'react';
-import { useChatStore } from '../store/chatStore';
+import { useChatStore, type Message } from '../store/chatStore';
 import { initializeSocket } from '../services/socket/SocketManager';
 import { useConversations } from '../hooks/v2/useConversations';
 import { useSocketListeners } from '../hooks/v2/useSocketListeners';
 import ErrorBoundary from '../components/ErrorBoundary';
 import ChatView_v2 from '../components/chat/ChatView_v2';
 import ChatComposer_v2 from '../components/chat/ChatComposer_v2';
+import SimpleConversationList_v2 from '../components/chat/SimpleConversationList_v2';
+import { api } from '../services/api';
 import './ChatPage_v2.css';
+
+const normalizeSender = (value?: string | null): Message['sender'] => {
+  if (!value) return 'contact';
+  const normalized = value.trim().toLowerCase();
+  if (['operator', 'user', 'agent', 'admin'].includes(normalized)) {
+    return 'user';
+  }
+  if (['bot', 'system'].includes(normalized)) {
+    return 'bot';
+  }
+  return 'contact';
+};
 
 const ChatPage: React.FC = () => {
   // Refs for tracking initialization
@@ -21,6 +35,9 @@ const ChatPage: React.FC = () => {
 
   // Store state - use simple getters to avoid infinite loops
   const error = useChatStore((state) => state.error);
+  const selectedContactGroup = useChatStore(
+    (state) => state.selectedContactGroup
+  );
   const activeConversation = useChatStore(
     (state) =>
       state.conversations.find((c) => c.id === state.activeConversationId) ||
@@ -76,6 +93,90 @@ const ChatPage: React.FC = () => {
   // Register socket listeners AFTER socket is initialized
   useSocketListeners();
 
+  // Load messages for the active conversation
+  useEffect(() => {
+    const conversationId = activeConversation?.id;
+    if (!conversationId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchConversationHistory = async () => {
+      try {
+        useChatStore.getState().setLoading(true);
+        const response = await api.get(
+          `/conversations/${conversationId}/history`,
+          {
+            timeout: 5000,
+          }
+        );
+
+        const normalizedMessages = Array.isArray(response.data)
+          ? response.data.map((message: any) => {
+              const parsedSenderId =
+                typeof message.senderId === 'string'
+                  ? parseInt(message.senderId, 10)
+                  : message.senderId ?? null;
+
+              return {
+                id:
+                  typeof message.id === 'string'
+                    ? parseInt(message.id, 10)
+                    : message.id,
+                conversationId:
+                  typeof message.conversationId === 'string'
+                    ? parseInt(message.conversationId, 10)
+                    : message.conversationId ?? conversationId,
+                content: message.content ?? '',
+                sender: normalizeSender(
+                  message.senderType || message.sender || undefined
+                ),
+                senderId: parsedSenderId,
+                senderName: message.senderName ?? null,
+                senderUsername: message.senderUsername ?? null,
+                timestamp: message.createdAt
+                  ? new Date(message.createdAt).getTime()
+                  : message.timestamp || Date.now(),
+                status: (message.status as Message['status']) ?? 'delivered',
+                mediaUrl: message.mediaUrl ?? undefined,
+                mediaType: message.mediaType ?? undefined,
+                metadata: {
+                  senderType: message.senderType,
+                  senderId: parsedSenderId,
+                  senderName: message.senderName ?? null,
+                  senderUsername: message.senderUsername ?? null,
+                },
+              };
+            })
+          : [];
+
+        if (cancelled) return;
+
+        const store = useChatStore.getState();
+        store.setMessageHistory(conversationId, normalizedMessages);
+        store.setMessages(normalizedMessages);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to load conversation history', error);
+          useChatStore
+            .getState()
+            .setError('No se pudo cargar el historial de mensajes.');
+        }
+      } finally {
+        if (!cancelled) {
+          useChatStore.getState().setLoading(false);
+        }
+      }
+    };
+
+    fetchConversationHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeConversation?.id]);
+
   // Auto-select first conversation on load (only once)
   useEffect(() => {
     if (
@@ -88,9 +189,16 @@ const ChatPage: React.FC = () => {
     }
   }, [conversations.length, activeConversation]); // Only depend on length and activeConversation to avoid infinite loop
 
-  const handleSelectConversation = useCallback((conversationId: number) => {
-    useChatStore.getState().setActiveConversation(conversationId);
-  }, []);
+  const handleSelectConversation = useCallback(
+    (conversationId: number | string) => {
+      const id =
+        typeof conversationId === 'string'
+          ? parseInt(conversationId, 10)
+          : conversationId;
+      useChatStore.getState().setActiveConversation(id);
+    },
+    []
+  );
 
   const handleDismissError = useCallback(() => {
     useChatStore.getState().setError(null);
@@ -99,44 +207,15 @@ const ChatPage: React.FC = () => {
   return (
     <ErrorBoundary>
       <div className="chat-page-v2-container">
-        {/* Conversation List */}
+        {/* Conversation List - Now Grouped by Phone Number */}
         <div className="conversation-list-panel-v2">
           <div className="conversation-list-header-v2">
-            <h2>Conversations</h2>
+            <h2>Conversaciones</h2>
           </div>
 
-          {loadingConversations ? (
-            <div className="chat-loading">
-              <div>Loading conversations...</div>
-            </div>
-          ) : conversations.length === 0 ? (
-            <div className="conversation-empty-state">
-              <div>No conversations</div>
-            </div>
-          ) : (
-            <div className="conversation-list-items-v2">
-              {conversations.map((conversation) => (
-                <button
-                  key={conversation.id}
-                  onClick={() => handleSelectConversation(conversation.id)}
-                  className={`conversation-item-button-v2 ${
-                    activeConversation?.id === conversation.id ? 'active' : ''
-                  }`}
-                >
-                  <div className="conversation-item-name">
-                    {typeof conversation.contact?.name === 'string'
-                      ? conversation.contact.name
-                      : `Contact ${conversation.contactId}`}
-                  </div>
-                  <div className="conversation-item-preview">
-                    {typeof conversation.lastMessage === 'string'
-                      ? conversation.lastMessage
-                      : 'No messages'}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
+          <SimpleConversationList_v2
+            onSelectConversation={handleSelectConversation}
+          />
         </div>
 
         {/* Chat Area */}
@@ -150,14 +229,17 @@ const ChatPage: React.FC = () => {
             </div>
           )}
 
-          {activeConversation ? (
+          {selectedContactGroup || activeConversation ? (
             <>
-              <ChatView_v2 conversationId={activeConversation.id} />
+              <ChatView_v2
+                contactGroup={selectedContactGroup}
+                conversationId={activeConversation?.id || 0}
+              />
               <ChatComposer_v2 />
             </>
           ) : (
-            <div className="chat-area-empty-v2">
-              <div>Select a conversation to start</div>
+            <div className="chat-view-v2-empty">
+              <div>Selecciona una conversación para empezar</div>
             </div>
           )}
         </div>

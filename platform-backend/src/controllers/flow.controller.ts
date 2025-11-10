@@ -145,6 +145,36 @@ function removeDiacritics(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
+/**
+ * Limpia valores undefined recursivamente de un objeto
+ */
+function cleanUndefinedValues(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return null;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(cleanUndefinedValues).filter((v) => v !== undefined);
+  }
+  if (typeof obj === 'object') {
+    const cleaned: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        cleaned[key] = cleanUndefinedValues(value);
+      }
+    }
+    return cleaned;
+  }
+  return obj;
+}
+
+/**
+ * Serializa un objeto a JSON string, limpiando valores undefined
+ */
+function serializeMetadata(metadata: any): string {
+  const cleaned = cleanUndefinedValues(metadata);
+  return JSON.stringify(cleaned);
+}
+
 // CRUD individual para nodos Flow
 // import duplicado eliminado
 
@@ -514,6 +544,15 @@ function buildListSettingsFromMetadata(metadata?: BuilderMetadata | null) {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
+  // Si es un string JSON, intentar parsearlo
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch (e) {
+      return null;
+    }
+  }
+
   if (!value || typeof value !== 'object') {
     return null;
   }
@@ -521,6 +560,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function extractBuilderMetadata(value: unknown): BuilderMetadata | null {
+  // asRecord ya maneja el parsing de JSON strings
   const root = asRecord(value);
   if (!root) return null;
 
@@ -1201,7 +1241,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
         const variableValue = sanitizeStringValue(dataRecord.variable);
         const valueValue = sanitizeStringValue(dataRecord.value);
 
-        const metadataPayload: Prisma.InputJsonValue = {
+        const metadataPayload = {
           builder: {
             reactId: nodeId ?? undefined, // Usar nodeId tal cual, sin conversión
             position: normalized.position ?? null,
@@ -1244,6 +1284,9 @@ export async function saveFlowGraph(req: Request, res: Response) {
             value: flowType === 'SET_VARIABLE' ? valueValue : undefined,
           },
         };
+
+        // Serializar metadata a JSON string, limpiando valores undefined
+        const metadataJsonString = serializeMetadata(metadataPayload);
 
         if (flowType === 'CONDITIONAL') {
           sanitizedDefaultConditionsByNode.set(nodeId, {
@@ -1347,7 +1390,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
               orderIndex: 0,
               isActive,
               areaId: areaId ?? null,
-              metadata: metadataPayload,
+              metadata: metadataJsonString,
               parentId,
               botId: payloadBotId,
             },
@@ -1367,7 +1410,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
               trigger: triggerValue,
               type: flowType as any,
               orderIndex: 0,
-              metadata: metadataPayload,
+              metadata: metadataJsonString,
               areaId: areaId ?? null,
               isActive,
               createdBy: req.user!.id,
@@ -1729,6 +1772,9 @@ export async function getFlowGraph(req: Request, res: Response) {
         trigger: typeof flow.trigger === 'string' ? flow.trigger : undefined,
         type: builderMeta?.type ?? flow.type ?? 'default',
         position: builderMeta?.position ?? null,
+        // ID del flow en la base de datos (para evitar duplicados al guardar nuevamente)
+        flowId: flow.id,
+        parentId: flow.parentId,
         // Configuraciones adicionales
         buttonSettings: buttonSettings ?? undefined,
         listSettings: listSettings ?? undefined,

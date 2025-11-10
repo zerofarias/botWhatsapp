@@ -110,6 +110,14 @@ export const NODE_STYLE_CONFIG: Record<FlowNodeType, NodeStyleConfig> = {
     borderWidth: 2,
     icon: '📌',
   },
+  DATA_LOG: {
+    backgroundColor: '#9575cd',
+    borderColor: '#5e35b1',
+    textColor: '#ffffff',
+    shape: 'rounded',
+    borderWidth: 2,
+    icon: '💾',
+  },
 };
 
 /**

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authRouter } from './auth.js';
 import { flowRouter } from './flows.js';
+import { flowDataRouter } from './flow-data.js';
 import { botRouter } from './bot.js';
 import botsRouter from './bots.routes.js';
 import { messageRouter } from './messages.js';
@@ -11,11 +12,13 @@ import { contactRouter } from './contacts.js';
 import { workingHourRouter } from './working-hours.js';
 import { quickRepliesRouter } from './quick-replies.js';
 import nodesRouter from './nodes.routes.js';
+import ordersRouter from './orders.js';
 
 export const apiRouter = Router();
 
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/flows', flowRouter);
+apiRouter.use('/flow-data', flowDataRouter);
 apiRouter.use('/bot', botRouter);
 apiRouter.use('/bots', botsRouter);
 apiRouter.use('/messages', messageRouter);
@@ -25,4 +28,5 @@ apiRouter.use('/conversations', conversationRouter);
 apiRouter.use('/contacts', contactRouter);
 apiRouter.use('/working-hours', workingHourRouter);
 apiRouter.use('/quick-replies', quickRepliesRouter);
+apiRouter.use('/orders', ordersRouter);
 apiRouter.use(nodesRouter);

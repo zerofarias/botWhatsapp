@@ -108,7 +108,6 @@ export async function processMessageAndAdvanceFlow(
   const result = await executeNodeChain({
     botId: Number(conversation.botId),
     nodeId: Number(conversation.currentFlowNodeId),
-    startNodeId: Number(conversation.currentFlowNodeId),
     context: contextWithMessage,
     capturedVariableName,
   });

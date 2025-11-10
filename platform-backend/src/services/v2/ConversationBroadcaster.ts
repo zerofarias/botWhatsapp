@@ -48,6 +48,8 @@ export class ConversationBroadcaster {
               name: true,
               phone: true,
               dni: true,
+              address1: true,
+              address2: true,
             },
           },
         },
@@ -66,6 +68,8 @@ export class ConversationBroadcaster {
               name: record.contact.name,
               phone: record.contact.phone,
               dni: record.contact.dni || undefined,
+              address1: record.contact.address1 ?? null,
+              address2: record.contact.address2 ?? null,
             }
           : null,
         areaId: record.areaId,

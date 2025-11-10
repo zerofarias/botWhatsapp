@@ -1,0 +1,205 @@
+/**
+ * ChatView_v2.css - WhatsApp Web style messaging
+ */
+
+.chat-view-v2-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: #fff;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+/* Messages Container */
+.chat-view-v2-messages {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+  padding: 12px 16px;
+  gap: 8px;
+}
+
+.chat-view-v2-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-view-v2-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-view-v2-messages::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.chat-view-v2-messages::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+/* Empty State */
+.chat-view-v2-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #999;
+  font-size: 14px;
+}
+
+/* Load More Button */
+.chat-view-v2-load-more {
+  align-self: center;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: #999;
+  border: 1px solid #e5e5e5;
+  background: white;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.chat-view-v2-load-more:hover:not(:disabled) {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.chat-view-v2-load-more:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Message Container */
+.chat-view-v2-message {
+  display: flex;
+  margin-bottom: 4px;
+  animation: messageSlideIn 0.3s ease-out;
+}
+
+.chat-view-v2-message.incoming {
+  justify-content: flex-start;
+}
+
+.chat-view-v2-message.outgoing {
+  justify-content: flex-end;
+}
+
+/* Message Bubble */
+.chat-view-v2-message-bubble {
+  display: flex;
+  flex-direction: column;
+  max-width: 55%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  word-wrap: break-word;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.chat-view-v2-message.incoming .chat-view-v2-message-bubble {
+  background-color: white;
+  border-bottom-left-radius: 2px;
+  color: #222;
+}
+
+.chat-view-v2-message.outgoing .chat-view-v2-message-bubble {
+  background: linear-gradient(135deg, #dcf8c6 0%, #c7f9c8 100%);
+  border-bottom-right-radius: 2px;
+  color: #222;
+}
+
+/* Message Content */
+.chat-view-v2-message-content {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* Message Footer (Time + Status) */
+.chat-view-v2-message-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.chat-view-v2-message.incoming .chat-view-v2-message-footer {
+  color: #999;
+}
+
+.chat-view-v2-message.outgoing .chat-view-v2-message-footer {
+  color: #4a7c59;
+}
+
+.chat-view-v2-message-time {
+  white-space: nowrap;
+}
+
+.chat-view-v2-message-status {
+  white-space: nowrap;
+}
+
+/* Animation */
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .chat-view-v2-message-bubble {
+    max-width: 75%;
+  }
+
+  .chat-view-v2-messages {
+    padding: 8px 12px;
+  }
+}
+
+/* Add Contact Button */
+.chat-area-v2-add-contact-btn {
+  background: linear-gradient(135deg, #25d366 0%, #20c05a 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(37, 211, 102, 0.2);
+  white-space: nowrap;
+  margin-right: 8px;
+}
+
+.chat-area-v2-add-contact-btn:hover {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  box-shadow: 0 4px 8px rgba(37, 211, 102, 0.3);
+  transform: translateY(-1px);
+}
+
+.chat-area-v2-add-contact-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(37, 211, 102, 0.2);
+}
+
+/* Responsive para el botón */
+@media (max-width: 768px) {
+  .chat-area-v2-add-contact-btn {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+  }
+}

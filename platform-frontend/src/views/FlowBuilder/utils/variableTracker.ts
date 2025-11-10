@@ -1,4 +1,10 @@
-import type { FlowBuilderNode, FlowBuilderEdge, FlowNodeData } from '../types';
+import type {
+  FlowBuilderNode,
+  FlowBuilderEdge,
+  FlowNodeData,
+  TextNodeData,
+  ConditionalNodeData,
+} from '../types';
 
 /**
  * Información sobre una variable disponible en el flujo
@@ -15,6 +21,54 @@ export interface AvailableVariable {
  * Clave: nodeId, Valor: Array de variables disponibles hasta ese nodo
  */
 export type VariableAvailabilityMap = Map<string, AvailableVariable[]>;
+
+/**
+ * Variables globales del contacto disponibles en todos los nodos
+ */
+export const GLOBAL_CONTACT_VARIABLES: AvailableVariable[] = [
+  {
+    name: 'GLOBAL_numTelefono',
+    createdByNodeId: 'SYSTEM',
+    createdByNodeType: 'CONTACT',
+    createdByNodeLabel: '📱 Número de Teléfono del Contacto',
+  },
+  {
+    name: 'GLOBAL_nombre',
+    createdByNodeId: 'SYSTEM',
+    createdByNodeType: 'CONTACT',
+    createdByNodeLabel: '👤 Nombre según WhatsApp',
+  },
+  {
+    name: 'GLOBAL_nombreContacto',
+    createdByNodeId: 'SYSTEM',
+    createdByNodeType: 'CONTACT',
+    createdByNodeLabel: '📋 Nombre del Contacto Agendado',
+  },
+  {
+    name: 'GLOBAL_dni',
+    createdByNodeId: 'SYSTEM',
+    createdByNodeType: 'CONTACT',
+    createdByNodeLabel: '🆔 DNI del Contacto',
+  },
+  {
+    name: 'GLOBAL_email',
+    createdByNodeId: 'SYSTEM',
+    createdByNodeType: 'CONTACT',
+    createdByNodeLabel: '📧 Email del Contacto',
+  },
+  {
+    name: 'GLOBAL_areaId',
+    createdByNodeId: 'SYSTEM',
+    createdByNodeType: 'CONTACT',
+    createdByNodeLabel: '🏢 Área/Departamento del Contacto',
+  },
+  {
+    name: 'GLOBAL_conversationStatus',
+    createdByNodeId: 'SYSTEM',
+    createdByNodeType: 'CONTACT',
+    createdByNodeLabel: '🔄 Estado de la Conversación',
+  },
+];
 
 /**
  * Extrae el nombre de variable de un nodo que la crea
@@ -61,15 +115,50 @@ export function buildVariableAvailabilityMap(
     adjacency.set(node.id, []);
   });
 
+  const addNeighbor = (sourceId: string, targetId?: string | null) => {
+    if (!targetId || !nodeMap.has(targetId)) {
+      return;
+    }
+    if (!adjacency.has(sourceId)) {
+      adjacency.set(sourceId, []);
+    }
+    const neighbors = adjacency.get(sourceId);
+    if (!neighbors) return;
+    if (!neighbors.includes(targetId)) {
+      neighbors.push(targetId);
+    }
+  };
+
   edges.forEach((edge) => {
     const source = edge.source;
     const target = edge.target;
 
     if (nodeMap.has(source) && nodeMap.has(target)) {
-      const sourceNeighbors = adjacency.get(source);
-      if (sourceNeighbors) {
-        sourceNeighbors.push(target);
-      }
+      addNeighbor(source, target);
+    }
+  });
+
+  // Agregar conexiones implícitas definidas dentro de los propios nodos (ej. TEXT options, CONDITIONAL evaluations)
+  nodes.forEach((node) => {
+    if (!node?.data) return;
+
+    if (node.data.type === 'TEXT') {
+      const textData = node.data as TextNodeData;
+      const options = Array.isArray(textData.options) ? textData.options : [];
+      options.forEach((option) => {
+        addNeighbor(node.id, option?.targetId ?? null);
+      });
+    }
+
+    if (node.data.type === 'CONDITIONAL') {
+      const conditionalData = node.data as ConditionalNodeData;
+      const evaluations = Array.isArray(conditionalData.evaluations)
+        ? conditionalData.evaluations
+        : [];
+      evaluations.forEach((evaluation) => {
+        addNeighbor(node.id, evaluation?.targetId ?? null);
+      });
+      addNeighbor(node.id, conditionalData.defaultTargetId ?? null);
     }
   });
 
@@ -133,12 +222,10 @@ export function buildVariableAvailabilityMap(
   // Calcular variables para cada nodo
   nodes.forEach((node) => {
     const vars = dfsVariables(node.id);
-    availabilityMap.set(node.id, vars);
+    // Agregar variables globales del contacto a todas las variables disponibles
+    const allVars = [...GLOBAL_CONTACT_VARIABLES, ...vars];
+    availabilityMap.set(node.id, allVars);
   });
-
-  console.log(
-    '[variableTracker] DFS completed, variable availability map ready'
-  );
 
   return availabilityMap;
 }
