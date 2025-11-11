@@ -5,7 +5,6 @@ import DashboardLayout from './layouts/DashboardLayout';
 
 import DashboardOverview from './pages/DashboardOverview';
 import SettingsPage from './pages/SettingsPage';
-import ChatPage from './pages/ChatPage';
 import ChatPage_v2 from './pages/ChatPage_v2';
 import OrdersPage_v2 from './pages/OrdersPage_v2';
 import UsersPage from './pages/UsersPage';
@@ -24,8 +23,7 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardOverview />} />
-          <Route path="chat" element={<ChatPage />} />
-          <Route path="chat2" element={<ChatPage_v2 />} />
+          <Route path="chat" element={<ChatPage_v2 />} />
           <Route path="orders" element={<OrdersPage_v2 />} />
           {/* Flows y Flow Builder eliminados, ahora solo desde Bots */}
           <Route path="bots" element={<BotsPage />} />

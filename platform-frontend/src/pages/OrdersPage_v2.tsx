@@ -33,7 +33,7 @@ const OrdersPage_v2: React.FC = () => {
     (order: Order) => {
       // Redirigir al chat con esa conversación
       useChatStore.setState({ activeConversationId: order.conversationId });
-      navigate('/dashboard/chat2');
+      navigate('/dashboard/chat');
     },
     [navigate]
   );
