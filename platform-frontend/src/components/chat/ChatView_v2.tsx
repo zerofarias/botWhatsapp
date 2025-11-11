@@ -20,6 +20,8 @@ import type { ConversationProgressStatus } from '../../types/chat';
 import MessageBubble_v2 from './MessageBubble_v2';
 import AddContactModal from './AddContactModal';
 import './ChatView_v2.css';
+import { api } from '../../services/api';
+import { getApiErrorMessage } from '../../utils/apiError';
 
 interface ChatViewProps {
   conversationId?: number;
@@ -236,35 +238,24 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
       setStatusUpdating(true);
       setStatusError(null);
       try {
-        const response = await fetch(
-          `/api/conversations/${activeConversation.id}/progress-status`,
+        const { data } = await api.post(
+          `/conversations/${activeConversation.id}/progress-status`,
           {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              status,
-              message: customMessage,
-            }),
+            status,
+            message: customMessage,
           }
         );
-        const data = await response.json().catch(() => null);
-        if (!response.ok) {
-          throw new Error(
-            data?.message || 'No se pudo actualizar el estado del pedido.'
-          );
-        }
         setSelectedStatus(status);
         if (data?.conversation) {
           updateConversationFromApi(data.conversation);
         }
       } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : 'No se pudo actualizar el estado del pedido.';
+        const message = getApiErrorMessage(
+          error,
+          'No se pudo actualizar el estado del pedido.'
+        );
         setStatusError(message);
-        throw error;
+        throw new Error(message);
       } finally {
         setStatusUpdating(false);
       }
@@ -275,24 +266,21 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
   const finishConversationRequest = useCallback(
     async (reason: string) => {
       if (!activeConversation) return;
-      const response = await fetch(
-        `/api/conversations/${activeConversation.id}/finish`,
-        {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reason }),
-        }
-      );
-      const data = await response.json().catch(() => null);
-      if (!response.ok) {
+      try {
+        await api.post(`/conversations/${activeConversation.id}/finish`, {
+          reason,
+        });
+        useChatStore
+          .getState()
+          .updateConversation(activeConversation.id, { status: 'CLOSED' });
+      } catch (error) {
         throw new Error(
-          data?.message || 'No se pudo finalizar la conversación.'
+          getApiErrorMessage(
+            error,
+            'No se pudo finalizar la conversación.'
+          )
         );
       }
-      useChatStore
-        .getState()
-        .updateConversation(activeConversation.id, { status: 'CLOSED' });
     },
     [activeConversation]
   );
@@ -337,24 +325,20 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
       address2?: string;
     }) => {
       if (!canAddContact) {
-        throw new Error('No hay un número válido para guardar.');
+        throw new Error('No hay un numero valido para guardar.');
       }
-      const response = await fetch('/api/contacts', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      try {
+        await api.post('/contacts', {
           name: payload.name,
           phone: phoneNumber,
           dni: payload.dni || null,
           address1: payload.address1 || null,
           address2: payload.address2 || null,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'No se pudo agregar el contacto.');
+        });
+      } catch (error) {
+        throw new Error(
+          getApiErrorMessage(error, 'No se pudo agregar el contacto.')
+        );
       }
 
       window.location.reload();
@@ -372,26 +356,17 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
       if (!activeConversation?.contact?.id) {
         throw new Error('No hay contacto para editar.');
       }
-      const response = await fetch(
-        `/api/contacts/${activeConversation.contact.id}`,
-        {
-          method: 'PUT',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: payload.name,
-            dni: payload.dni || null,
-            address1: payload.address1 || null,
-            address2: payload.address2 || null,
-            phone: activeConversation.contact.phone,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+      try {
+        await api.put(`/contacts/${activeConversation.contact.id}`, {
+          name: payload.name,
+          dni: payload.dni || null,
+          address1: payload.address1 || null,
+          address2: payload.address2 || null,
+          phone: activeConversation.contact.phone,
+        });
+      } catch (error) {
         throw new Error(
-          errorData.message || 'No se pudo actualizar el contacto.'
+          getApiErrorMessage(error, 'No se pudo actualizar el contacto.')
         );
       }
 

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { FiUserPlus } from 'react-icons/fi';
 import type { ConversationSummary } from '../../types/chat';
 import AddContactModal from './AddContactModal';
+import { api } from '../../services/api';
+import { getApiErrorMessage } from '../../utils/apiError';
 
 const getDisplayName = (conversation: ConversationSummary) => {
   const name = conversation.contact?.name ?? conversation.contactName ?? '';
@@ -114,15 +116,17 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
         <button
           onClick={async () => {
             try {
-              await fetch(`/api/conversations/${conversation.id}/finish`, {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ reason: 'manual_close' }),
+              await api.post(`/conversations/${conversation.id}/finish`, {
+                reason: 'manual_close',
               });
               onCloseConversation();
-            } catch {
-              alert('No se pudo finalizar la conversacion.');
+            } catch (error) {
+              alert(
+                getApiErrorMessage(
+                  error,
+                  'No se pudo finalizar la conversacion.'
+                )
+              );
             }
           }}
           disabled={isClosing || conversation.status === 'CLOSED'}
@@ -136,25 +140,20 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
         onClose={() => setShowAddContactModal(false)}
         phoneNumber={conversation.userPhone}
         onSubmit={async ({ name, dni, address1, address2 }) => {
-          const response = await fetch('/api/contacts', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+          try {
+            await api.post('/contacts', {
               name,
               phone: conversation.userPhone,
               dni: dni || null,
               address1: address1 || null,
               address2: address2 || null,
-            }),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Error al agregar contacto');
+            });
+            window.location.reload();
+          } catch (error) {
+            throw new Error(
+              getApiErrorMessage(error, 'Error al agregar contacto')
+            );
           }
-
-          window.location.reload();
         }}
       />
     </header>

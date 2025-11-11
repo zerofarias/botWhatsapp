@@ -258,23 +258,66 @@ interface Conversation {
   botActive?: boolean;
   lastActivity?: Date | string | null;
   updatedAt?: Date | string | null;
-  messages?: Array<unknown>;
+  messages?: MessagePreview[];
+}
+
+interface MessagePreview {
+  id: bigint | string | number;
+  conversationId: bigint | string | number;
+  [key: string]: unknown;
+}
+
+function sanitizeBigInts<T>(value: T): T {
+  return normalizeBigIntValue(value) as T;
+}
+
+function normalizeBigIntValue(value: unknown): unknown {
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeBigIntValue(item));
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).reduce(
+      (acc, [key, entryValue]) => {
+        acc[key] = normalizeBigIntValue(entryValue);
+        return acc;
+      },
+      {} as Record<string, unknown>
+    );
+  }
+  return value;
 }
 
 function mapConversationForResponse(conversation: Conversation) {
   const contact = conversation.contact
-    ? {
+    ? sanitizeBigInts({
         ...conversation.contact,
         id:
-          conversation.contact.id?.toString?.() ??
-          String(conversation.contact.id),
-      }
+          conversation.contact.id?.toString?.() ?? String(conversation.contact.id),
+      })
     : null;
-  return {
+  const messages = Array.isArray(conversation.messages)
+    ? conversation.messages.map((message) =>
+        sanitizeBigInts({
+          ...message,
+          id: message.id?.toString?.() ?? String(message.id),
+          conversationId:
+            message.conversationId?.toString?.() ??
+            String(message.conversationId),
+        })
+      )
+    : conversation.messages;
+  return sanitizeBigInts({
     ...conversation,
     id: conversation.id?.toString?.() ?? String(conversation.id),
     contact,
-  };
+    messages,
+  });
 }
 
 export async function listAllChatsByPhoneHandler(req: Request, res: Response) {

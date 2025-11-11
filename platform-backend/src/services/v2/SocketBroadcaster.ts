@@ -278,8 +278,12 @@ export class SocketBroadcaster {
    * Determine message sender type
    */
   private determineSender(message: Message): 'user' | 'bot' | 'contact' {
-    if (message.externalId) return 'contact';
-    if (message.senderType === 'OPERATOR') return 'user';
+    if (message.senderType === 'OPERATOR') {
+      return 'user';
+    }
+    if (message.senderType === 'CONTACT') {
+      return 'contact';
+    }
     return 'bot';
   }
 
