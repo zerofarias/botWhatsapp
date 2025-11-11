@@ -43,29 +43,7 @@ export function useMessageSender() {
           clearTimeout(timeoutRef.current);
         }
 
-        const message = response.data;
-
-        // Add message to store (socket might also add it, but this ensures local update)
-        useChatStore.getState().addMessage({
-          id: message.id,
-          conversationId,
-          content,
-          sender: 'user',
-          senderId: user?.id ?? null,
-          senderName: user?.name ?? null,
-          senderUsername: user?.username ?? null,
-          timestamp: Date.now(),
-          status: 'sent',
-          metadata: {
-            senderType: 'OPERATOR',
-            senderId: user?.id ?? null,
-            senderName: user?.name ?? null,
-            senderUsername: user?.username ?? null,
-            ...message.metadata,
-          },
-        });
-
-        return { success: true, messageId: message.id };
+        return { success: true, messageId: response.data?.id };
       } catch (error) {
         let errorMessage = 'Failed to send message';
 

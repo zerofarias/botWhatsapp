@@ -166,17 +166,34 @@ export const useChatStore = create<ChatStoreState>()(
       }),
     addMessage: (message) =>
       set((state) => {
+        const normalizedId =
+          typeof message.id === 'string'
+            ? message.id
+            : message.id != null
+            ? message.id.toString()
+            : `${Date.now()}-${Math.random()}`;
+        const normalizedMessage: Message = { ...message, id: normalizedId };
+
         const newHistory = new Map(state.messageHistory);
         const existing = newHistory.get(message.conversationId) || [];
-        newHistory.set(message.conversationId, [...existing, message]);
+        const historyHasMessage = existing.some(
+          (m) => String(m.id) === normalizedId
+        );
+        if (!historyHasMessage) {
+          newHistory.set(message.conversationId, [
+            ...existing,
+            normalizedMessage,
+          ]);
+        }
 
         const shouldAppend =
-          state.activeConversationId === message.conversationId;
+          state.activeConversationId === message.conversationId &&
+          !state.messages.some((m) => String(m.id) === normalizedId);
 
         return {
           messageHistory: newHistory,
           messages: shouldAppend
-            ? [...state.messages, message]
+            ? [...state.messages, normalizedMessage]
             : state.messages,
         };
       }),

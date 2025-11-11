@@ -6,6 +6,7 @@
 import { useEffect } from 'react';
 import { getSocketManager } from '../../services/socket/SocketManager';
 import { useChatStore } from '../../store/chatStore';
+import { normalizeSender } from '../../services/socket/socketSchemas';
 
 export function useSocketListeners() {
   useEffect(() => {
@@ -40,9 +41,9 @@ export function useSocketListeners() {
               ? parseInt(payload.conversationId, 10)
               : payload.conversationId,
           content: payload.content,
-          sender: (payload.sender ||
-            payload.senderType?.toLowerCase() ||
-            'contact') as 'user' | 'bot' | 'contact',
+          sender: normalizeSender(
+            payload.senderType ?? payload.sender ?? 'contact'
+          ),
           senderId: parsedSenderId,
           senderName: payload.senderName ?? null,
           senderUsername: payload.senderUsername ?? null,
@@ -83,9 +84,9 @@ export function useSocketListeners() {
               ? parseInt(payload.conversationId, 10)
               : payload.conversationId,
           content: payload.content,
-          sender: (payload.sender ||
-            payload.senderType?.toLowerCase() ||
-            'contact') as 'user' | 'bot' | 'contact',
+          sender: normalizeSender(
+            payload.senderType ?? payload.sender ?? 'contact'
+          ),
           senderId: updateSenderId,
           senderName: payload.senderName ?? null,
           senderUsername: payload.senderUsername ?? null,

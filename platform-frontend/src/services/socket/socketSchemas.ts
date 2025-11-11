@@ -5,7 +5,7 @@
 
 import { z } from 'zod';
 
-const normalizeSender = (value: unknown): 'user' | 'bot' | 'contact' => {
+export const normalizeSender = (value: unknown): 'user' | 'bot' | 'contact' => {
   if (!value || typeof value !== 'string') {
     return 'contact';
   }
