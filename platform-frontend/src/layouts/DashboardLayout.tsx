@@ -1,8 +1,9 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth, type Role } from '../context/AuthContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import '../styles/sidebar.css';
 import { sidebarIcons } from '../components/SidebarIcons';
+import { initializeSocket } from '../services/socket/SocketManager';
 
 type NavigationLink = {
   to: string;
@@ -56,6 +57,29 @@ export default function DashboardLayout() {
     if (!user) return false;
     return link.roles.includes(user.role);
   });
+
+  // Inicializar socket globalmente para todas las páginas del dashboard
+  useEffect(() => {
+    // Usar VITE_SOCKET_URL si está disponible, sino derivar de VITE_API_URL
+    const socketUrl =
+      import.meta.env.VITE_SOCKET_URL ||
+      (import.meta.env.VITE_API_URL || 'http://localhost:4001/api').replace(
+        /\/api\/?$/,
+        ''
+      );
+
+    console.log(
+      '🔌 Initializing socket globally from DashboardLayout:',
+      socketUrl
+    );
+
+    try {
+      initializeSocket(socketUrl);
+      console.log('✅ Socket initialized successfully');
+    } catch (error) {
+      console.error('❌ Failed to initialize socket:', error);
+    }
+  }, []);
 
   return (
     <div className={`dashboard-layout${collapsed ? ' collapsed' : ''}`}>

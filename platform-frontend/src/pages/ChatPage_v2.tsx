@@ -6,38 +6,22 @@
 
 import React, { useEffect, useCallback, useRef } from 'react';
 import { useChatStore, type Message } from '../store/chatStore';
-import { initializeSocket } from '../services/socket/SocketManager';
+import { getSocketManager } from '../services/socket/SocketManager';
 import { useConversations } from '../hooks/v2/useConversations';
 import { useSocketListeners } from '../hooks/v2/useSocketListeners';
 import ErrorBoundary from '../components/ErrorBoundary';
 import ChatView_v2 from '../components/chat/ChatView_v2';
 import ChatComposer_v2 from '../components/chat/ChatComposer_v2';
-import SimpleConversationList_v2 from '../components/chat/SimpleConversationList_v2';
+import GroupedConversationList_v2 from '../components/chat/GroupedConversationList_v2';
 import { api } from '../services/api';
 import './ChatPage_v2.css';
-
-const normalizeSender = (value?: string | null): Message['sender'] => {
-  if (!value) return 'contact';
-  const normalized = value.trim().toLowerCase();
-  if (['operator', 'user', 'agent', 'admin'].includes(normalized)) {
-    return 'user';
-  }
-  if (['bot', 'system'].includes(normalized)) {
-    return 'bot';
-  }
-  return 'contact';
-};
 
 const ChatPage: React.FC = () => {
   // Refs for tracking initialization
   const hasInitializedConversation = useRef(false);
-  const socketInitialized = useRef(false);
 
   // Store state - use simple getters to avoid infinite loops
   const error = useChatStore((state) => state.error);
-  const selectedContactGroup = useChatStore(
-    (state) => state.selectedContactGroup
-  );
   const activeConversation = useChatStore(
     (state) =>
       state.conversations.find((c) => c.id === state.activeConversationId) ||
@@ -47,50 +31,7 @@ const ChatPage: React.FC = () => {
   // Load conversations
   const { conversations, loading: loadingConversations } = useConversations();
 
-  // Initialize socket connection FIRST (before useSocketListeners)
-  useEffect(() => {
-    if (socketInitialized.current) return;
-    socketInitialized.current = true;
-
-    try {
-      // Derive socket URL from current window location or VITE_API_URL
-      const viteApiUrl = import.meta.env.VITE_API_URL;
-      let socketUrl: string;
-
-      if (viteApiUrl) {
-        // Remove /api suffix if present
-        socketUrl = viteApiUrl.replace(/\/api\/?$/, '');
-      } else {
-        // Fallback: use current location's protocol + hostname + port 4000
-        socketUrl = `${window.location.protocol}//${window.location.hostname}:4000`;
-      }
-
-      console.log('🔌 Initializing socket with URL:', socketUrl);
-
-      const socket = initializeSocket(socketUrl, {
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-      });
-
-      // Connect socket
-      socket.connect().catch((error) => {
-        console.error('Failed to connect socket:', error);
-        useChatStore.setState({
-          error: 'Connection failed. Please refresh the page.',
-        });
-      });
-
-      return () => {
-        // Don't disconnect on unmount - keep connection alive for other pages
-      };
-    } catch (error) {
-      console.error('Socket initialization error:', error);
-      useChatStore.setState({ error: 'Socket initialization failed' });
-    }
-  }, []);
-
-  // Register socket listeners AFTER socket is initialized
+  // Register socket listeners (socket is already initialized in DashboardLayout)
   useSocketListeners();
 
   // Load messages for the active conversation
@@ -113,42 +54,29 @@ const ChatPage: React.FC = () => {
         );
 
         const normalizedMessages = Array.isArray(response.data)
-          ? response.data.map((message: any) => {
-              const parsedSenderId =
-                typeof message.senderId === 'string'
-                  ? parseInt(message.senderId, 10)
-                  : message.senderId ?? null;
-
-              return {
-                id:
-                  typeof message.id === 'string'
-                    ? parseInt(message.id, 10)
-                    : message.id,
-                conversationId:
-                  typeof message.conversationId === 'string'
-                    ? parseInt(message.conversationId, 10)
-                    : message.conversationId ?? conversationId,
-                content: message.content ?? '',
-                sender: normalizeSender(
-                  message.senderType || message.sender || undefined
-                ),
-                senderId: parsedSenderId,
-                senderName: message.senderName ?? null,
-                senderUsername: message.senderUsername ?? null,
-                timestamp: message.createdAt
-                  ? new Date(message.createdAt).getTime()
-                  : message.timestamp || Date.now(),
-                status: (message.status as Message['status']) ?? 'delivered',
-                mediaUrl: message.mediaUrl ?? undefined,
-                mediaType: message.mediaType ?? undefined,
-                metadata: {
-                  senderType: message.senderType,
-                  senderId: parsedSenderId,
-                  senderName: message.senderName ?? null,
-                  senderUsername: message.senderUsername ?? null,
-                },
-              };
-            })
+          ? response.data.map((message: any) => ({
+              id:
+                typeof message.id === 'string'
+                  ? parseInt(message.id, 10)
+                  : message.id,
+              conversationId:
+                typeof message.conversationId === 'string'
+                  ? parseInt(message.conversationId, 10)
+                  : message.conversationId ?? conversationId,
+              content: message.content ?? '',
+              sender: (message.senderType?.toLowerCase() ||
+                message.sender ||
+                'contact') as 'user' | 'bot' | 'contact',
+              timestamp: message.createdAt
+                ? new Date(message.createdAt).getTime()
+                : message.timestamp || Date.now(),
+              status: (message.status as Message['status']) ?? 'delivered',
+              mediaUrl: message.mediaUrl ?? undefined,
+              metadata: {
+                senderType: message.senderType,
+                senderId: message.senderId,
+              },
+            }))
           : [];
 
         if (cancelled) return;
@@ -213,7 +141,7 @@ const ChatPage: React.FC = () => {
             <h2>Conversaciones</h2>
           </div>
 
-          <SimpleConversationList_v2
+          <GroupedConversationList_v2
             onSelectConversation={handleSelectConversation}
           />
         </div>
@@ -229,12 +157,9 @@ const ChatPage: React.FC = () => {
             </div>
           )}
 
-          {selectedContactGroup || activeConversation ? (
+          {activeConversation ? (
             <>
-              <ChatView_v2
-                contactGroup={selectedContactGroup}
-                conversationId={activeConversation?.id || 0}
-              />
+              <ChatView_v2 conversationId={activeConversation.id} />
               <ChatComposer_v2 />
             </>
           ) : (

@@ -47,6 +47,10 @@ export interface UseOrdersResult {
     orderId: number,
     data: { notas?: string; especificaciones?: string }
   ) => Promise<void>;
+  updateOrderStatus: (
+    orderId: number,
+    status: 'PENDING' | 'CONFIRMADO' | 'COMPLETADO' | 'CANCELADO'
+  ) => Promise<void>;
   deleteOrder: (orderId: number) => Promise<void>;
 }
 
@@ -87,6 +91,14 @@ export function useOrders(status?: string, search?: string): UseOrdersResult {
     try {
       const socket = getSocketManager();
 
+      // Si el socket no está inicializado, no hacer nada
+      if (!socket) {
+        console.log(
+          '[useOrders] Socket manager not initialized yet, skipping socket setup'
+        );
+        return;
+      }
+
       // Crear unsubscribe functions
       const unsubCreateOrder = socket.on('order:created', (newOrder: Order) => {
         setOrders((prev) => [newOrder, ...prev]);
@@ -113,9 +125,10 @@ export function useOrders(status?: string, search?: string): UseOrdersResult {
       );
 
       return () => {
-        unsubCreateOrder();
-        unsubUpdateOrder();
-        unsubDeleteOrder();
+        // Solo hacer cleanup si las funciones existen
+        if (unsubCreateOrder) unsubCreateOrder();
+        if (unsubUpdateOrder) unsubUpdateOrder();
+        if (unsubDeleteOrder) unsubDeleteOrder();
       };
     } catch (error) {
       console.error('Error setting up socket listeners:', error);
@@ -169,6 +182,34 @@ export function useOrders(status?: string, search?: string): UseOrdersResult {
     []
   );
 
+  // Actualizar solo el estado del pedido
+  const updateOrderStatus = useCallback(
+    async (
+      orderId: number,
+      status: 'PENDING' | 'CONFIRMADO' | 'COMPLETADO' | 'CANCELADO'
+    ) => {
+      try {
+        const response = await api.patch(`/orders/${orderId}/status`, {
+          status,
+        });
+
+        setOrders((prev) =>
+          prev.map((order) =>
+            order.id === orderId
+              ? { ...order, status: response.data.status || status }
+              : order
+          )
+        );
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Failed to update order status';
+        setError(message);
+        throw err;
+      }
+    },
+    []
+  );
+
   // Eliminar/cancelar pedido
   const deleteOrder = useCallback(async (orderId: number) => {
     try {
@@ -190,6 +231,7 @@ export function useOrders(status?: string, search?: string): UseOrdersResult {
     refetch,
     completeOrder,
     updateOrder,
+    updateOrderStatus,
     deleteOrder,
   };
 }

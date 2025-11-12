@@ -146,6 +146,29 @@ import {
 } from './node-execution.service.js';
 import { beginTrackedTask } from '../utils/shutdown-manager.js';
 
+/**
+ * Convierte BigInt a Number en un objeto para evitar errores de serialización JSON
+ */
+function sanitizeBigInts(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  if (typeof obj === 'bigint') {
+    return Number(obj);
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeBigInts);
+  }
+  if (typeof obj === 'object') {
+    const result: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = sanitizeBigInts(value);
+    }
+    return result;
+  }
+  return obj;
+}
+
 import {
   checkIfWithinWorkingHours,
   formatAfterHoursMessage,
@@ -1698,6 +1721,37 @@ async function handleIncomingMessage(
                   io
                 );
               }
+
+              // Verificar si hay acción end_flow (también puede ocurrir desde START)
+              const endFlowAction = chainResult.actions.find(
+                (a) => a.type === 'end_flow'
+              );
+              const shouldCreateOrder =
+                endFlowAction?.payload &&
+                typeof endFlowAction.payload === 'object'
+                  ? (endFlowAction.payload as Record<string, unknown>)
+                      .shouldCreateOrder === true
+                  : false;
+
+              // Crear orden si llegó al nodo END desde START
+              if (shouldCreateOrder) {
+                try {
+                  await createOrderFromCompletedFlow(
+                    Number(conversationId),
+                    chainResult.updatedContext,
+                    contact,
+                    conversation
+                  );
+                  console.log(
+                    `[FLOW] Orden creada exitosamente para conversación ${conversationId} (desde START)`
+                  );
+                } catch (orderError) {
+                  console.error(
+                    `[FLOW] Error creando orden para conversación ${conversationId}:`,
+                    orderError
+                  );
+                }
+              }
             }
             return;
           } catch (error) {
@@ -1908,6 +1962,32 @@ async function handleIncomingMessage(
             ? (endFlowAction.payload as Record<string, unknown>)
                 .shouldDeactivateBot === true
             : false;
+
+        const shouldCreateOrder =
+          endFlowAction?.payload && typeof endFlowAction.payload === 'object'
+            ? (endFlowAction.payload as Record<string, unknown>)
+                .shouldCreateOrder === true
+            : false;
+
+        // Crear orden si llegó al nodo END y completó el flujo
+        if (shouldCreateOrder) {
+          try {
+            await createOrderFromCompletedFlow(
+              Number(conversationId),
+              chainResult.updatedContext,
+              contact,
+              conversation
+            );
+            console.log(
+              `[FLOW] Orden creada exitosamente para conversación ${conversationId}`
+            );
+          } catch (orderError) {
+            console.error(
+              `[FLOW] Error creando orden para conversación ${conversationId}:`,
+              orderError
+            );
+          }
+        }
 
         // Guardar contexto final
         await touchConversation(conversationId, {
@@ -2220,6 +2300,103 @@ export async function startSession(ownerUserId: number, io?: SocketIOServer) {
   });
 
   return cache;
+}
+
+/**
+ * Crea una orden cuando se completa un flujo (llega al nodo END)
+ */
+async function createOrderFromCompletedFlow(
+  conversationId: number,
+  context: any,
+  contact: any,
+  conversation: any
+): Promise<void> {
+  try {
+    // Verificar si ya existe una orden para esta conversación
+    const existingOrder = await (prisma as any).order.findUnique({
+      where: { conversationId: BigInt(conversationId) },
+    });
+
+    if (existingOrder) {
+      console.log(
+        `[ORDER] Ya existe orden para conversación ${conversationId}, omitiendo creación`
+      );
+      return;
+    }
+
+    // Extraer datos del contexto y variables capturadas
+    const clientPhone = conversation.userPhone || '';
+    const clientName =
+      contact?.name || conversation.contactName || context.GLOBAL_nombre || '';
+
+    // Determinar el tipo de conversación basado en las variables del contexto
+    let tipoConversacion = 'General';
+    if (context.menu_selected) {
+      const menuOption = context.menu_selected.toLowerCase();
+      if (menuOption.includes('pedido')) {
+        tipoConversacion = 'Pedido';
+      } else if (menuOption.includes('precio')) {
+        tipoConversacion = 'Consulta Precio';
+      } else if (menuOption.includes('estado')) {
+        tipoConversacion = 'Estado Pedido';
+      } else if (menuOption.includes('ofertas')) {
+        tipoConversacion = 'Ofertas';
+      } else if (menuOption.includes('asesor')) {
+        tipoConversacion = 'Asesor';
+      }
+    }
+
+    // Recopilar todas las variables del contexto como datos del pedido
+    const contextVariables = { ...context };
+    delete contextVariables.lastMessage;
+    delete contextVariables.previousNode;
+    delete contextVariables.updatedAt;
+    delete contextVariables.waitingForInput;
+    delete contextVariables.waitingVariable;
+
+    // Crear la orden
+    const newOrder = await (prisma as any).order.create({
+      data: {
+        conversationId: BigInt(conversationId),
+        clientPhone,
+        clientName: clientName || 'Cliente',
+        tipoConversacion,
+        itemsJson: JSON.stringify(contextVariables),
+        status: 'PENDING',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      include: {
+        conversation: {
+          select: {
+            userPhone: true,
+            contactName: true,
+          },
+        },
+      },
+    });
+
+    console.log(`[ORDER] Nueva orden creada:`, {
+      orderId: newOrder.id,
+      conversationId,
+      clientPhone,
+      clientName,
+      tipoConversacion,
+    });
+
+    // Emitir evento de socket para notificar al frontend
+    const io = (global as any).io;
+    if (io) {
+      io.emit('order:created', sanitizeBigInts(newOrder));
+      console.log(`[ORDER] Evento socket emitido: order:created`);
+    }
+  } catch (error) {
+    console.error(
+      `[ORDER] Error creando orden para conversación ${conversationId}:`,
+      error
+    );
+    throw error;
+  }
 }
 
 export async function stopSession(ownerUserId: number) {

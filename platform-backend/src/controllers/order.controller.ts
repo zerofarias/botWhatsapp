@@ -2,6 +2,29 @@ import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
 
 /**
+ * Convierte BigInt a Number en un objeto para evitar errores de serialización JSON
+ */
+function sanitizeBigInts(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  if (typeof obj === 'bigint') {
+    return Number(obj);
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeBigInts);
+  }
+  if (typeof obj === 'object') {
+    const result: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = sanitizeBigInts(value);
+    }
+    return result;
+  }
+  return obj;
+}
+
+/**
  * Enviar mensaje WhatsApp al cliente
  * Nota: Esta función necesita ser implementada según tu arquitectura WPP
  */
@@ -85,8 +108,11 @@ export const getOrdersHandler = async (req: Request, res: Response) => {
 
     const total = await (prisma as any).order.count({ where });
 
+    // Convertir BigInts para evitar errores de serialización
+    const sanitizedOrders = sanitizeBigInts(orders);
+
     return res.status(200).json({
-      orders,
+      orders: sanitizedOrders,
       total,
       limit: parseInt(limit as string),
       offset: parseInt(offset as string),
@@ -138,7 +164,7 @@ export const getOrderHandler = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    return res.status(200).json(order);
+    return res.status(200).json(sanitizeBigInts(order));
   } catch (error) {
     console.error('Error fetching order:', error);
     return res.status(500).json({ error: 'Failed to fetch order' });
@@ -253,7 +279,7 @@ export const completeOrderHandler = async (req: Request, res: Response) => {
     // Emitir socket event
     const io = (global as any).io;
     if (io) {
-      io.emit('order:updated', updatedOrder);
+      io.emit('order:updated', sanitizeBigInts(updatedOrder));
       io.emit('order:completed', {
         orderId: updatedOrder.id,
         clientPhone: updatedOrder.conversation.userPhone,
@@ -264,7 +290,7 @@ export const completeOrderHandler = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      order: updatedOrder,
+      order: sanitizeBigInts(updatedOrder),
       message: `Pedido marcado como ${reason}`,
     });
   } catch (error) {
@@ -327,10 +353,10 @@ export const updateOrderHandler = async (req: Request, res: Response) => {
     // Emitir socket event
     const io = (global as any).io;
     if (io) {
-      io.emit('order:updated', updatedOrder);
+      io.emit('order:updated', sanitizeBigInts(updatedOrder));
     }
 
-    return res.status(200).json(updatedOrder);
+    return res.status(200).json(sanitizeBigInts(updatedOrder));
   } catch (error) {
     console.error('Error updating order:', error);
     return res.status(500).json({ error: 'Failed to update order' });
@@ -382,5 +408,97 @@ export const deleteOrderHandler = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error deleting order:', error);
     return res.status(500).json({ error: 'Failed to delete order' });
+  }
+};
+
+/**
+ * @swagger
+ * /orders/{id}/status:
+ *   patch:
+ *     summary: Actualizar solo el estado de un pedido
+ *     tags:
+ *       - Pedidos
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: number
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [PENDING, CONFIRMADO, COMPLETADO, CANCELADO]
+ *     responses:
+ *       200:
+ *         description: Estado actualizado exitosamente
+ *       404:
+ *         description: Pedido no encontrado
+ */
+export const updateOrderStatusHandler = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ error: 'Status is required' });
+    }
+
+    const validStatuses = ['PENDING', 'CONFIRMADO', 'COMPLETADO', 'CANCELADO'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        error:
+          'Invalid status. Must be one of: PENDING, CONFIRMADO, COMPLETADO, CANCELADO',
+      });
+    }
+
+    const existingOrder = await (prisma as any).order.findUnique({
+      where: { id: parseInt(id) },
+    });
+
+    if (!existingOrder) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const updateData: any = {
+      status,
+      updatedAt: new Date(),
+    };
+
+    // Si el estado cambia a COMPLETADO o CANCELADO, establecer closedAt
+    if (
+      (status === 'COMPLETADO' || status === 'CANCELADO') &&
+      !existingOrder.closedAt
+    ) {
+      updateData.closedAt = new Date();
+    }
+
+    const updatedOrder = await (prisma as any).order.update({
+      where: { id: parseInt(id) },
+      data: updateData,
+    });
+
+    // Convertir BigInts para evitar errores de serialización
+    const sanitizedOrder = sanitizeBigInts(updatedOrder);
+
+    // Emitir socket event para actualización en tiempo real
+    const io = (global as any).io;
+    if (io) {
+      io.emit('order:updated', sanitizedOrder);
+    }
+
+    return res.status(200).json({
+      message: 'Order status updated successfully',
+      order: sanitizedOrder,
+      status: sanitizedOrder.status,
+    });
+  } catch (error) {
+    console.error('Error updating order status:', error);
+    return res.status(500).json({ error: 'Failed to update order status' });
   }
 };

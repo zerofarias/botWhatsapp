@@ -4,6 +4,7 @@ import {
   getOrderHandler,
   completeOrderHandler,
   updateOrderHandler,
+  updateOrderStatusHandler,
   deleteOrderHandler,
 } from '../controllers/order.controller';
 import { authenticate } from '../middleware/auth';
@@ -28,6 +29,9 @@ router.get('/:id', getOrderHandler);
 
 // PATCH /orders/:id/complete - Completar un pedido
 router.patch('/:id/complete', completeOrderHandler);
+
+// PATCH /orders/:id/status - Actualizar solo el estado de un pedido
+router.patch('/:id/status', updateOrderStatusHandler);
 
 // PATCH /orders/:id - Actualizar un pedido
 router.patch('/:id', updateOrderHandler);

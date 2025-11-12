@@ -202,17 +202,20 @@ export function initializeSocket(
 ): SocketManager {
   if (!socketManager) {
     socketManager = new SocketManager(url, options);
+    // Conectar automáticamente cuando se inicializa
+    socketManager.connect().catch((error) => {
+      console.error('Failed to connect socket during initialization:', error);
+    });
   }
   return socketManager;
 }
 
-export function getSocketManager(): SocketManager {
+export function getSocketManager(): SocketManager | null {
   if (!socketManager) {
     console.warn(
       '⚠️ Socket manager not initialized. Call initializeSocket first.'
     );
-    // Don't throw - return null check instead
-    return null as any; // Caller should check
+    return null;
   }
   return socketManager;
 }

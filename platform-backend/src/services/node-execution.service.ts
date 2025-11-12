@@ -472,6 +472,7 @@ export async function executeNode({
         payload: {
           nodeId: node.id,
           shouldDeactivateBot: true,
+          shouldCreateOrder: true, // Nueva bandera para crear orden
         },
       });
       updatedContext.waitingForInput = false;
