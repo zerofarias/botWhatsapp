@@ -41,6 +41,20 @@ export const ConditionalNodeForm: React.FC<ConditionalNodeFormProps> = ({
   availableVariables = [],
   onChange,
 }) => {
+  const generateEvaluationId = () => {
+    try {
+      if (
+        typeof window !== 'undefined' &&
+        window.crypto &&
+        typeof window.crypto.randomUUID === 'function'
+      ) {
+        return window.crypto.randomUUID();
+      }
+    } catch {
+      // Ignore, fall back below
+    }
+    return `cond-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  };
   const handleEvalChange = (
     index: number,
     patch: Partial<ConditionalEvaluation>
@@ -53,7 +67,7 @@ export const ConditionalNodeForm: React.FC<ConditionalNodeFormProps> = ({
 
   const handleAddEvaluation = () => {
     const next: ConditionalEvaluation = {
-      id: crypto.randomUUID(),
+      id: generateEvaluationId(),
       label: 'Condición',
       operator: 'EQUALS',
       value: '',

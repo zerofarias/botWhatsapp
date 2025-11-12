@@ -168,6 +168,7 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
   const [statusError, setStatusError] = useState<string | null>(null);
   const [finishingReason, setFinishingReason] =
     useState<FinishPresetKey | null>(null);
+  const [isQuickFinishing, setIsQuickFinishing] = useState(false);
 
   const handleLoadMoreMessages = useCallback(() => {
     if (effectiveContactGroup) {
@@ -284,6 +285,33 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
     },
     [activeConversation]
   );
+
+  const handleQuickFinish = useCallback(async () => {
+    if (!activeConversation || conversationIsClosed) {
+      return;
+    }
+    const confirmed =
+      typeof window === 'undefined'
+        ? true
+        : window.confirm('�?"Seguro que deseas finalizar este chat?');
+    if (!confirmed) {
+      return;
+    }
+    try {
+      setIsQuickFinishing(true);
+      await finishConversationRequest('manual_close');
+      alert('La conversaci��n fue finalizada.');
+    } catch (error) {
+      alert(
+        getApiErrorMessage(
+          error,
+          'No se pudo finalizar la conversaci��n.'
+        )
+      );
+    } finally {
+      setIsQuickFinishing(false);
+    }
+  }, [activeConversation, conversationIsClosed, finishConversationRequest]);
 
   const handleStatusSubmit = useCallback(async () => {
     if (!activeConversation) return;
@@ -452,6 +480,16 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
               onClick={() => setContactModalMode('edit')}
             >
               Editar contacto
+            </button>
+          )}
+          {activeConversation && (
+            <button
+              type="button"
+              className="chat-area-v2-finish-chat-btn"
+              onClick={handleQuickFinish}
+              disabled={conversationIsClosed || isQuickFinishing}
+            >
+              {isQuickFinishing ? 'Finalizando...' : 'Finalizar chat'}
             </button>
           )}
         </div>

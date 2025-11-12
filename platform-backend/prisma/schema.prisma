@@ -127,7 +127,7 @@ model Flow {
   id                  Int              @id @default(autoincrement())
   name                String
   trigger             String?
-  message             String
+  message             String           @db.LongText
   type                String?          @db.VarChar(32)
   parentId            Int?             @map("parent_id")
   areaId              Int?             @map("area_id")

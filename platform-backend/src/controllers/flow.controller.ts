@@ -1578,8 +1578,12 @@ export async function saveFlowGraph(req: Request, res: Response) {
 
         const flowsToDelete = existingFlows.filter((flow) => {
           const builderMeta = extractBuilderMetadata(flow.metadata ?? null);
-          if (!builderMeta?.reactId) return false;
-          return !payloadReactIds.has(builderMeta.reactId);
+          if (builderMeta?.reactId) {
+            return !payloadReactIds.has(builderMeta.reactId);
+          }
+          // Fallback: legacy nodes without builder metadata should be deleted
+          // when they were not part of the payload processed in this save.
+          return !touchedFlowIds.has(flow.id);
         });
 
         if (flowsToDelete.length) {
