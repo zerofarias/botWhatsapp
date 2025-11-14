@@ -18,6 +18,15 @@ package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
+# SSL and Certificates
+platform-backend/greenlock.d/
+platform-backend/ssl/
+platform-backend/.well-known/
+*.pem
+*.crt
+*.key
+*.csr
+
 # Build artifacts
 dist/
 dist.zip

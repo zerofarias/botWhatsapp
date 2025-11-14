@@ -143,6 +143,7 @@ import {
   executeNodeChain,
   enrichContextWithGlobalVariables,
   interpolateVariables,
+  extractBuilderMetadata,
 } from './node-execution.service.js';
 import { beginTrackedTask } from '../utils/shutdown-manager.js';
 
@@ -293,7 +294,7 @@ type FlowExecutionResult = {
 
 const sessions = new Map<number, SessionCache>();
 const AFTER_HOURS_MESSAGE =
-  '🕓 Nuestro horario de atención es de 8:00 a 18:00 hs. Te responderemos apenas volvamos a estar disponibles.';
+  '?? Nuestro horario de atención es de 8:00 a 18:00 hs. Te responderemos apenas volvamos a estar disponibles.';
 
 function normalizeText(value: string) {
   return value
@@ -1030,7 +1031,7 @@ async function ensureConversation(
   const snapshot = await fetchConversationSnapshot_Full(created.id);
   if (!snapshot) {
     console.error(
-      `[CONVERSATION] ❌ Failed to fetch snapshot for conversation ${created.id}`
+      `[CONVERSATION] ? Failed to fetch snapshot for conversation ${created.id}`
     );
     return {
       conversation: created,
@@ -1041,7 +1042,7 @@ async function ensureConversation(
   }
 
   console.log(
-    `[CONVERSATION] ✅ Snapshot fetched successfully for conversation ${created.id}`
+    `[CONVERSATION] ? Snapshot fetched successfully for conversation ${created.id}`
   );
 
   // Emitir evento global de actualización
@@ -1052,7 +1053,7 @@ async function ensureConversation(
       source: 'incoming_message',
     });
     console.log(
-      `[CONVERSATION] 📢 Emitted conversation:update for ${created.id}`
+      `[CONVERSATION] ?? Emitted conversation:update for ${created.id}`
     );
   }
 
@@ -1066,7 +1067,7 @@ async function ensureConversation(
       source: 'incoming_message',
     });
     console.log(
-      `[CONVERSATION] ✅ Emitted conversation:new for ${created.id} to ALL clients`
+      `[CONVERSATION] ? Emitted conversation:new for ${created.id} to ALL clients`
     );
   }
 
@@ -1352,6 +1353,7 @@ async function handleIncomingMessage(
     createdBy: ownerUserId,
     includeInactive: false,
   });
+  const flatFlowNodes = flattenFlowTree(flows);
   const primaryMenu = buildPrimaryMenuMessage(flows);
 
   const caption =
@@ -1830,15 +1832,38 @@ async function handleIncomingMessage(
             : {};
 
         let capturedVariableName: string | null = null;
-        const waitingForInput = Boolean(
-          (workingContext as any).waitingForInput
-        );
-        const waitingVariable =
+        let waitingForInput = Boolean((workingContext as any).waitingForInput);
+        let waitingVariable =
           waitingForInput &&
           typeof (workingContext as any).waitingVariable === 'string'
             ? ((workingContext as any).waitingVariable as string)
             : null;
 
+        if (!waitingVariable && previousNodeId) {
+          const derivedNodeId = Number(previousNodeId);
+          if (!Number.isNaN(derivedNodeId)) {
+            const waitingNode = flatFlowNodes.find(
+              (node) => node.id === derivedNodeId
+            );
+            if (waitingNode) {
+              const builderMeta = extractBuilderMetadata(waitingNode.metadata);
+              const expectsResponse =
+                waitingNode.type === 'CAPTURE' ||
+                (waitingNode.type === 'TEXT' &&
+                  Boolean(builderMeta.waitForResponse));
+
+              if (expectsResponse && builderMeta.responseVariableName) {
+                waitingVariable = builderMeta.responseVariableName;
+                waitingForInput = true;
+                (workingContext as any).waitingVariable = waitingVariable;
+                (workingContext as any).waitingForInput = true;
+                console.warn(
+                  `[FLOW] Missing waitingVariable in context. Derived "${waitingVariable}" from node ${derivedNodeId}`
+                );
+              }
+            }
+          }
+        }
         if (waitingVariable) {
           const valueToCapture = finalContent;
 

@@ -76,4 +76,10 @@ export const env = {
     Number(process.env.FLOW_GRAPH_TRANSACTION_NODE_LIMIT) > 0
       ? Number(process.env.FLOW_GRAPH_TRANSACTION_NODE_LIMIT)
       : 1200,
+  // SSL Configuration
+  enableSsl: process.env.ENABLE_SSL === 'true',
+  domainName: process.env.DOMAIN_NAME || 'localhost',
+  email: process.env.EMAIL || 'admin@localhost',
+  staging: process.env.STAGING !== 'false',
+  greenlockConfigDir: process.env.GREENLOCK_CONFIG_DIR || './greenlock.d',
 };

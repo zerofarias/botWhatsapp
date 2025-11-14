@@ -1,0 +1,8 @@
+camarafarma.duckdns.org {
+reverse_proxy /api localhost:4000
+reverse_proxy /socket.io localhost:4001 {
+header_up Connection *
+header_up Upgrade websocket
+}
+respond / "SSL activo"
+}

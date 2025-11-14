@@ -1,4 +1,4 @@
-// Servicio principal para ejecutar nodos del Flow Builder
+﻿// Servicio principal para ejecutar nodos del Flow Builder
 import { prisma } from '../config/prisma.js';
 import type { ConversationContext } from './flow.service';
 
@@ -99,16 +99,36 @@ export interface ExecuteNodeResult {
   actions: Array<{ type: string; payload?: unknown }>;
 }
 
-function extractBuilderMetadata(metadata: unknown): BuilderMetadata {
-  if (
-    metadata &&
-    typeof metadata === 'object' &&
-    (metadata as Record<string, unknown>).builder
-  ) {
-    const builder = (metadata as Record<string, unknown>)
-      .builder as BuilderMetadata;
-    return builder ?? {};
+export function extractBuilderMetadata(metadata: unknown): BuilderMetadata {
+  let root: unknown = metadata;
+
+  if (typeof root === 'string') {
+    try {
+      root = JSON.parse(root);
+    } catch {
+      return {};
+    }
   }
+
+  if (!root || typeof root !== 'object') {
+    return {};
+  }
+
+  const builderValue = (root as Record<string, unknown>).builder;
+  let builder: unknown = builderValue;
+
+  if (typeof builderValue === 'string') {
+    try {
+      builder = JSON.parse(builderValue);
+    } catch {
+      builder = {};
+    }
+  }
+
+  if (builder && typeof builder === 'object') {
+    return builder as BuilderMetadata;
+  }
+
   return {};
 }
 
