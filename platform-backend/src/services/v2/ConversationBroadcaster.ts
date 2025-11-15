@@ -41,6 +41,8 @@ export class ConversationBroadcaster {
           status: true,
           botActive: true,
           lastActivity: true,
+          closedAt: true,
+          closedReason: true,
           updatedAt: true,
           contact: {
             select: {
@@ -77,6 +79,8 @@ export class ConversationBroadcaster {
         status: record.status,
         botActive: record.botActive,
         lastActivity: record.lastActivity.toISOString(),
+        closedAt: record.closedAt ? record.closedAt.toISOString() : null,
+        closedReason: record.closedReason ?? null,
         updatedAt: record.updatedAt.toISOString(),
       };
 

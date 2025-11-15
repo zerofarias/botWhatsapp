@@ -38,6 +38,8 @@ export interface Conversation {
   unreadCount: number;
   status?: ConversationStatus;
   progressStatus?: ConversationProgressStatus;
+  closedAt?: string | null;
+  closedReason?: string | null;
   contact?: {
     id: number;
     name: string;

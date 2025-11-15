@@ -27,6 +27,8 @@ export interface ConversationSnapshot {
   status: string;
   botActive: boolean;
   lastActivity: string;
+  closedAt?: string | null;
+  closedReason?: string | null;
   updatedAt: string;
 }
 
@@ -51,6 +53,8 @@ export const ConversationSnapshotSchema = z.object({
   status: z.string(),
   botActive: z.boolean(),
   lastActivity: z.string(),
+  closedAt: z.string().nullable().optional(),
+  closedReason: z.string().nullable().optional(),
   updatedAt: z.string(),
 });
 

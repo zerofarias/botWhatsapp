@@ -226,3 +226,14 @@
   cursor: not-allowed;
   box-shadow: none;
 }
+
+.chat-area-v2-closure-notice {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #ef4444;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 0.9rem;
+  font-weight: 600;
+}

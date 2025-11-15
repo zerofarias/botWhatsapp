@@ -116,6 +116,8 @@ export const ConversationSchema = z.object({
   lastMessageTime: z.number().optional(),
   unreadCount: z.number().default(0),
   progressStatus: z.string().optional(),
+  closedAt: z.string().nullable().optional(),
+  closedReason: z.string().nullable().optional(),
   contact: z
     .object({
       id: z.number(),

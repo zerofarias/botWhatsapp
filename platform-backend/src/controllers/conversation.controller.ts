@@ -1,4 +1,4 @@
-import { getNextNodeAndContext } from '../services/flow.service';
+﻿import { getNextNodeAndContext } from '../services/flow.service';
 /**
  * @swagger
  * /conversations:
@@ -39,7 +39,7 @@ import { getNextNodeAndContext } from '../services/flow.service';
  *                   lastMessage:
  *                     type: object
  *   post:
- *     summary: Crear una conversación
+ *     summary: Crear una conversaciÃ³n
  *     tags:
  *       - Conversaciones
  *     requestBody:
@@ -59,7 +59,7 @@ import { getNextNodeAndContext } from '../services/flow.service';
  *                 type: integer
  *     responses:
  *       201:
- *         description: Conversación creada
+ *         description: ConversaciÃ³n creada
  *         content:
  *           application/json:
  *             schema:
@@ -74,7 +74,7 @@ import { getNextNodeAndContext } from '../services/flow.service';
  *                 createdAt:
  *                   type: string
  *       500:
- *         description: Error al crear conversación
+ *         description: Error al crear conversaciÃ³n
  */
 
 import { ConversationProgressStatus, ConversationStatus } from '@prisma/client';
@@ -109,16 +109,16 @@ import {
 import { executeNode } from '../services/node-execution.service.js';
 
 const PROGRESS_STATUS_MESSAGES: Record<ConversationProgressStatus, string> = {
-  PENDING: 'Su pedido está pendiente. En breve le daremos novedades.',
-  IN_PREPARATION: 'Su pedido está en preparación.',
-  COMPLETED: 'Su pedido está completado.',
+  PENDING: 'Su pedido estÃ¡ pendiente. En breve le daremos novedades.',
+  IN_PREPARATION: 'Su pedido estÃ¡ en preparaciÃ³n.',
+  COMPLETED: 'Su pedido estÃ¡ completado.',
   CANCELLED:
-    'Su pedido ha sido cancelado. Si necesita ayuda contáctenos nuevamente.',
+    'Su pedido ha sido cancelado. Si necesita ayuda contÃ¡ctenos nuevamente.',
   INACTIVE:
-    'Cerramos esta conversación por inactividad. Escríbanos si necesita continuar.',
+    'Cerramos esta conversaciÃ³n por inactividad. EscrÃ­banos si necesita continuar.',
 };
 
-// Controladores de conversación
+// Controladores de conversaciÃ³n
 export async function takeConversationHandler(req: Request, res: Response) {
   if (!req.user) {
     return res.status(401).json({ message: 'Unauthorized' });
@@ -149,7 +149,7 @@ export async function takeConversationHandler(req: Request, res: Response) {
     },
   });
 
-  // Notificación en tiempo real
+  // NotificaciÃ³n en tiempo real
   const io = getSocketServer();
   io?.emit('conversation:take', {
     conversationId: conversationId.toString(),
@@ -158,7 +158,7 @@ export async function takeConversationHandler(req: Request, res: Response) {
     botActive: false,
   });
 
-  // También emitir actualización completa de la conversación
+  // TambiÃ©n emitir actualizaciÃ³n completa de la conversaciÃ³n
   await broadcastConversationUpdate(io, conversationId);
 
   res.json({ success: true, assignedTo: req.user.id, botActive: false });
@@ -175,29 +175,71 @@ export async function finishConversationHandler(req: Request, res: Response) {
   } catch {
     return res.status(400).json({ message: 'Invalid conversation id.' });
   }
-  const { reason } = req.body ?? {};
-  await prisma.conversation.update({
+
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { status: true },
+  });
+  if (!conversation) {
+    return res.status(404).json({ message: 'Conversation not found.' });
+  }
+
+  const rawReason =
+    typeof req.body?.reason === 'string' && req.body.reason.trim().length > 0
+      ? req.body.reason.trim()
+      : null;
+  const resolvedReason = rawReason ?? 'manual_close';
+  const now = new Date();
+
+  const updatedConversation = await prisma.conversation.update({
     where: { id: conversationId },
     data: {
       status: 'CLOSED',
       botActive: false,
+      lastActivity: now,
+      closedAt: now,
+      closedReason: resolvedReason,
       assignedTo: { disconnect: true },
+      closedBy: { connect: { id: req.user.id } },
+    },
+    select: {
+      id: true,
+      status: true,
+      closedAt: true,
+      closedReason: true,
     },
   });
-  // Notificación en tiempo real
+
+  await addConversationEvent(
+    conversationId,
+    'STATUS_CHANGE',
+    {
+      previousStatus: conversation.status,
+      newStatus: 'CLOSED',
+      reason: resolvedReason,
+      closedAt: now.toISOString(),
+    },
+    req.user.id
+  );
+
   const io = getSocketServer();
   io?.emit('conversation:finish', {
     conversationId: conversationId.toString(),
     status: 'CLOSED',
-    reason: reason ?? 'manual_close',
+    reason: resolvedReason,
+    closedAt: updatedConversation.closedAt?.toISOString() ?? null,
+    closedReason: resolvedReason,
   });
+  await broadcastConversationUpdate(io, conversationId);
+
   res.json({
     success: true,
-    status: 'CLOSED',
-    reason: reason ?? 'manual_close',
+    status: updatedConversation.status,
+    reason: resolvedReason,
+    closedAt: updatedConversation.closedAt?.toISOString() ?? null,
+    closedReason: resolvedReason,
   });
 }
-
 export async function listAllChatsHandler(req: Request, res: Response) {
   if (!req.user) {
     return res.status(401).json({ message: 'Unauthorized' });
@@ -235,7 +277,7 @@ export async function listAllChatsHandler(req: Request, res: Response) {
     });
   }
 }
-// Endpoint para listar todos los chats de un número, separados por estado
+// Endpoint para listar todos los chats de un nÃºmero, separados por estado
 
 interface Contact {
   id: string | number;
@@ -298,7 +340,8 @@ function mapConversationForResponse(conversation: Conversation) {
     ? sanitizeBigInts({
         ...conversation.contact,
         id:
-          conversation.contact.id?.toString?.() ?? String(conversation.contact.id),
+          conversation.contact.id?.toString?.() ??
+          String(conversation.contact.id),
       })
     : null;
   const messages = Array.isArray(conversation.messages)
@@ -335,7 +378,7 @@ export async function listAllChatsByPhoneHandler(req: Request, res: Response) {
     phone.startsWith('+') ? phone.substring(1) : null,
   ].filter(Boolean) as string[];
 
-  // Buscar todas las conversaciones de ese número
+  // Buscar todas las conversaciones de ese nÃºmero
   const allChats = await prisma.conversation.findMany({
     where: {
       userPhone: {
@@ -372,7 +415,7 @@ export async function getCombinedChatHistoryHandler(
     return res.status(400).json({ message: 'Phone is required.' });
   }
 
-  // Desabilitar caché del navegador para este endpoint
+  // Desabilitar cachÃ© del navegador para este endpoint
   res.set(
     'Cache-Control',
     'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0'
@@ -380,18 +423,18 @@ export async function getCombinedChatHistoryHandler(
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
 
-  // Opcional: verificar permisos del usuario sobre ese teléfono
+  // Opcional: verificar permisos del usuario sobre ese telÃ©fono
   try {
     console.log(`[GET /api/conversations/history/${phone}] Starting...`);
     const history = await getCombinedChatHistoryByPhone(phone);
     console.log(
-      `[GET /api/conversations/history/${phone}] ✅ History loaded: ${
+      `[GET /api/conversations/history/${phone}] âœ… History loaded: ${
         history?.length || 0
       } items`
     );
     res.json(history);
   } catch (error) {
-    console.error(`[GET /api/conversations/history/${phone}] ❌ ERROR:`, error);
+    console.error(`[GET /api/conversations/history/${phone}] âŒ ERROR:`, error);
     res.status(500).json({
       message: 'Error al obtener historial combinado',
       error: String(error),
@@ -414,7 +457,7 @@ export async function getSingleConversationHistoryHandler(
     return res.status(400).json({ message: 'Invalid conversation id.' });
   }
 
-  // Desabilitar caché
+  // Desabilitar cachÃ©
   res.set(
     'Cache-Control',
     'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0'
@@ -431,18 +474,18 @@ export async function getSingleConversationHistoryHandler(
     );
     const history = await getSingleConversationHistory(conversationId);
     console.log(
-      `[GET /api/conversations/${conversationId}/history] ✅ History loaded: ${
+      `[GET /api/conversations/${conversationId}/history] âœ… History loaded: ${
         history?.length || 0
       } items`
     );
     res.json(history);
   } catch (error) {
     console.error(
-      `[GET /api/conversations/${conversationId}/history] ❌ ERROR:`,
+      `[GET /api/conversations/${conversationId}/history] âŒ ERROR:`,
       error
     );
     res.status(500).json({
-      message: 'Error al obtener historial de conversación',
+      message: 'Error al obtener historial de conversaciÃ³n',
       error: String(error),
     });
   }
@@ -496,7 +539,7 @@ export async function createConversationNoteHandler(
   });
 }
 
-// Listar notas internas de una conversación
+// Listar notas internas de una conversaciÃ³n
 export async function listConversationNotesHandler(
   req: Request,
   res: Response
@@ -706,14 +749,14 @@ export async function sendConversationMessageHandler(
     createdAt: outbound ? resolveMessageDate(outbound) : new Date(),
   });
 
-  // 🚀 RESPOND IMMEDIATELY to client (before background processing)
+  // ðŸš€ RESPOND IMMEDIATELY to client (before background processing)
   res.status(201).json({
     id: messageRecord.id.toString(),
     createdAt: messageRecord.createdAt,
     isDelivered: messageRecord.isDelivered,
   });
 
-  // 🔄 BACKGROUND PROCESSING - Fire and forget (no await)
+  // ðŸ”„ BACKGROUND PROCESSING - Fire and forget (no await)
   // This prevents blocking the HTTP response while still updating state
   // Use setImmediate instead of process.nextTick to ensure request context is fully released
   setImmediate(async () => {
@@ -727,13 +770,13 @@ export async function sendConversationMessageHandler(
         ]);
         await broadcastConversationUpdate(io, conversationId);
         console.log(
-          `[sendConversationMessageHandler] ✅ Background socket broadcast completed for message ${messageRecord.id}`
+          `[sendConversationMessageHandler] âœ… Background socket broadcast completed for message ${messageRecord.id}`
         );
       }
 
       // Try to update conversation context, but don't fail if it errors
       try {
-        // Lógica para determinar el siguiente nodo y contexto
+        // LÃ³gica para determinar el siguiente nodo y contexto
         const { nextNodeId, newContext } = await getNextNodeAndContext({
           currentNodeId: conversation.currentFlowNodeId,
           message: bodyContent,
@@ -742,11 +785,11 @@ export async function sendConversationMessageHandler(
           conversationId,
         });
 
-        // Si la función no retorna un nodo válido, se mantiene el actual y el contexto
+        // Si la funciÃ³n no retorna un nodo vÃ¡lido, se mantiene el actual y el contexto
         const finalNodeId = nextNodeId ?? conversation.currentFlowNodeId;
         const finalContext = newContext ?? conversation.context;
 
-        // Asegurar que context sea un string JSON válido
+        // Asegurar que context sea un string JSON vÃ¡lido
         let contextValue: string | null = null;
         if (finalContext) {
           contextValue =
@@ -773,18 +816,18 @@ export async function sendConversationMessageHandler(
 
         await touchConversation(conversationId, updateData);
         console.log(
-          `[sendConversationMessageHandler] ✅ Background context update completed for message ${messageRecord.id}`
+          `[sendConversationMessageHandler] âœ… Background context update completed for message ${messageRecord.id}`
         );
       } catch (contextError) {
         console.warn(
-          `[sendConversationMessageHandler] ⚠️ Background context update failed (non-critical):`,
+          `[sendConversationMessageHandler] âš ï¸ Background context update failed (non-critical):`,
           contextError instanceof Error ? contextError.message : contextError
         );
         // Don't fail - context update is optional
       }
     } catch (error) {
       console.error(
-        `[sendConversationMessageHandler] ❌ Background processing error for message ${messageRecord.id}:`,
+        `[sendConversationMessageHandler] âŒ Background processing error for message ${messageRecord.id}:`,
         error instanceof Error ? error.message : error
       );
       // Client already has message confirmation, so we don't fail the request
@@ -899,7 +942,7 @@ export async function updateConversationProgressStatusHandler(
   });
 }
 /**
- * Inicia el flujo de una conversación ejecutando el nodo START
+ * Inicia el flujo de una conversaciÃ³n ejecutando el nodo START
  * POST /conversations/:id/start-flow
  */
 export async function startFlowHandler(req: Request, res: Response) {
@@ -985,7 +1028,7 @@ export async function startFlowHandler(req: Request, res: Response) {
     context: parsedContext,
   });
 
-  // Actualizar la conversación con el siguiente nodo
+  // Actualizar la conversaciÃ³n con el siguiente nodo
   await prisma.conversation.update({
     where: { id: conversationId },
     data: {
@@ -1001,8 +1044,8 @@ export async function startFlowHandler(req: Request, res: Response) {
       (a: any) => a.type === 'send_message'
     );
     if (sendMessageAction) {
-      // Aquí se podría integrar con WhatsApp para enviar el mensaje
-      // Por ahora, se retorna la acción para que el cliente la maneje
+      // AquÃ­ se podrÃ­a integrar con WhatsApp para enviar el mensaje
+      // Por ahora, se retorna la acciÃ³n para que el cliente la maneje
     }
   }
 

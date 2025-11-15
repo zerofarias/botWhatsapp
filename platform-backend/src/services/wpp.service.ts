@@ -15,6 +15,8 @@ export async function fetchConversationSnapshot(
       progressStatus: true,
       botActive: true,
       lastActivity: true,
+      closedAt: true,
+      closedReason: true,
       updatedAt: true,
       contact: {
         select: {
@@ -50,6 +52,8 @@ export async function fetchConversationSnapshot(
     progressStatus: record.progressStatus,
     botActive: record.botActive,
     lastActivity: record.lastActivity.toISOString(),
+    closedAt: record.closedAt ? record.closedAt.toISOString() : null,
+    closedReason: record.closedReason ?? null,
     updatedAt: record.updatedAt.toISOString(),
   };
 }
@@ -252,6 +256,8 @@ type ConversationSnapshot = {
   progressStatus: string;
   botActive: boolean;
   lastActivity: string;
+  closedAt: string | null;
+  closedReason: string | null;
   updatedAt: string;
 };
 

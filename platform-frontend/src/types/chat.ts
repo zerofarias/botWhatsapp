@@ -30,6 +30,8 @@ export type ConversationSummary = {
   progressStatus?: ConversationProgressStatus;
   botActive: boolean;
   lastActivity: string;
+  closedAt?: string | null;
+  closedReason?: string | null;
   updatedAt: string;
   lastMessage: {
     id: string;
