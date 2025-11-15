@@ -37,6 +37,14 @@ const ChatComposer_v2: React.FC = () => {
   const activeConversation = useChatStore(selectActiveConversation);
   const sending = useChatStore(selectSending);
   const { sendMessage } = useMessageSender();
+  const isConversationClosed = activeConversation?.status === 'CLOSED';
+  const composerDisabled = !activeConversation || isConversationClosed;
+  const disabledPlaceholder = composerDisabled
+    ? !activeConversation
+      ? 'Selecciona una conversacion para escribir.'
+      : 'La conversacion esta cerrada. Reactivala para escribir.'
+    : null;
+  const showLockedBanner = Boolean(activeConversation && isConversationClosed);
 
   // Load quick replies on component mount
   useEffect(() => {
@@ -122,7 +130,7 @@ const ChatComposer_v2: React.FC = () => {
     async (e: React.FormEvent) => {
       e.preventDefault();
 
-      if (!content.trim() || !activeConversation) {
+      if (!content.trim() || !activeConversation || composerDisabled) {
         console.warn(
           '[ChatComposer_v2] Missing content or activeConversation',
           {
@@ -156,7 +164,14 @@ const ChatComposer_v2: React.FC = () => {
         );
       }
     },
-    [content, activeConversation, sendMessage, sendNoteInternally, isNoteMode]
+    [
+      content,
+      activeConversation,
+      sendMessage,
+      sendNoteInternally,
+      isNoteMode,
+      composerDisabled,
+    ]
   );
 
   const handleKeyDown = useCallback(
@@ -223,7 +238,7 @@ const ChatComposer_v2: React.FC = () => {
               type="button"
               className="chat-composer-v2-btn-icon"
               onClick={() => setIsNoteMode(true)}
-              disabled={sending || !activeConversation}
+              disabled={sending || composerDisabled}
               title="Agregar nota interna"
             >
               📝
@@ -250,7 +265,7 @@ const ChatComposer_v2: React.FC = () => {
             type="button"
             className="chat-composer-v2-btn-icon"
             onClick={() => setShowQuickReplyEditor(true)}
-            disabled={sending || !activeConversation}
+            disabled={sending || composerDisabled}
             title="Crear nuevo atajo rápido"
           >
             ⚡
@@ -262,11 +277,12 @@ const ChatComposer_v2: React.FC = () => {
               onChange={(e) => setContent(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={
-                isNoteMode
+                disabledPlaceholder ??
+                (isNoteMode
                   ? 'Escribe una nota interna...'
-                  : 'Escribe un mensaje o / para atajos...'
+                  : 'Escribe un mensaje o / para atajos...')
               }
-              disabled={sending || !activeConversation}
+              disabled={sending || composerDisabled}
               className={`chat-composer-v2-textarea ${
                 isNoteMode ? 'note-mode' : ''
               }`}
@@ -301,7 +317,7 @@ const ChatComposer_v2: React.FC = () => {
 
           <button
             type="submit"
-            disabled={!content.trim() || sending || !activeConversation}
+            disabled={!content.trim() || sending || composerDisabled}
             className="chat-composer-v2-btn-send"
             title={isNoteMode ? 'Guardar nota (Enter)' : 'Enviar (Enter)'}
           >
@@ -309,6 +325,12 @@ const ChatComposer_v2: React.FC = () => {
           </button>
         </div>
       </form>
+
+      {showLockedBanner && (
+        <div className="chat-composer-v2-locked-banner">
+          La conversacion esta cerrada. Reactivala para enviar mensajes.
+        </div>
+      )}
 
       {/* Quick Reply Editor Modal */}
       <QuickReplyEditor

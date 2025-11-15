@@ -72,11 +72,13 @@ export function useGroupedConversations() {
 
     conversationData.forEach((conv) => {
       const phone = conv.userPhone || 'Unknown';
+      const contactName = conv.contact?.name?.trim();
+      const formattedPhone = formatPhoneNumber(phone);
 
       if (!groups.has(phone)) {
         groups.set(phone, {
           phoneNumber: phone,
-          displayNumber: formatPhoneNumber(phone),
+          displayNumber: contactName || formattedPhone,
           conversations: [],
           unreadCount: 0,
           lastActivity: '',
@@ -85,6 +87,11 @@ export function useGroupedConversations() {
 
       const group = groups.get(phone)!;
       group.conversations.push(conv);
+
+      // Prefer mostrar el nombre del contacto si estÃ¡ agendado
+      if (contactName) {
+        group.displayNumber = contactName;
+      }
 
       // Update last activity timestamp (use the most recent)
       const convActivity = new Date(

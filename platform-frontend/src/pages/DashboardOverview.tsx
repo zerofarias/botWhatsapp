@@ -40,6 +40,8 @@ export default function DashboardOverview() {
   const [messages, setMessages] = useState<MessagePreview[]>([]);
   const [startLoading, setStartLoading] = useState(false);
   const [stopLoading, setStopLoading] = useState(false);
+  const [pauseLoading, setPauseLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [conversationStats, setConversationStats] = useState<ConversationStats>(
     {
       active: 0,
@@ -50,6 +52,26 @@ export default function DashboardOverview() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState<string | null>(null);
   const socket = useSocket();
+
+  const buildStatusState = useCallback(
+    (statusValue: string): BotStatus => ({
+      record: {
+        status: statusValue,
+        connectedAt: null,
+        paused: false,
+        lastQr: null,
+        lastQrAscii: null,
+      },
+      cache: {
+        status: statusValue,
+        lastQr: null,
+        lastQrAscii: null,
+        connectedAt: undefined,
+        paused: false,
+      },
+    }),
+    []
+  );
 
   const lastQrImage = useMemo(
     () => status?.cache?.lastQr ?? status?.record?.lastQr ?? null,
@@ -127,45 +149,52 @@ export default function DashboardOverview() {
     if (!socket) return;
 
     const onStatus = (payload: string) => {
-      setStatus((prev) =>
-        prev
-          ? {
-              ...prev,
-              cache: {
-                status: payload,
-                lastQr: prev.cache?.lastQr ?? prev.record?.lastQr ?? null,
-                lastQrAscii:
-                  prev.cache?.lastQrAscii ?? prev.record?.lastQrAscii ?? null,
-                connectedAt:
-                  prev.cache?.connectedAt ??
-                  prev.record?.connectedAt ??
-                  undefined,
-                paused: prev.cache?.paused ?? prev.record?.paused ?? false,
-              },
-            }
-          : prev
-      );
+      setStatus((prev) => {
+        const next = prev ?? buildStatusState(payload);
+        return {
+          ...next,
+          cache: {
+            status: payload,
+            lastQr: next.cache?.lastQr ?? next.record?.lastQr ?? null,
+            lastQrAscii:
+              next.cache?.lastQrAscii ?? next.record?.lastQrAscii ?? null,
+            connectedAt:
+              next.cache?.connectedAt ?? next.record?.connectedAt ?? undefined,
+            paused: next.cache?.paused ?? next.record?.paused ?? false,
+          },
+        };
+      });
     };
 
     const onQr = ({ ascii, qr }: { ascii: string; qr: string }) => {
-      setStatus((prev) =>
-        prev
-          ? {
-              ...prev,
-              cache: {
-                status:
-                  prev.cache?.status ?? prev.record.status ?? 'CONNECTING',
-                lastQr: qr,
-                lastQrAscii: ascii,
-                connectedAt:
-                  prev.cache?.connectedAt ??
-                  prev.record.connectedAt ??
-                  undefined,
-                paused: prev.cache?.paused ?? prev.record.paused,
-              },
-            }
-          : prev
-      );
+      setStatus((prev) => {
+        const next =
+          prev ??
+          (() => {
+            const base = buildStatusState('CONNECTING');
+            return {
+              ...base,
+              record: { ...base.record, lastQr: qr, lastQrAscii: ascii },
+            };
+          })();
+
+        return {
+          ...next,
+          cache: {
+            status: next.cache?.status ?? next.record?.status ?? 'CONNECTING',
+            lastQr: qr,
+            lastQrAscii: ascii,
+            connectedAt:
+              next.cache?.connectedAt ?? next.record?.connectedAt ?? undefined,
+            paused: next.cache?.paused ?? next.record?.paused ?? false,
+          },
+          record: {
+            ...next.record,
+            lastQr: next.record?.lastQr ?? qr,
+            lastQrAscii: next.record?.lastQrAscii ?? ascii,
+          },
+        };
+      });
     };
 
     const onMessage = (payload: {
@@ -242,13 +271,16 @@ export default function DashboardOverview() {
       socket.off('conversation:closed', refreshStats);
       socket.off('conversation:new', refreshStats);
     };
-  }, [socket]);
+  }, [socket, buildStatusState]);
 
   const handleStart = async () => {
     setStartLoading(true);
     try {
       await api.post('/bot/start');
-      void fetchStatus();
+      await fetchStatus();
+    } catch (error) {
+      console.error('[Dashboard] Failed to start bot', error);
+      alert('No se pudo iniciar el bot. Revisa la consola para más detalles.');
     } finally {
       setStartLoading(false);
     }
@@ -258,15 +290,44 @@ export default function DashboardOverview() {
     setStopLoading(true);
     try {
       await api.post('/bot/stop');
-      void fetchStatus();
+      await fetchStatus();
+    } catch (error) {
+      console.error('[Dashboard] Failed to stop bot', error);
+      alert('No se pudo detener el bot.');
     } finally {
       setStopLoading(false);
     }
   };
 
   const handlePauseToggle = async (paused: boolean) => {
-    await api.post('/bot/pause', { paused });
-    void fetchStatus();
+    setPauseLoading(true);
+    try {
+      await api.post('/bot/pause', { paused });
+      await fetchStatus();
+    } catch (error) {
+      console.error('[Dashboard] Failed to toggle pause', error);
+      alert('No se pudo actualizar el estado de pausa.');
+    } finally {
+      setPauseLoading(false);
+    }
+  };
+
+  const handleResetSession = async () => {
+    const confirmed = window.confirm(
+      'Se eliminará la sesión actual y deberás escanear el código QR nuevamente. ¿Deseas continuar?'
+    );
+    if (!confirmed) return;
+    setResetLoading(true);
+    try {
+      await api.post('/bot/reset');
+      alert('Sesión eliminada. Escanea el nuevo QR para reconectar.');
+      await fetchStatus();
+    } catch (error) {
+      console.error('[Dashboard] Failed to reset bot session', error);
+      alert('No se pudo borrar la sesión. Intenta nuevamente.');
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   if (loading && !status) {
@@ -404,18 +465,37 @@ export default function DashboardOverview() {
                 !(status?.cache?.paused ?? status?.record?.paused)
               )
             }
+            disabled={pauseLoading}
             style={{
               padding: '0.65rem 1.2rem',
               borderRadius: '10px',
               border: '1px solid #0f172a',
-              background: '#fff',
+              background: pauseLoading ? '#f1f5f9' : '#fff',
               color: '#0f172a',
-              cursor: 'pointer',
+              cursor: pauseLoading ? 'not-allowed' : 'pointer',
+              opacity: pauseLoading ? 0.75 : 1,
             }}
           >
-            {status?.cache?.paused ?? status?.record?.paused
+            {pauseLoading
+              ? 'Actualizando...'
+              : status?.cache?.paused ?? status?.record?.paused
               ? 'Reanudar bot'
               : 'Pausar bot'}
+          </button>
+          <button
+            onClick={handleResetSession}
+            disabled={resetLoading}
+            style={{
+              padding: '0.65rem 1.2rem',
+              borderRadius: '10px',
+              border: 'none',
+              background: resetLoading ? '#cbd5f5' : '#6366f1',
+              color: '#fff',
+              cursor: resetLoading ? 'not-allowed' : 'pointer',
+              opacity: resetLoading ? 0.75 : 1,
+            }}
+          >
+            {resetLoading ? 'Borrando...' : 'Borrar número'}
           </button>
         </div>
       </section>

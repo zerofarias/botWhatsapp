@@ -116,6 +116,8 @@ export function emitToRoom(
   if (!io) return;
   io.to(room).emit(event, payload);
 }
+import fs from 'fs/promises';
+import path from 'path';
 import {
   create as createClient,
   type CreateOptions,
@@ -186,6 +188,8 @@ import {
   getMediaTypeFromMimetype,
   type MediaFile,
 } from './media.service.js';
+
+const tokensRoot = path.resolve(process.cwd(), 'tokens');
 
 type SessionCache = {
   client: Whatsapp;
@@ -2432,9 +2436,23 @@ async function createOrderFromCompletedFlow(
 
 export async function stopSession(ownerUserId: number) {
   const cache = sessions.get(ownerUserId);
-  if (!cache) return;
+  if (!cache) {
+    await upsertBotSession(ownerUserId, {
+      status: 'DISCONNECTED',
+      connectedAt: null,
+    });
+    return;
+  }
 
-  await cache.client.close();
+  try {
+    await cache.client.close();
+  } catch (error) {
+    console.warn(
+      '[WPP] Error closing session client',
+      ownerUserId,
+      error instanceof Error ? error.message : error
+    );
+  }
   sessions.delete(ownerUserId);
   await upsertBotSession(ownerUserId, {
     status: 'DISCONNECTED',
@@ -2450,6 +2468,75 @@ export async function pauseSession(ownerUserId: number, paused: boolean) {
   }
 
   await upsertBotSession(ownerUserId, { paused });
+}
+
+export async function clearSessionData(ownerUserId: number) {
+  const sessionDir = path.join(tokensRoot, `user-${ownerUserId}`);
+  const zipPath = `${sessionDir}.zip`;
+
+  try {
+    await fs.rm(sessionDir, { recursive: true, force: true });
+    console.log('[WPP] Removed session folder', sessionDir);
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    console.warn(
+      '[WPP] Failed to remove session folder',
+      sessionDir,
+      err?.message ?? err
+    );
+    if (err && err.code === 'EBUSY') {
+      try {
+        await removeLockFiles(sessionDir);
+        const fallbackDir = `${sessionDir}.old-${Date.now()}`;
+        await fs.rename(sessionDir, fallbackDir);
+        console.log('[WPP] Renamed busy session folder to', fallbackDir);
+      } catch (renameError) {
+        console.warn(
+          '[WPP] Failed to rename busy session folder',
+          renameError instanceof Error ? renameError.message : renameError
+        );
+      }
+    }
+  }
+
+  try {
+    await fs.rm(zipPath, { force: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      console.warn(
+        '[WPP] Failed to remove session zip',
+        zipPath,
+        error instanceof Error ? error.message : error
+      );
+    }
+  }
+
+  await upsertBotSession(ownerUserId, {
+    status: 'DISCONNECTED',
+    connectedAt: null,
+    lastQr: null,
+  });
+}
+
+async function removeLockFiles(folder: string) {
+  try {
+    const entries = await fs.readdir(folder);
+    await Promise.all(
+      entries
+        .filter((name) =>
+          ['lockfile', 'SingletonLock', 'SingletonCookie'].includes(name)
+        )
+        .map((file) =>
+          fs
+            .rm(path.join(folder, file), { force: true })
+            .catch((err) =>
+              console.warn('[WPP] Failed to remove lock file', file, err)
+            )
+        )
+    );
+  } catch (error) {
+    // directory might not exist
+  }
 }
 
 export function getSessionInfo(ownerUserId: number) {

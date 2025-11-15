@@ -38,6 +38,7 @@ export interface Conversation {
   unreadCount: number;
   status?: ConversationStatus;
   progressStatus?: ConversationProgressStatus;
+  botActive?: boolean;
   closedAt?: string | null;
   closedReason?: string | null;
   contact?: {

@@ -77,7 +77,11 @@
  *         description: Error al crear conversaciÃ³n
  */
 
-import { ConversationProgressStatus, ConversationStatus } from '@prisma/client';
+import {
+  ConversationProgressStatus,
+  ConversationStatus,
+  OrderStatus,
+} from '@prisma/client';
 import type { Request, Response } from 'express';
 import { prisma } from '../config/prisma.js';
 import { getSocketServer } from '../lib/socket.js';
@@ -109,14 +113,99 @@ import {
 import { executeNode } from '../services/node-execution.service.js';
 
 const PROGRESS_STATUS_MESSAGES: Record<ConversationProgressStatus, string> = {
-  PENDING: 'Su pedido estÃ¡ pendiente. En breve le daremos novedades.',
-  IN_PREPARATION: 'Su pedido estÃ¡ en preparaciÃ³n.',
-  COMPLETED: 'Su pedido estÃ¡ completado.',
+  PENDING: 'Su pedido está pendiente. En breve le daremos novedades.',
+  IN_PREPARATION: 'Su pedido está en preparación.',
+  COMPLETED: 'Su pedido está completado.',
   CANCELLED:
-    'Su pedido ha sido cancelado. Si necesita ayuda contÃ¡ctenos nuevamente.',
+    'Su pedido ha sido cancelado. Si necesita ayuda contáctenos nuevamente.',
   INACTIVE:
-    'Cerramos esta conversaciÃ³n por inactividad. EscrÃ­banos si necesita continuar.',
+    'Cerramos esta conversación por inactividad. Escríbanos si necesita continuar.',
 };
+
+const PROGRESS_TO_ORDER_STATUS: Partial<
+  Record<ConversationProgressStatus, OrderStatus>
+> = {
+  PENDING: OrderStatus.PENDING,
+  IN_PREPARATION: OrderStatus.CONFIRMADO,
+  COMPLETED: OrderStatus.COMPLETADO,
+  CANCELLED: OrderStatus.CANCELADO,
+};
+
+function sanitizeOrderBigInts(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  if (typeof obj === 'bigint') {
+    return Number(obj);
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeOrderBigInts);
+  }
+  if (typeof obj === 'object') {
+    const result: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = sanitizeOrderBigInts(value);
+    }
+    return result;
+  }
+  return obj;
+}
+
+async function syncOrderStatusWithProgress(
+  conversationId: bigint,
+  progressStatus: ConversationProgressStatus
+) {
+  const targetStatus = PROGRESS_TO_ORDER_STATUS[progressStatus];
+  if (!targetStatus) {
+    return;
+  }
+
+  try {
+    const updateData: Record<string, unknown> = {
+      status: targetStatus,
+      updatedAt: new Date(),
+    };
+
+    if (
+      targetStatus === OrderStatus.COMPLETADO ||
+      targetStatus === OrderStatus.CANCELADO
+    ) {
+      updateData.closedAt = new Date();
+    } else {
+      updateData.closedAt = null;
+    }
+
+    const result = await (prisma as any).order.updateMany({
+      where: { conversationId },
+      data: updateData,
+    });
+
+    if (!result.count) {
+      return;
+    }
+
+    const updatedOrders = await (prisma as any).order.findMany({
+      where: { conversationId },
+      include: {
+        conversation: {
+          select: { userPhone: true, contactName: true },
+        },
+      },
+    });
+
+    const io = getSocketServer();
+    updatedOrders.forEach((order: any) => {
+      const sanitized = sanitizeOrderBigInts(order);
+      io?.emit('order:updated', sanitized);
+    });
+  } catch (error) {
+    console.warn(
+      '[Conversation] Failed to sync order status',
+      conversationId.toString(),
+      error instanceof Error ? error.message : error
+    );
+  }
+}
 
 // Controladores de conversaciÃ³n
 export async function takeConversationHandler(req: Request, res: Response) {
@@ -238,6 +327,72 @@ export async function finishConversationHandler(req: Request, res: Response) {
     reason: resolvedReason,
     closedAt: updatedConversation.closedAt?.toISOString() ?? null,
     closedReason: resolvedReason,
+  });
+}
+
+export async function reopenConversationHandler(req: Request, res: Response) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  const conversationIdParam = req.params.id;
+  let conversationId: bigint;
+  try {
+    conversationId = BigInt(conversationIdParam);
+  } catch {
+    return res.status(400).json({ message: 'Invalid conversation id.' });
+  }
+
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { status: true },
+  });
+
+  if (!conversation) {
+    return res.status(404).json({ message: 'Conversation not found.' });
+  }
+  if (conversation.status !== 'CLOSED') {
+    return res.status(409).json({ message: 'Conversation is not closed.' });
+  }
+
+  const now = new Date();
+  const reopenedConversation = await prisma.conversation.update({
+    where: { id: conversationId },
+    data: {
+      status: 'ACTIVE',
+      botActive: true,
+      lastActivity: now,
+      closedAt: null,
+      closedReason: null,
+      closedById: null,
+    },
+    select: {
+      id: true,
+      status: true,
+      botActive: true,
+      lastActivity: true,
+    },
+  });
+
+  await addConversationEvent(
+    conversationId,
+    'STATUS_CHANGE',
+    {
+      previousStatus: 'CLOSED',
+      newStatus: reopenedConversation.status,
+      reason: 'manual_reopen',
+      reopenedAt: now.toISOString(),
+    },
+    req.user.id
+  );
+
+  const io = getSocketServer();
+  await broadcastConversationUpdate(io, conversationId);
+
+  res.json({
+    success: true,
+    status: reopenedConversation.status,
+    botActive: reopenedConversation.botActive,
+    lastActivity: reopenedConversation.lastActivity.toISOString(),
   });
 }
 export async function listAllChatsHandler(req: Request, res: Response) {
@@ -886,6 +1041,8 @@ export async function updateConversationProgressStatusHandler(
       req.user.id
     ),
   ]);
+
+  await syncOrderStatusWithProgress(conversationId, normalizedStatus);
 
   let messageRecord: ConversationMessage | null = null;
   const shouldSendMessage = req.body?.sendMessage !== false;

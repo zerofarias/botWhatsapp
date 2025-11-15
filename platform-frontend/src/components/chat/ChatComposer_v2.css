@@ -221,6 +221,24 @@
   color: #ccc;
 }
 
+.chat-composer-v2-locked-banner {
+  margin-top: 8px;
+  padding: 8px 12px;
+  text-align: center;
+  color: #b91c1c;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.chat-composer-v2-locked-banner {
+  margin-top: 8px;
+  padding: 8px 12px;
+  text-align: center;
+  color: #b91c1c;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .chat-composer-v2 {

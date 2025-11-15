@@ -130,6 +130,14 @@ export const ConversationSchema = z.object({
 
 export type Conversation = z.infer<typeof ConversationSchema>;
 
+const ConversationFinishSchema = z.object({
+  conversationId: z.number(),
+  status: z.string(),
+  reason: z.string().optional(),
+  closedAt: z.string().nullable().optional(),
+  closedReason: z.string().nullable().optional(),
+});
+
 // Socket events payloads
 export const SocketEventPayloads = {
   // Server → Client events
@@ -142,6 +150,7 @@ export const SocketEventPayloads = {
 
   'conversation:updated': ConversationSchema,
   'conversation:created': ConversationSchema,
+  'conversation:finish': ConversationFinishSchema,
   'conversation:deleted': z.object({
     conversationId: z.number(),
   }),

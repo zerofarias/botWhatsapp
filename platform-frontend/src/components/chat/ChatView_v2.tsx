@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ChatView v2 - header + message list for the redesigned chat
  */
 
@@ -9,7 +9,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { FiUserPlus } from 'react-icons/fi';
+import { FiUserPlus, FiCheckCircle, FiPhone } from 'react-icons/fi';
 import {
   useChatStore,
   selectMessages,
@@ -36,29 +36,29 @@ const STATUS_OPTIONS: Array<{
   {
     value: 'PENDING',
     label: 'Pendiente',
-    defaultMessage: 'Su pedido estÃ¡ pendiente. En breve le daremos novedades.',
+    defaultMessage: 'Su pedido está pendiente. En breve le daremos novedades.',
   },
   {
     value: 'IN_PREPARATION',
-    label: 'En preparaciÃ³n',
-    defaultMessage: 'Su pedido estÃ¡ en preparaciÃ³n.',
+    label: 'En preparación',
+    defaultMessage: 'Su pedido está en preparación.',
   },
   {
     value: 'COMPLETED',
     label: 'Completado',
-    defaultMessage: 'Su pedido estÃ¡ completado. Â¡Gracias por su compra!',
+    defaultMessage: 'Su pedido está completado. ¡Gracias por su compra!',
   },
   {
     value: 'CANCELLED',
     label: 'Cancelado',
     defaultMessage:
-      'Su pedido ha sido cancelado. Si necesita ayuda contÃ¡ctenos nuevamente.',
+      'Su pedido ha sido cancelado. Si necesita ayuda contáctenos nuevamente.',
   },
   {
     value: 'INACTIVE',
     label: 'Cerrado por inactividad',
     defaultMessage:
-      'Cerramos esta conversaciÃ³n por inactividad. EscrÃ­banos si necesita continuar.',
+      'Cerramos esta conversación por inactividad. Escríbanos si necesita continuar.',
   },
 ];
 
@@ -66,24 +66,33 @@ const FINISH_PRESETS = {
   completed: {
     label: 'Finalizar chat completado',
     status: 'COMPLETED' as ConversationProgressStatus,
-    message: 'Su pedido estÃ¡ completado. Â¡Gracias por su compra!',
+    message: 'Su pedido está completado. ¡Gracias por su compra!',
     finishReason: 'completed',
   },
   cancelled: {
     label: 'Finalizar chat cancelado',
     status: 'CANCELLED' as ConversationProgressStatus,
     message:
-      'Su pedido ha sido cancelado. Si necesita ayuda contÃ¡ctenos nuevamente.',
+      'Su pedido ha sido cancelado. Si necesita ayuda contáctenos nuevamente.',
     finishReason: 'cancelled',
   },
   inactive: {
     label: 'Finalizar chat por inactividad',
     status: 'INACTIVE' as ConversationProgressStatus,
     message:
-      'Cerramos esta conversaciÃ³n por inactividad. EscrÃ­banos si necesita continuar.',
+      'Cerramos esta conversación por inactividad. Escríbanos si necesita continuar.',
     finishReason: 'inactive',
   },
 } as const;
+
+const FINISH_REASON_LABELS: Record<string, string> = {
+  manual_close: 'Cierre manual',
+  completed: 'Pedido completado',
+  cancelled: 'Pedido cancelado',
+  inactive: 'Cierre por inactividad',
+  auto_inactivity: 'Cierre automático por inactividad',
+  auto_close: 'Cierre automático',
+};
 
 type FinishPresetKey = keyof typeof FINISH_PRESETS;
 
@@ -172,6 +181,9 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
   const [finishingReason, setFinishingReason] =
     useState<FinishPresetKey | null>(null);
   const [isQuickFinishing, setIsQuickFinishing] = useState(false);
+  const [isReopening, setIsReopening] = useState(false);
+  const [finishMenuOpen, setFinishMenuOpen] = useState(false);
+  const finishMenuRef = useRef<HTMLDivElement | null>(null);
 
   const handleLoadMoreMessages = useCallback(() => {
     if (effectiveContactGroup) {
@@ -210,9 +222,9 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
     '';
 
   const phoneNumber =
-    derivedPhone && derivedPhone.trim().length ? derivedPhone : 'Sin nÃºmero';
+    derivedPhone && derivedPhone.trim().length ? derivedPhone : 'Sin número';
 
-  const canAddContact = !isContactSaved && phoneNumber !== 'Sin nÃºmero';
+  const canAddContact = !isContactSaved && phoneNumber !== 'Sin número';
   const showContactModal = contactModalMode !== null;
   const conversationIsClosed = activeConversation?.status === 'CLOSED';
   const closureTimestamp = useMemo(() => {
@@ -228,6 +240,35 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
       timeStyle: 'short',
     });
   }, [activeConversation?.closedAt]);
+  const closureReasonLabel = useMemo(() => {
+    if (!activeConversation?.closedReason) {
+      return null;
+    }
+    const normalized = activeConversation.closedReason.toLowerCase();
+    return FINISH_REASON_LABELS[normalized] ?? activeConversation.closedReason;
+  }, [activeConversation?.closedReason]);
+  const closureSummary = useMemo(() => {
+    if (!conversationIsClosed) {
+      return null;
+    }
+    const timestampText = closureTimestamp ? ` el ${closureTimestamp}` : '';
+    const reasonText = closureReasonLabel
+      ? ` (Motivo: ${closureReasonLabel})`
+      : '';
+    const closedByAgent =
+      activeConversation?.closedReason === 'manual_close' ||
+      activeConversation?.closedReason === 'completed' ||
+      activeConversation?.closedReason === 'cancelled';
+    const prefix = closedByAgent
+      ? 'Cerraste esta conversación'
+      : 'Esta conversación fue finalizada';
+    return `${prefix}${timestampText}${reasonText}`;
+  }, [
+    conversationIsClosed,
+    closureTimestamp,
+    closureReasonLabel,
+    activeConversation?.closedReason,
+  ]);
   const currentProgressStatus =
     (activeConversation?.progressStatus as ConversationProgressStatus) ??
     'PENDING';
@@ -239,6 +280,28 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
     setSelectedStatus(currentProgressStatus);
     setStatusError(null);
   }, [currentProgressStatus, activeConversation?.id]);
+  useEffect(() => {
+    if (conversationIsClosed) {
+      setFinishMenuOpen(false);
+    }
+  }, [conversationIsClosed]);
+  useEffect(() => {
+    if (!finishMenuOpen) {
+      return;
+    }
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (
+        finishMenuRef.current &&
+        !finishMenuRef.current.contains(event.target as Node)
+      ) {
+        setFinishMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleDocumentClick);
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentClick);
+    };
+  }, [finishMenuOpen]);
 
   const updateConversationFromApi = useCallback((payload: any) => {
     const normalized = normalizeConversationFromApi(payload);
@@ -305,7 +368,10 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
         });
       } catch (error) {
         throw new Error(
-          getApiErrorMessage(error, 'No se pudo finalizar la conversaci��n.')
+          getApiErrorMessage(
+            error,
+            'No se pudo finalizar la conversaci´┐¢´┐¢n.'
+          )
         );
       }
     },
@@ -318,28 +384,53 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
     const confirmed =
       typeof window === 'undefined'
         ? true
-        : window.confirm('ï¿½?"Seguro que deseas finalizar este chat?');
+        : window.confirm('¿Seguro que deseas finalizar este chat?');
     if (!confirmed) {
       return;
     }
     try {
       setIsQuickFinishing(true);
       await finishConversationRequest('manual_close');
-      alert('La conversaciï¿½ï¿½n fue finalizada.');
+      alert('La conversación fue finalizada.');
     } catch (error) {
-      alert(
-        getApiErrorMessage(error, 'No se pudo finalizar la conversaciï¿½ï¿½n.')
-      );
+      alert(getApiErrorMessage(error, 'No se pudo finalizar la conversación.'));
     } finally {
       setIsQuickFinishing(false);
     }
   }, [activeConversation, conversationIsClosed, finishConversationRequest]);
+  const handleManualFinish = useCallback(async () => {
+    setFinishMenuOpen(false);
+    await handleQuickFinish();
+  }, [handleQuickFinish]);
+
+  const handleReopenConversation = useCallback(async () => {
+    if (!activeConversation) {
+      return;
+    }
+    try {
+      setIsReopening(true);
+      const { data } = await api.post(
+        `/conversations/${activeConversation.id}/reopen`
+      );
+      useChatStore.getState().updateConversation(activeConversation.id, {
+        status: data?.status ?? 'ACTIVE',
+        botActive: data?.botActive ?? activeConversation.botActive,
+        closedAt: null,
+        closedReason: null,
+      });
+      alert('La conversación fue reactivada.');
+    } catch (error) {
+      alert(getApiErrorMessage(error, 'No se pudo reactivar la conversación.'));
+    } finally {
+      setIsReopening(false);
+    }
+  }, [activeConversation]);
 
   const handleStatusSubmit = useCallback(async () => {
     if (!activeConversation) return;
     try {
       await sendProgressStatus(selectedStatus);
-      alert('Estado enviado al cliente.');
+      alert('Estado guardado y enviado al cliente.');
     } catch {
       // errors handled via statusError
     }
@@ -353,18 +444,25 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
         setFinishingReason(presetKey);
         await sendProgressStatus(preset.status, preset.message);
         await finishConversationRequest(preset.finishReason);
-        alert('La conversaciÃ³n fue finalizada.');
+        alert('La conversación fue finalizada.');
       } catch (error) {
         const message =
           error instanceof Error
             ? error.message
-            : 'No se pudo finalizar la conversaciÃ³n.';
+            : 'No se pudo finalizar la conversación.';
         alert(message);
       } finally {
         setFinishingReason(null);
       }
     },
     [activeConversation, finishConversationRequest, sendProgressStatus]
+  );
+  const handleFinishOptionSelect = useCallback(
+    async (presetKey: FinishPresetKey) => {
+      setFinishMenuOpen(false);
+      await handleFinishPreset(presetKey);
+    },
+    [handleFinishPreset]
   );
 
   const handleContactSubmit = useCallback(
@@ -437,7 +535,11 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
           ) : (
             <div className="avatar-placeholder">
               {avatarLetter}
-              {isContactSaved && <span className="contact-indicator">âœ“</span>}
+              {isContactSaved && (
+                <span className="contact-indicator" title="Contacto guardado">
+                  <FiCheckCircle aria-hidden="true" />
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -457,13 +559,15 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
               )}
           </div>
           <div className="chat-area-v2-header-phone">
-            {isContactSaved ? (
-              <span>ðŸ“ž {phoneNumber}</span>
-            ) : (
-              <span className="unsaved-number">
-                ðŸ“ž {phoneNumber} (No agendado)
-              </span>
-            )}
+            <span
+              className={`contact-phone ${
+                isContactSaved ? '' : 'unsaved-number'
+              }`}
+            >
+              <FiPhone aria-hidden="true" />
+              <span>{phoneNumber}</span>
+              {!isContactSaved && <em> (No agendado)</em>}
+            </span>
           </div>
           <div className="chat-area-v2-header-meta">
             {activeConversation?.contact?.dni && (
@@ -473,12 +577,12 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
             )}
             {activeConversation?.contact?.address1 && (
               <div>
-                <span>DirecciÃ³n 1:</span> {activeConversation.contact.address1}
+                <span>Dirección 1:</span> {activeConversation.contact.address1}
               </div>
             )}
             {activeConversation?.contact?.address2 && (
               <div>
-                <span>DirecciÃ³n 2:</span> {activeConversation.contact.address2}
+                <span>Dirección 2:</span> {activeConversation.contact.address2}
               </div>
             )}
           </div>
@@ -505,23 +609,71 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
             </button>
           )}
           {activeConversation && (
-            <button
-              type="button"
-              className="chat-area-v2-finish-chat-btn"
-              onClick={handleQuickFinish}
-              disabled={conversationIsClosed || isQuickFinishing}
-            >
-              {isQuickFinishing ? 'Finalizando...' : 'Finalizar chat'}
-            </button>
+            <div className="chat-area-v2-finish-actions" ref={finishMenuRef}>
+              <button
+                type="button"
+                className="chat-area-v2-finish-chat-btn"
+                onClick={() =>
+                  setFinishMenuOpen((open) =>
+                    conversationIsClosed ? false : !open
+                  )
+                }
+                disabled={conversationIsClosed}
+              >
+                {conversationIsClosed ? 'Chat cerrado' : 'Finalizar chat'}
+              </button>
+              {finishMenuOpen && !conversationIsClosed && (
+                <div className="chat-area-v2-finish-menu">
+                  <span className="finish-menu-title">
+                    Selecciona cómo finalizar
+                  </span>
+                  {(Object.keys(FINISH_PRESETS) as FinishPresetKey[]).map(
+                    (key) => {
+                      const preset = FINISH_PRESETS[key];
+                      const isBusy = finishingReason === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          className="finish-menu-option"
+                          onClick={() => handleFinishOptionSelect(key)}
+                          disabled={isBusy}
+                        >
+                          {isBusy ? 'Finalizando...' : preset.label}
+                        </button>
+                      );
+                    }
+                  )}
+                  <button
+                    type="button"
+                    className="finish-menu-option manual"
+                    onClick={handleManualFinish}
+                    disabled={isQuickFinishing}
+                  >
+                    {isQuickFinishing ? 'Finalizando...' : 'Cierre manual'}
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
 
       {activeConversation && (
         <div className="chat-area-v2-status-panel">
-          {conversationIsClosed && closureTimestamp && (
+          {conversationIsClosed && (
             <div className="chat-area-v2-closure-notice">
-              Chat finalizado el {closureTimestamp}
+              {closureSummary ?? 'Chat finalizado'}
+              <div className="chat-area-v2-closure-actions">
+                <button
+                  type="button"
+                  className="chat-area-v2-reactivate-btn"
+                  onClick={handleReopenConversation}
+                  disabled={isReopening}
+                >
+                  {isReopening ? 'Reactivando...' : 'Reactivar chat'}
+                </button>
+              </div>
             </div>
           )}
           <div className="chat-area-v2-progress-row">
@@ -555,28 +707,12 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
                 selectedStatus.length === 0
               }
             >
-              {statusUpdating ? 'Enviando...' : 'Enviar estado'}
+              {statusUpdating ? 'Guardando...' : 'Guardar estado'}
             </button>
           </div>
           {statusError && (
             <div className="chat-area-v2-status-error">{statusError}</div>
           )}
-          <div className="chat-area-v2-finish-buttons">
-            {(Object.keys(FINISH_PRESETS) as FinishPresetKey[]).map((key) => {
-              const preset = FINISH_PRESETS[key];
-              const isBusy = finishingReason === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => handleFinishPreset(key)}
-                  disabled={conversationIsClosed || isBusy}
-                >
-                  {isBusy ? 'Finalizando...' : preset.label}
-                </button>
-              );
-            })}
-          </div>
         </div>
       )}
 
@@ -593,7 +729,7 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
 
         {messages.length === 0 ? (
           <div className="chat-view-v2-empty">
-            <div>No hay mensajes todavÃ­a</div>
+            <div>No hay mensajes todavía</div>
           </div>
         ) : (
           messages.map((message: any, index: number) => (

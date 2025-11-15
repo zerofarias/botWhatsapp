@@ -7,6 +7,7 @@ import {
   stopBot,
   togglePause,
   updateMetadata,
+  resetBotSession,
 } from '../controllers/bot.controller.js';
 
 export const botRouter = Router();
@@ -17,4 +18,5 @@ botRouter.post('/start', startBot);
 botRouter.post('/stop', stopBot);
 botRouter.get('/qr', getBotQr);
 botRouter.post('/pause', togglePause);
+botRouter.post('/reset', resetBotSession);
 botRouter.patch('/metadata', updateMetadata);

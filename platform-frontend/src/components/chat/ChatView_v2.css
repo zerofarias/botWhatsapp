@@ -227,6 +227,63 @@
   box-shadow: none;
 }
 
+.chat-area-v2-finish-actions {
+  position: relative;
+  display: inline-flex;
+}
+
+.chat-area-v2-finish-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 240px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 20;
+  border: 1px solid #f3f4f6;
+}
+
+.chat-area-v2-finish-menu .finish-menu-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.chat-area-v2-finish-menu .finish-menu-option {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f3f4f6;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.chat-area-v2-finish-menu .finish-menu-option.manual {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.chat-area-v2-finish-menu .finish-menu-option:hover:not(:disabled) {
+  background: #e5e7eb;
+  transform: translateX(2px);
+}
+
+.chat-area-v2-finish-menu .finish-menu-option.manual:hover:not(:disabled) {
+  background: #fecaca;
+}
+
+.chat-area-v2-finish-menu .finish-menu-option:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .chat-area-v2-closure-notice {
   margin-bottom: 12px;
   padding: 8px 12px;
@@ -236,4 +293,33 @@
   color: #b91c1c;
   font-size: 0.9rem;
   font-weight: 600;
+}
+
+.chat-area-v2-closure-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.chat-area-v2-reactivate-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);
+}
+
+.chat-area-v2-reactivate-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.chat-area-v2-reactivate-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(22, 163, 74, 0.45);
 }

@@ -1,14 +1,13 @@
 import 'dotenv/config';
-import { createApp } from './app.js';
+import { createApp, initializeSocketServer } from './app.js';
 import { env } from './config/env.js';
 import { connectPrisma } from './config/prisma.js';
 import { createHybridServer, httpsRedirectMiddleware } from './config/ssl.js';
 import express from 'express';
-import { createRequire } from 'module';
 
 async function bootstrap() {
   await connectPrisma();
-  const { app, server: httpServer } = createApp();
+  const { app, sessionMiddleware, corsOrigin } = createApp();
 
   // Agregar middleware de redirección HTTPS si SSL está habilitado
   if (env.enableSsl) {
@@ -17,6 +16,7 @@ async function bootstrap() {
 
   // Crear servidor con soporte SSL opcional
   const { server, protocol } = createHybridServer(app);
+  initializeSocketServer(server, sessionMiddleware, corsOrigin);
 
   const port = env.enableSsl ? 443 : env.port;
   const httpPort = env.enableSsl ? 80 : env.port;

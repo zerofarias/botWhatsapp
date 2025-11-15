@@ -14,6 +14,7 @@ import {
   listAllChatsHandler,
   takeConversationHandler,
   finishConversationHandler,
+  reopenConversationHandler,
   startFlowHandler,
   updateConversationProgressStatusHandler,
 } from '../controllers/conversation.controller.js';
@@ -59,6 +60,11 @@ conversationRouter.post(
   '/:id/finish',
   authorize(['ADMIN', 'SUPERVISOR', 'OPERATOR']),
   finishConversationHandler
+);
+conversationRouter.post(
+  '/:id/reopen',
+  authorize(['ADMIN', 'SUPERVISOR', 'OPERATOR']),
+  reopenConversationHandler
 );
 
 // Endpoint para iniciar el flujo

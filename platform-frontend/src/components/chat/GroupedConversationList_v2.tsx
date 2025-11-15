@@ -1,13 +1,9 @@
 /**
- * GroupedConversationList_v2 - WhatsApp-style conversation groups
- * Displays conversations grouped by phone number with expand/collapse
+ * GroupedConversationList_v2 - simplified list that shows one entry per contacto/teléfono
  */
 
 import React from 'react';
-import {
-  useGroupedConversations,
-  PhoneGroup,
-} from '../../hooks/v2/useGroupedConversations';
+import { useGroupedConversations } from '../../hooks/v2/useGroupedConversations';
 import { useChatStore } from '../../store/chatStore';
 import './GroupedConversationList_v2.css';
 
@@ -15,54 +11,54 @@ interface Props {
   onSelectConversation?: (conversationId: number | string) => void;
 }
 
-/**
- * PhoneGroupHeader - Displays phone number with expand/collapse toggle
- */
-const PhoneGroupHeader: React.FC<{
-  group: PhoneGroup;
-  isExpanded: boolean;
-  onToggle: () => void;
-}> = ({ group, isExpanded, onToggle }) => (
-  <div className="phone-group-header" onClick={onToggle}>
-    <button className="expand-toggle" type="button">
-      <span className={`arrow ${isExpanded ? 'expanded' : ''}`}>
-        {isExpanded ? '▾' : '▸'}
-      </span>
-    </button>
-    <div className="phone-info">
-      <span className="phone-number">{group.displayNumber}</span>
-      <span className="conversation-count">
-        {group.conversations.length}{' '}
-        {group.conversations.length === 1 ? 'chat' : 'chats'}
-      </span>
-    </div>
-  </div>
-);
-
 const formatPhone = (value?: string | null) => {
   if (!value) return 'Sin número';
   return value.includes('@') ? value.replace(/@.+$/, '') : value;
 };
 
-/**
- * ConversationListItem - Single conversation within a group
- */
-const ConversationListItem: React.FC<{
-  conversation: any; // ConversationSummary
+const getLatestConversation = (conversations: any[]) => {
+  if (!conversations.length) return null;
+  return [...conversations].sort(
+    (a, b) =>
+      new Date(b.updatedAt || b.lastActivity || 0).getTime() -
+      new Date(a.updatedAt || a.lastActivity || 0).getTime()
+  )[0];
+};
+
+type ConversationListItemProps = {
+  conversation: any;
   isActive: boolean;
   onClick: () => void;
-}> = ({ conversation, isActive, onClick }) => {
+  groupCount?: number;
+  displayLabel?: string;
+  fallbackPhone?: string;
+};
+
+const ConversationListItem: React.FC<ConversationListItemProps> = ({
+  conversation,
+  isActive,
+  onClick,
+  groupCount = 1,
+  displayLabel,
+  fallbackPhone,
+}) => {
   const cleanPhone = formatPhone(
-    conversation.contact?.phone || conversation.userPhone
+    conversation.contact?.phone || conversation.userPhone || fallbackPhone
   );
+  const hasCustomName =
+    Boolean(displayLabel?.trim()) ||
+    Boolean(conversation.contact?.name?.trim());
   const displayName =
-    conversation.contact?.name?.trim() || cleanPhone || 'Sin número';
-  const isContactSaved = Boolean(conversation.contact?.name?.trim());
+    displayLabel?.trim() ||
+    conversation.contact?.name?.trim() ||
+    cleanPhone ||
+    'Sin número';
 
   const lastMessage =
     conversation.lastMessage?.content ||
     conversation.lastMessage ||
     'Sin mensajes';
+
   const timestamp = new Date(
     conversation.lastActivity || conversation.updatedAt
   ).toLocaleTimeString('es-AR', {
@@ -73,7 +69,7 @@ const ConversationListItem: React.FC<{
   return (
     <div
       className={`conversation-item ${isActive ? 'active' : ''} ${
-        isContactSaved ? 'contact-saved' : 'contact-unsaved'
+        hasCustomName ? 'contact-saved' : 'contact-unsaved'
       }`}
       onClick={onClick}
     >
@@ -83,7 +79,7 @@ const ConversationListItem: React.FC<{
         ) : (
           <div className="avatar-placeholder">
             {displayName.charAt(0).toUpperCase()}
-            {isContactSaved && <span className="contact-badge">★</span>}
+            {hasCustomName && <span className="contact-badge">★</span>}
           </div>
         )}
       </div>
@@ -91,14 +87,19 @@ const ConversationListItem: React.FC<{
         <div className="conversation-header">
           <div className="contact-info">
             <span
-              className={`contact-name ${isContactSaved ? 'saved' : 'unsaved'}`}
+              className={`contact-name ${hasCustomName ? 'saved' : 'unsaved'}`}
             >
               {displayName}
             </span>
-            {isContactSaved && displayName !== cleanPhone && (
+            {groupCount > 1 && (
+              <span className="conversation-count-badge">
+                {groupCount} chats
+              </span>
+            )}
+            {hasCustomName && cleanPhone && displayName !== cleanPhone && (
               <span className="phone-subtitle">{cleanPhone}</span>
             )}
-            {!isContactSaved && (
+            {!hasCustomName && cleanPhone && (
               <span className="phone-main">{cleanPhone}</span>
             )}
           </div>
@@ -113,14 +114,10 @@ const ConversationListItem: React.FC<{
   );
 };
 
-/**
- * Main component
- */
 export const GroupedConversationList_v2: React.FC<Props> = ({
   onSelectConversation,
 }) => {
-  const { groupedConversations, isGroupExpanded, toggleGroup, loading } =
-    useGroupedConversations();
+  const { groupedConversations, loading } = useGroupedConversations();
 
   const activeConversationId = useChatStore(
     (state) => state.activeConversationId
@@ -153,32 +150,32 @@ export const GroupedConversationList_v2: React.FC<Props> = ({
 
   return (
     <div className="grouped-conversation-list">
-      {groupedConversations.map((group) => (
-        <div key={group.phoneNumber} className="phone-group">
-          <PhoneGroupHeader
-            group={group}
-            isExpanded={isGroupExpanded(group.phoneNumber)}
-            onToggle={() => toggleGroup(group.phoneNumber)}
-          />
-          {isGroupExpanded(group.phoneNumber) && (
-            <div className="phone-group-content">
-              {group.conversations.map((conversation) => (
-                <ConversationListItem
-                  key={conversation.id}
-                  conversation={conversation}
-                  isActive={
-                    activeConversationId ===
-                    (typeof conversation.id === 'string'
-                      ? parseInt(conversation.id, 10)
-                      : conversation.id)
-                  }
-                  onClick={() => handleSelectConversation(conversation.id)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+      {groupedConversations.map((group) => {
+        const primaryConversation = getLatestConversation(group.conversations);
+        if (!primaryConversation) {
+          return null;
+        }
+        const groupHasActive = group.conversations.some(
+          (conversation) =>
+            activeConversationId ===
+            (typeof conversation.id === 'string'
+              ? parseInt(conversation.id, 10)
+              : conversation.id)
+        );
+
+        return (
+          <div key={group.phoneNumber} className="phone-group single-entry">
+            <ConversationListItem
+              conversation={primaryConversation}
+              isActive={groupHasActive}
+              onClick={() => handleSelectConversation(primaryConversation.id)}
+              groupCount={group.conversations.length}
+              displayLabel={group.displayNumber}
+              fallbackPhone={group.phoneNumber}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 };

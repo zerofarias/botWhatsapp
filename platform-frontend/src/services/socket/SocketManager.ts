@@ -190,6 +190,20 @@ export class SocketManager {
         store.updateConversation(validated.data.id, validated.data);
       }
     });
+
+    this.socket?.on('conversation:finish', (payload) => {
+      const store = useChatStore.getState();
+      const validated = validateSocketPayload('conversation:finish', payload);
+      if (validated.valid) {
+        const { conversationId, status, reason, closedAt, closedReason } =
+          validated.data;
+        store.updateConversation(conversationId, {
+          status,
+          closedAt: closedAt ?? new Date().toISOString(),
+          closedReason: closedReason ?? reason ?? 'manual_close',
+        });
+      }
+    });
   }
 }
 

@@ -14,6 +14,7 @@ import ChatView_v2 from '../components/chat/ChatView_v2';
 import ChatComposer_v2 from '../components/chat/ChatComposer_v2';
 import GroupedConversationList_v2 from '../components/chat/GroupedConversationList_v2';
 import { api } from '../services/api';
+import { normalizeSender } from '../services/socket/socketSchemas';
 import './ChatPage_v2.css';
 
 const ChatPage: React.FC = () => {
@@ -64,9 +65,9 @@ const ChatPage: React.FC = () => {
                   ? parseInt(message.conversationId, 10)
                   : message.conversationId ?? conversationId,
               content: message.content ?? '',
-              sender: (message.senderType?.toLowerCase() ||
-                message.sender ||
-                'contact') as 'user' | 'bot' | 'contact',
+              sender: normalizeSender(
+                message.senderType ?? message.sender ?? 'contact'
+              ),
               timestamp: message.createdAt
                 ? new Date(message.createdAt).getTime()
                 : message.timestamp || Date.now(),

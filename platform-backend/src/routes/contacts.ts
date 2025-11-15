@@ -23,4 +23,5 @@ contactRouter.get(
 contactRouter.post('/', authorize(['ADMIN']), createContactHandler);
 contactRouter.post('/import', authorize(['ADMIN']), importContactsHandler);
 contactRouter.patch('/:id', authorize(['ADMIN']), updateContactHandler);
+contactRouter.put('/:id', authorize(['ADMIN']), updateContactHandler);
 contactRouter.delete('/:id', authorize(['ADMIN']), deleteContactHandler);
