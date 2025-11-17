@@ -37,6 +37,12 @@
   padding: 0;
 }
 
+.chat-composer-v2-btn-icon svg,
+.chat-composer-v2-btn-send svg {
+  width: 18px;
+  height: 18px;
+}
+
 .chat-composer-v2-btn-icon:hover:not(:disabled) {
   background-color: #f0f0f0;
   color: #333;
@@ -92,9 +98,9 @@
   align-items: flex-end;
   background-color: #f0f0f0;
   border-radius: 20px;
-  padding: 8px 12px;
-  min-height: 32px;
-  max-height: 100px;
+  padding: 10px 16px;
+  min-height: 42px;
+  max-height: 140px;
   position: relative;
 }
 
@@ -104,12 +110,12 @@
   border: none;
   background: transparent;
   outline: none;
-  font-size: 14px;
+  font-size: 15px;
   color: #222;
   font-family: inherit;
   resize: none;
-  max-height: 80px;
-  line-height: 1.4;
+  max-height: 120px;
+  line-height: 1.5;
   padding: 0;
   transition: all 0.2s;
 }
@@ -219,6 +225,20 @@
   opacity: 0.5;
   cursor: not-allowed;
   color: #ccc;
+}
+
+.chat-composer-v2-icon-spin {
+  display: inline-flex;
+  animation: chat-composer-spin 1s linear infinite;
+}
+
+@keyframes chat-composer-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .chat-composer-v2-locked-banner {

@@ -36,19 +36,32 @@ export const api = axios.create({
 
 // Si el backend solo usa sesión, no agregues Authorization
 
-// Notas internas de conversación
+// Notas internas de conversaci��n
+export interface ConversationNoteDTO {
+  id: string;
+  content: string;
+  createdAt: string;
+  createdById: number | null;
+  createdByName: string | null;
+}
+
 export async function createConversationNote(
   conversationId: string | number,
   content: string
 ) {
-  const res = await api.post(`/conversations/${conversationId}/notes`, {
-    content,
-  });
+  const res = await api.post<ConversationNoteDTO>(
+    `/conversations/${conversationId}/notes`,
+    {
+      content,
+    }
+  );
   return res.data;
 }
 
 export async function listConversationNotes(conversationId: string | number) {
-  const res = await api.get(`/conversations/${conversationId}/notes`);
+  const res = await api.get<ConversationNoteDTO[]>(
+    `/conversations/${conversationId}/notes`
+  );
   return res.data;
 }
 

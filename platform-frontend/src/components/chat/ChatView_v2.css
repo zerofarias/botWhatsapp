@@ -6,9 +6,11 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background-color: #fff;
+  background-color: transparent;
   border-radius: inherit;
   overflow: hidden;
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont,
+    sans-serif;
 }
 
 /* Messages Container */
@@ -17,9 +19,15 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
-  padding: 12px 16px;
-  gap: 8px;
+  background: radial-gradient(
+        circle at top right,
+        rgba(79, 70, 229, 0.08),
+        #f8fafc
+      )
+      no-repeat,
+    linear-gradient(135deg, #fdfdfd 0%, #f5f5f5 100%);
+  padding: 20px 28px 16px;
+  gap: 12px;
 }
 
 .chat-view-v2-messages::-webkit-scrollbar {
@@ -45,8 +53,10 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #999;
-  font-size: 14px;
+  color: #94a3b8;
+  font-size: 1rem;
+  text-align: center;
+  padding: 16px;
 }
 
 /* Load More Button */
@@ -91,30 +101,32 @@
 .chat-view-v2-message-bubble {
   display: flex;
   flex-direction: column;
-  max-width: 55%;
-  padding: 8px 12px;
-  border-radius: 8px;
+  max-width: 60%;
+  padding: 10px 14px;
+  border-radius: 14px;
   word-wrap: break-word;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 15px 35px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(15, 23, 42, 0.05);
 }
 
 .chat-view-v2-message.incoming .chat-view-v2-message-bubble {
-  background-color: white;
-  border-bottom-left-radius: 2px;
-  color: #222;
+  background-color: #ffffff;
+  border-bottom-left-radius: 10px;
+  color: #0f172a;
 }
 
 .chat-view-v2-message.outgoing .chat-view-v2-message-bubble {
-  background: linear-gradient(135deg, #dcf8c6 0%, #c7f9c8 100%);
-  border-bottom-right-radius: 2px;
-  color: #222;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  border-bottom-right-radius: 10px;
+  color: #f8fafc;
+  border-color: rgba(79, 70, 229, 0.4);
 }
 
 /* Message Content */
 .chat-view-v2-message-content {
   margin: 0;
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 0.95rem;
+  line-height: 1.5;
   word-wrap: break-word;
   white-space: pre-wrap;
   overflow-wrap: break-word;
@@ -144,6 +156,54 @@
 
 .chat-view-v2-message-status {
   white-space: nowrap;
+}
+
+.chat-note-entry {
+  border: 1px solid #fcd34d;
+  background: #fff7d6;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  animation: messageSlideIn 0.2s ease;
+  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.25);
+}
+
+.chat-note-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #92400e;
+  font-weight: 600;
+}
+
+.chat-note-label {
+  background: #fcd34d;
+  color: #78350f;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chat-note-author {
+  color: #78350f;
+}
+
+.chat-note-time {
+  margin-left: auto;
+  font-size: 11px;
+  color: #b45309;
+}
+
+.chat-note-content {
+  margin: 0;
+  font-size: 13px;
+  color: #92400e;
+  white-space: pre-line;
 }
 
 /* Animation */

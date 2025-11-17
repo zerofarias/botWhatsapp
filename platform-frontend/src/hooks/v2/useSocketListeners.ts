@@ -3,21 +3,44 @@
  * Replaces socket listener logic from old useChatSession
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { getSocketManager } from '../../services/socket/SocketManager';
 import { useChatStore } from '../../store/chatStore';
 import { normalizeSender } from '../../services/socket/socketSchemas';
 
 export function useSocketListeners() {
-  useEffect(() => {
-    try {
-      const socket = getSocketManager();
+  const [socketManager, setSocketManager] = useState(() => getSocketManager());
 
-      // Only register listeners if socket exists and is connected
-      if (!socket) {
-        console.warn('ÔÜá´©Å Socket manager not available yet');
-        return;
+  useEffect(() => {
+    if (socketManager) {
+      return;
+    }
+
+    let cancelled = false;
+    console.warn('⚠️ Socket manager not available yet, retrying…');
+
+    const interval = setInterval(() => {
+      if (cancelled) return;
+      const manager = getSocketManager();
+      if (manager) {
+        setSocketManager(manager);
+        clearInterval(interval);
       }
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [socketManager]);
+
+  useEffect(() => {
+    if (!socketManager) {
+      return;
+    }
+
+    try {
+      const socket = socketManager;
 
       // Get the store state once, without reactive subscription
       const store = useChatStore.getState();
@@ -52,7 +75,16 @@ export function useSocketListeners() {
               ? new Date(payload.timestamp).getTime()
               : payload.timestamp || new Date(payload.createdAt).getTime(),
           status: 'sent' as const,
-          mediaUrl: payload.mediaUrl || undefined,
+          mediaUrl:
+            payload.mediaUrl ??
+            payload.metadata?.mediaUrl ??
+            (payload as any)?.media?.url ??
+            undefined,
+          mediaType:
+            payload.mediaType ??
+            payload.metadata?.mediaType ??
+            (payload as any)?.media?.mediaType ??
+            undefined,
           metadata: {
             senderType: payload.senderType,
             senderId: parsedSenderId,
@@ -95,6 +127,16 @@ export function useSocketListeners() {
               ? new Date(payload.timestamp).getTime()
               : payload.timestamp || new Date(payload.createdAt).getTime(),
           status: payload.status || ('delivered' as const),
+          mediaUrl:
+            payload.mediaUrl ??
+            payload.metadata?.mediaUrl ??
+            (payload as any)?.media?.url ??
+            undefined,
+          mediaType:
+            payload.mediaType ??
+            payload.metadata?.mediaType ??
+            (payload as any)?.media?.mediaType ??
+            undefined,
         };
 
         useChatStore.getState().updateMessage(messageId, normalizedUpdate);
@@ -234,7 +276,7 @@ export function useSocketListeners() {
       console.error('Error registering socket listeners:', error);
       return;
     }
-  }, []);
+  }, [socketManager]);
 
   return null;
 }

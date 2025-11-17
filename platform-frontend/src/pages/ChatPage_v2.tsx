@@ -13,6 +13,7 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import ChatView_v2 from '../components/chat/ChatView_v2';
 import ChatComposer_v2 from '../components/chat/ChatComposer_v2';
 import GroupedConversationList_v2 from '../components/chat/GroupedConversationList_v2';
+import { FiX } from 'react-icons/fi';
 import { api } from '../services/api';
 import { normalizeSender } from '../services/socket/socketSchemas';
 import './ChatPage_v2.css';
@@ -72,10 +73,25 @@ const ChatPage: React.FC = () => {
                 ? new Date(message.createdAt).getTime()
                 : message.timestamp || Date.now(),
               status: (message.status as Message['status']) ?? 'delivered',
-              mediaUrl: message.mediaUrl ?? undefined,
+              mediaUrl:
+                message.mediaUrl ??
+                message.media?.url ??
+                message.metadata?.mediaUrl ??
+                undefined,
+              mediaType:
+                message.mediaType ??
+                message.media?.mediaType ??
+                message.media?.type ??
+                message.metadata?.mediaType ??
+                undefined,
               metadata: {
                 senderType: message.senderType,
                 senderId: message.senderId,
+                mediaUrl: message.mediaUrl ?? message.metadata?.mediaUrl,
+                mediaType:
+                  message.mediaType ??
+                  message.media?.mediaType ??
+                  message.metadata?.mediaType,
               },
             }))
           : [];
@@ -165,7 +181,7 @@ const ChatPage: React.FC = () => {
             </>
           ) : (
             <div className="chat-view-v2-empty">
-              <div>Selecciona una conversación para empezar</div>
+              <div>Selecciona una conversaci�n para empezar</div>
             </div>
           )}
         </div>

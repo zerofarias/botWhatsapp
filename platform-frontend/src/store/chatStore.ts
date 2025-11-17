@@ -28,6 +28,15 @@ export interface Message {
   metadata?: Record<string, any>;
 }
 
+export interface ConversationNote {
+  id: number | string;
+  conversationId: number;
+  content: string;
+  createdAt: number;
+  createdById?: number | null;
+  createdByName?: string | null;
+}
+
 export interface Conversation {
   id: number;
   contactId: number;
@@ -65,6 +74,7 @@ export interface ChatStoreState {
   selectedContactGroup: ContactGroup | null; // Para agrupar mensajes por contacto
   messages: Message[];
   messageHistory: Map<number, Message[]>;
+  conversationNotes: Map<number, ConversationNote[]>;
 
   // Metadata
   hasMoreHistory: boolean;
@@ -94,6 +104,11 @@ export interface ChatStoreState {
   deleteMessage: (id: string | number) => void;
   setMessageHistory: (conversationId: number, messages: Message[]) => void;
   prependMessages: (conversationId: number, messages: Message[]) => void;
+  setConversationNotes: (
+    conversationId: number,
+    notes: ConversationNote[]
+  ) => void;
+  addConversationNote: (conversationId: number, note: ConversationNote) => void;
 
   // History pagination
   setHasMoreHistory: (hasMore: boolean) => void;
@@ -120,6 +135,7 @@ export const useChatStore = create<ChatStoreState>()(
     selectedContactGroup: null,
     messages: [],
     messageHistory: new Map(),
+    conversationNotes: new Map(),
 
     // Initial metadata
     hasMoreHistory: true,
@@ -246,6 +262,25 @@ export const useChatStore = create<ChatStoreState>()(
         newHistory.set(conversationId, messages);
         return { messageHistory: newHistory };
       }),
+    setConversationNotes: (conversationId, notes) =>
+      set((state) => {
+        const next = new Map(state.conversationNotes);
+        next.set(
+          conversationId,
+          [...notes].sort((a, b) => a.createdAt - b.createdAt)
+        );
+        return { conversationNotes: next };
+      }),
+    addConversationNote: (conversationId, note) =>
+      set((state) => {
+        const next = new Map(state.conversationNotes);
+        const existing = next.get(conversationId) || [];
+        const updated = [...existing, note].sort(
+          (a, b) => a.createdAt - b.createdAt
+        );
+        next.set(conversationId, updated);
+        return { conversationNotes: next };
+      }),
     prependMessages: (conversationId, messages) =>
       set((state) => {
         const newHistory = new Map(state.messageHistory);
@@ -301,6 +336,7 @@ export const useChatStore = create<ChatStoreState>()(
         conversations: [],
         activeConversationId: null,
         messageHistory: new Map(),
+        conversationNotes: new Map(),
         loading: false,
         sending: false,
         error: null,

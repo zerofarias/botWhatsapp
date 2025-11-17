@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Obtiene el historial combinado de mensajes de todas las conversaciones de una persona (por teléfono).
  * Devuelve un array de mensajes ordenados por fecha, con etiquetas de inicio/fin por cada conversación.
  */
@@ -48,23 +48,13 @@ export async function getCombinedChatHistoryByPhone(userPhone: string) {
     // Notas internas
     const notes = await listConversationNotes(conv.id);
     for (const note of notes) {
-      let noteContent = '';
-      if (note.payload) {
-        try {
-          const payload = JSON.parse(note.payload);
-          if (payload && typeof payload === 'object' && 'content' in payload) {
-            noteContent = (payload as any).content;
-          }
-        } catch (e) {
-          // ignore parse error
-        }
-      }
       history.push({
         id: note.id.toString(),
         type: 'note',
-        content: noteContent,
+        content: note.content,
         createdAt: note.createdAt,
         createdById: note.createdById,
+        createdByName: note.createdByName,
         conversationId: conv.id.toString(),
       });
     }
@@ -149,23 +139,13 @@ export async function getSingleConversationHistory(
   // Notas internas de ESTA conversación
   const notes = await listConversationNotes(id);
   for (const note of notes) {
-    let noteContent = '';
-    if (note.payload) {
-      try {
-        const payload = JSON.parse(note.payload);
-        if (payload && typeof payload === 'object' && 'content' in payload) {
-          noteContent = (payload as any).content;
-        }
-      } catch (e) {
-        // ignore parse error
-      }
-    }
     history.push({
       id: note.id.toString(),
       type: 'note',
-      content: noteContent,
+      content: note.content,
       createdAt: note.createdAt,
       createdById: note.createdById,
+      createdByName: note.createdByName,
       conversationId: conversation.id.toString(),
     });
   }
@@ -203,7 +183,28 @@ import {
 } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import type { SessionUser } from '../types/express.js';
+const conversationNoteInclude = {
+  createdBy: {
+    select: {
+      id: true,
+      name: true,
+      username: true,
+    },
+  },
+} satisfies Prisma.ConversationEventInclude;
 
+type ConversationNoteRecord = Prisma.ConversationEventGetPayload<{
+  include: typeof conversationNoteInclude;
+}>;
+
+export type ConversationNote = {
+  id: bigint;
+  conversationId: bigint;
+  content: string;
+  createdAt: Date;
+  createdById: number | null;
+  createdByName: string | null;
+};
 export const conversationSelect = {
   id: true,
   userPhone: true,
@@ -397,46 +398,116 @@ export async function addConversationEvent(
   });
 }
 
+function parseNoteContent(payload: Prisma.JsonValue | string | null): string {
+  if (!payload) {
+    return '';
+  }
+
+  const tryParse = (raw: string) => {
+    try {
+      const parsed = JSON.parse(raw);
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed) &&
+        'content' in parsed
+      ) {
+        const value = (parsed as { content?: unknown }).content;
+        return typeof value === 'string' ? value : value ? String(value) : '';
+      }
+      return '';
+    } catch {
+      return raw;
+    }
+  };
+
+  if (typeof payload === 'string') {
+    return tryParse(payload);
+  }
+
+  if (typeof payload === 'object' && payload !== null) {
+    if ('content' in payload) {
+      const value = (payload as Record<string, unknown>).content;
+      if (!value) {
+        return '';
+      }
+      return typeof value === 'string' ? value : String(value);
+    }
+    return '';
+  }
+
+  return '';
+}
+
+function isSystemNotePayload(payload: Prisma.JsonValue | string | null) {
+  if (!payload) {
+    return false;
+  }
+  let parsed: unknown = payload;
+
+  if (typeof payload === 'string') {
+    try {
+      parsed = JSON.parse(payload);
+    } catch {
+      return false;
+    }
+  }
+
+  return Boolean(
+    parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed) &&
+      'type' in (parsed as Record<string, unknown>)
+  );
+}
+
+function mapConversationEventToNote(
+  event: ConversationNoteRecord
+): ConversationNote {
+  return {
+    id: event.id,
+    conversationId: event.conversationId,
+    content: parseNoteContent(event.payload),
+    createdAt: event.createdAt,
+    createdById: event.createdById,
+    createdByName: event.createdBy?.name ?? event.createdBy?.username ?? null,
+  };
+}
 // Crear nota interna en la conversación
 export async function addConversationNote(
   conversationId: bigint,
   content: string,
   createdById?: number | null
 ) {
-  return prisma.conversationEvent.create({
+  const event = await prisma.conversationEvent.create({
     data: {
       conversationId,
       eventType: 'NOTE',
       payload: JSON.stringify({ content }),
       createdById: createdById ?? null,
     },
+    include: conversationNoteInclude,
   });
+
+  return mapConversationEventToNote(event);
 }
 
 // Listar notas internas de una conversación
-export async function listConversationNotes(conversationId: bigint) {
+export async function listConversationNotes(
+  conversationId: bigint
+): Promise<ConversationNote[]> {
   const events = await prisma.conversationEvent.findMany({
     where: {
       conversationId,
       eventType: 'NOTE',
     },
+    include: conversationNoteInclude,
     orderBy: { createdAt: 'asc' },
   });
 
-  // Filtrar solo las notas internas de usuario, no los eventos de sistema (send_fail, etc)
-  return events.filter((event) => {
-    if (!event.payload) return true; // Si no tiene payload, es una nota normal
-    try {
-      const payload = JSON.parse(event.payload);
-      // Si el payload tiene 'type', es un evento de sistema, excluirlo
-      if (payload && typeof payload === 'object' && 'type' in payload) {
-        return false; // Excluir eventos de sistema
-      }
-      return true;
-    } catch {
-      return true; // Si no se puede parsear, asumir que es una nota normal
-    }
-  });
+  return events
+    .filter((event) => !isSystemNotePayload(event.payload))
+    .map(mapConversationEventToNote);
 }
 
 export const ACTIVE_CONVERSATION_STATUSES = [...ACTIVE_STATUSES] as const;

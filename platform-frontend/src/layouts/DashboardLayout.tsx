@@ -5,6 +5,7 @@ import '../styles/sidebar.css';
 import { sidebarIcons } from '../components/SidebarIcons';
 import { initializeSocket } from '../services/socket/SocketManager';
 import PageShell from '../components/layout/PageShell';
+import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 
 type NavigationLink = {
   to: string;
@@ -94,9 +95,17 @@ export default function DashboardLayout() {
           <button
             className="sidebar__collapse"
             onClick={() => setCollapsed((c) => !c)}
-            title="Colapsar menú"
+            title={collapsed ? 'Expandir men�' : 'Colapsar men�'}
+            aria-label={
+              collapsed ? 'Expandir men� lateral' : 'Colapsar men� lateral'
+            }
+            type="button"
           >
-            {collapsed ? '»' : '«'}
+            {collapsed ? (
+              <FiChevronRight aria-hidden="true" />
+            ) : (
+              <FiChevronLeft aria-hidden="true" />
+            )}
           </button>
         </div>
         <div className="sidebar__user">

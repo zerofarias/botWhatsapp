@@ -7,6 +7,7 @@ import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
 import { useChatStore } from '../store/chatStore';
 import { Order, type OrderFilters } from '../hooks/v2/useOrders';
+import { listConversationNotes } from '../services/api';
 import OrdersTable_v2 from '../components/orders/OrdersTable_v2';
 import CompleteOrderModal_v2 from '../components/orders/CompleteOrderModal_v2';
 import OrderDetailsModal from '../components/orders/OrderDetailsModal';
@@ -61,17 +62,62 @@ const OrdersPage_v2: React.FC = () => {
     setIsDetailsModalOpen(true);
   }, []);
 
-  const handleShowNotes = useCallback((order: Order) => {
-    const notes = order.notas?.trim() || 'Sin notas registradas.';
+  const handleShowNotes = useCallback(async (order: Order) => {
+    const legacyNotes = order.notas?.trim() || 'Sin notas registradas.';
     const specs =
       order.especificaciones?.trim() || 'Sin instrucciones adicionales.';
+    let conversationNotesHtml = '<p>Sin notas internas para este chat.</p>';
+    if (order.conversationId) {
+      try {
+        const noteList = await listConversationNotes(order.conversationId);
+        if (noteList.length) {
+          conversationNotesHtml = noteList
+            .map((note) => {
+              const author =
+                note.createdByName ??
+                (note.createdById ? `Usuario #${note.createdById}` : 'Sistema');
+              const timestamp = new Date(note.createdAt).toLocaleString(
+                'es-AR',
+                {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }
+              );
+              return `
+                <div class="orders-note-entry">
+                  <div class="orders-note-entry-header">
+                    <span class="orders-note-entry-author">${escapeHtml(
+                      author
+                    )}</span>
+                    <span class="orders-note-entry-time">${timestamp}</span>
+                  </div>
+                  <p>${formatForHtml(note.content)}</p>
+                </div>
+              `;
+            })
+            .join('');
+        }
+      } catch (error) {
+        console.error('[OrdersPage_v2] Error al obtener notas', error);
+        conversationNotesHtml =
+          '<p class="orders-note-entry-error">No se pudieron cargar las notas del chat.</p>';
+      }
+    }
 
-    void Swal.fire({
+    await Swal.fire({
       title: `Notas del pedido #${order.id}`,
       html: `
         <div class="orders-notes-content">
-          <p><strong>Notas internas</strong></p>
-          <p>${formatForHtml(notes)}</p>
+          <p><strong>Notas internas del pedido</strong></p>
+          <p>${formatForHtml(legacyNotes)}</p>
+          <hr />
+          <p><strong>Notas asociadas al chat</strong></p>
+          <div class="orders-notes-timeline">
+            ${conversationNotesHtml}
+          </div>
           <hr />
           <p><strong>Especificaciones</strong></p>
           <p>${formatForHtml(specs)}</p>
@@ -80,6 +126,7 @@ const OrdersPage_v2: React.FC = () => {
       icon: 'info',
       confirmButtonText: 'Cerrar',
       focusConfirm: false,
+      width: 600,
     });
   }, []);
 

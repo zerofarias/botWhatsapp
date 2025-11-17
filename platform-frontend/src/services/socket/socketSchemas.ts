@@ -62,6 +62,19 @@ const parseMediaUrl = (value: unknown): string | undefined => {
   return undefined;
 };
 
+const parseContent = (value: unknown): string => {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (value == null) {
+    return '';
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return '';
+};
+
 // Message schema - Flexible to handle backend format variations
 export const MessageSchema = z.object({
   id: z
@@ -80,7 +93,9 @@ export const MessageSchema = z.object({
       return val;
     })
     .pipe(z.number()),
-  content: z.string().min(1),
+  content: z
+    .union([z.string(), z.null(), z.undefined()])
+    .transform(parseContent),
   // Accept both v1 format (senderType) and v2 format (sender)
   sender: z
     .union([z.string(), z.null(), z.undefined()])

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ChatComposer v2 - Send messages with clean state management
  * Uses Zustand store and hooks directly, no props
  * WhatsApp Web style composer
@@ -24,6 +24,14 @@ import {
   type QuickReply,
 } from '../../services/quickReply.service';
 import QuickReplyEditor from '../QuickReplyEditor';
+import {
+  FiFilePlus,
+  FiXCircle,
+  FiZap,
+  FiSend,
+  FiSave,
+  FiLoader,
+} from 'react-icons/fi';
 import './ChatComposer_v2.css';
 
 const ChatComposer_v2: React.FC = () => {
@@ -36,6 +44,9 @@ const ChatComposer_v2: React.FC = () => {
 
   const activeConversation = useChatStore(selectActiveConversation);
   const sending = useChatStore(selectSending);
+  const addConversationNote = useChatStore(
+    (state) => state.addConversationNote
+  );
   const { sendMessage } = useMessageSender();
   const isConversationClosed = activeConversation?.status === 'CLOSED';
   const composerDisabled = !activeConversation || isConversationClosed;
@@ -94,7 +105,18 @@ const ChatComposer_v2: React.FC = () => {
       if (!activeConversation) return;
 
       try {
-        await createConversationNote(activeConversation.id, noteContent);
+        const result = await createConversationNote(
+          activeConversation.id,
+          noteContent
+        );
+        addConversationNote(activeConversation.id, {
+          id: result.id,
+          conversationId: activeConversation.id,
+          content: result.content,
+          createdAt: new Date(result.createdAt).getTime(),
+          createdById: result.createdById,
+          createdByName: result.createdByName ?? 'Tú',
+        });
         console.debug('[ChatComposer_v2] Internal note created successfully');
       } catch (error) {
         console.error('[ChatComposer_v2] Error creating internal note:', error);
@@ -103,7 +125,7 @@ const ChatComposer_v2: React.FC = () => {
         });
       }
     },
-    [activeConversation]
+    [activeConversation, addConversationNote]
   );
 
   const handleSelectSuggestion = useCallback(
@@ -241,7 +263,7 @@ const ChatComposer_v2: React.FC = () => {
               disabled={sending || composerDisabled}
               title="Agregar nota interna"
             >
-              📝
+              <FiFilePlus />
             </button>
           )}
 
@@ -256,7 +278,7 @@ const ChatComposer_v2: React.FC = () => {
               }}
               title="Quitar nota"
             >
-              ✕
+              <FiXCircle />
             </button>
           )}
 
@@ -268,7 +290,7 @@ const ChatComposer_v2: React.FC = () => {
             disabled={sending || composerDisabled}
             title="Crear nuevo atajo rápido"
           >
-            ⚡
+            <FiZap />
           </button>
 
           <div className="chat-composer-v2-input-wrapper">
@@ -321,7 +343,15 @@ const ChatComposer_v2: React.FC = () => {
             className="chat-composer-v2-btn-send"
             title={isNoteMode ? 'Guardar nota (Enter)' : 'Enviar (Enter)'}
           >
-            {sending ? '⏳' : isNoteMode ? '💾' : '➤'}
+            {sending ? (
+              <span className="chat-composer-v2-icon-spin">
+                <FiLoader />
+              </span>
+            ) : isNoteMode ? (
+              <FiSave />
+            ) : (
+              <FiSend />
+            )}
           </button>
         </div>
       </form>

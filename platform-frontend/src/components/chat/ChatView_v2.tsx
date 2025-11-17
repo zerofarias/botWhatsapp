@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ChatView v2 - header + message list for the redesigned chat
  */
 
@@ -14,13 +14,15 @@ import {
   useChatStore,
   selectMessages,
   type ChatStoreState,
+  type ConversationNote,
+  type Message,
 } from '../../store/chatStore';
 import { ContactGroup } from '../../hooks/v2/useContactGroups';
 import type { ConversationProgressStatus } from '../../types/chat';
 import MessageBubble_v2 from './MessageBubble_v2';
 import AddContactModal from './AddContactModal';
 import './ChatView_v2.css';
-import { api } from '../../services/api';
+import { api, listConversationNotes } from '../../services/api';
 import { getApiErrorMessage } from '../../utils/apiError';
 import Swal from 'sweetalert2';
 
@@ -28,6 +30,10 @@ interface ChatViewProps {
   conversationId?: number;
   contactGroup?: ContactGroup | null;
 }
+
+type ChatEntry =
+  | { kind: 'message'; message: Message; timestamp: number }
+  | { kind: 'note'; note: ConversationNote; timestamp: number };
 
 const STATUS_OPTIONS: Array<{
   value: ConversationProgressStatus;
@@ -199,12 +205,49 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
     }
     return conversations.find((c) => c.id === conversationId) || null;
   }, [effectiveContactGroup, conversationId, conversations]);
+  const activeConversationId = effectiveContactGroup
+    ? null
+    : activeConversation?.id ?? null;
+  const conversationNotesMap = useChatStore(
+    (state: ChatStoreState) => state.conversationNotes
+  );
+  const setConversationNotes = useChatStore(
+    (state: ChatStoreState) => state.setConversationNotes
+  );
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (!activeConversationId || effectiveContactGroup) return;
+    let cancelled = false;
+    const loadNotes = async () => {
+      try {
+        const response = await listConversationNotes(activeConversationId);
+        if (cancelled) return;
+        setConversationNotes(
+          activeConversationId,
+          response.map((note) => ({
+            id: note.id,
+            conversationId: activeConversationId,
+            content: note.content,
+            createdAt: new Date(note.createdAt).getTime(),
+            createdById: note.createdById,
+            createdByName: note.createdByName ?? null,
+          }))
+        );
+      } catch (error) {
+        console.error('[ChatView_v2] Error al cargar notas internas', error);
+      }
+    };
+    void loadNotes();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeConversationId, effectiveContactGroup, setConversationNotes]);
 
   const [contactModalMode, setContactModalMode] = useState<
     'create' | 'edit' | null
@@ -219,6 +262,36 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
   const [isReopening, setIsReopening] = useState(false);
   const [finishMenuOpen, setFinishMenuOpen] = useState(false);
   const finishMenuRef = useRef<HTMLDivElement | null>(null);
+  const conversationNotes = useMemo(
+    () =>
+      activeConversationId
+        ? conversationNotesMap.get(activeConversationId) ?? []
+        : [],
+    [conversationNotesMap, activeConversationId]
+  );
+  const combinedEntries = useMemo<ChatEntry[]>(() => {
+    const baseEntries = messages.map((message) => ({
+      kind: 'message' as const,
+      message,
+      timestamp: message.timestamp,
+    }));
+    if (!activeConversationId || effectiveContactGroup) {
+      return baseEntries;
+    }
+    const noteEntries = conversationNotes.map((note) => ({
+      kind: 'note' as const,
+      note,
+      timestamp: note.createdAt,
+    }));
+    return [...baseEntries, ...noteEntries].sort(
+      (a, b) => a.timestamp - b.timestamp
+    );
+  }, [
+    messages,
+    conversationNotes,
+    activeConversationId,
+    effectiveContactGroup,
+  ]);
 
   const handleLoadMoreMessages = useCallback(() => {
     if (effectiveContactGroup) {
@@ -773,17 +846,44 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
           </button>
         )}
 
-        {messages.length === 0 ? (
+        {combinedEntries.length === 0 ? (
           <div className="chat-view-v2-empty">
-            <div>No hay mensajes todavía</div>
+            <div>No hay mensajes por ahora</div>
           </div>
         ) : (
-          messages.map((message: any, index: number) => (
-            <MessageBubble_v2
-              key={`${message.id || 'msg'}-${index}`}
-              message={message}
-            />
-          ))
+          combinedEntries.map((entry, index) =>
+            entry.kind === 'note' ? (
+              <div
+                key={`note-${entry.note.id}-${index}`}
+                className="chat-note-entry"
+              >
+                <div className="chat-note-header">
+                  <span className="chat-note-label">Nota interna</span>
+                  <span className="chat-note-author">
+                    {entry.note.createdByName ??
+                      (entry.note.createdById
+                        ? `Usuario #${entry.note.createdById}`
+                        : 'Nota interna')}
+                  </span>
+                  <span className="chat-note-time">
+                    {new Date(entry.note.createdAt).toLocaleString('es-AR', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+                <p className="chat-note-content">{entry.note.content}</p>
+              </div>
+            ) : (
+              <MessageBubble_v2
+                key={`${entry.message.id || 'msg'}-${index}`}
+                message={entry.message}
+              />
+            )
+          )
         )}
 
         <div ref={messagesEndRef} />

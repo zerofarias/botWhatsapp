@@ -34,15 +34,21 @@
 .chat-page-v2-container {
   position: relative;
   display: grid;
-  grid-template-columns: 370px 1fr;
+  grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
+  gap: 20px;
   height: min(940px, calc(100vh - 4rem));
   width: 100%;
   background: var(--chat-bg-gradient);
-  padding: 16px;
+  padding: 20px;
   box-sizing: border-box;
-  border-radius: 28px;
+  border-radius: 32px;
   overflow: hidden;
   box-shadow: 0 45px 70px rgba(15, 23, 42, 0.28);
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont,
+    sans-serif;
+  color: var(--chat-text-primary);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  isolation: isolate;
 }
 
 .chat-page-v2-container::before {
@@ -73,40 +79,41 @@
 .conversation-list-panel-v2 {
   display: flex;
   flex-direction: column;
-  background-color: var(--chat-panel-bg);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 20px;
-  box-shadow: var(--chat-panel-shadow);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), #f4f6fb 90%);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 24px;
+  box-shadow: 0 25px 60px rgba(15, 23, 42, 0.15);
   height: 100%;
   overflow: hidden;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px);
 }
 
 .conversation-list-header-v2 {
-  padding: 1.4rem 1.2rem 1rem;
+  padding: 1.4rem 1.5rem 1rem;
   border-bottom: 1px solid rgba(148, 163, 184, 0.18);
   background: linear-gradient(
     180deg,
-    var(--chat-panel-muted) 0%,
-    rgba(248, 250, 252, 0.6) 100%
+    rgba(248, 250, 252, 0.9) 0%,
+    rgba(241, 245, 249, 0.65) 100%
   );
 }
 
 .conversation-list-header-v2 h2 {
   margin: 0;
-  font-size: 1.4rem;
+  font-size: 1.35rem;
   font-weight: 700;
   color: var(--chat-text-primary);
+  letter-spacing: -0.01em;
 }
 
 .conversation-list-items-v2 {
   flex-grow: 1;
   overflow-y: auto;
-  padding: 0.25rem 0 1.25rem;
+  padding: 0.5rem 0 1.5rem;
   background: linear-gradient(
     180deg,
-    rgba(248, 250, 252, 0.85) 0%,
-    rgba(241, 245, 249, 0.35) 100%
+    rgba(248, 250, 252, 0.9) 0%,
+    rgba(241, 245, 249, 0.4) 100%
   );
 }
 
@@ -170,13 +177,19 @@
 .chat-area-v2 {
   display: flex;
   flex-direction: column;
-  background-color: #fff;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 20px;
-  box-shadow: var(--chat-panel-shadow);
+  background: radial-gradient(
+        circle at top right,
+        rgba(79, 70, 229, 0.08),
+        #fff
+      )
+      0 0 / cover,
+    #fff;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 28px;
+  box-shadow: 0 30px 60px rgba(15, 23, 42, 0.2);
   height: 100%;
   overflow: hidden;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(10px);
 }
 
 /* Chat Header with Contact Info */
@@ -497,6 +510,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
 }
 
 .chat-error-banner-v2 span {
@@ -504,23 +518,25 @@
   font-weight: 500;
 }
 
-.chat-error-banner-v2 button {
-  background: none;
-  border: none;
+.chat-error-dismiss {
+  background: rgba(252, 211, 77, 0.25);
+  border: 1px solid rgba(245, 158, 11, 0.55);
+  border-radius: 999px;
   cursor: pointer;
-  font-size: 1.2rem;
+  font-size: 1rem;
   color: var(--chat-text-secondary);
-  padding: 0;
-  width: 24px;
-  height: 24px;
+  padding: 4px 8px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.2s ease;
+  transition: all 0.2s ease;
 }
 
-.chat-error-banner-v2 button:hover {
+.chat-error-dismiss:hover {
   color: var(--chat-text-primary);
+  background: rgba(245, 158, 11, 0.2);
 }
 
 /* Empty State */
@@ -545,11 +561,17 @@
 @media (max-width: 1024px) {
   .chat-page-v2-container {
     grid-template-columns: 1fr;
+    gap: 16px;
     height: auto;
+    padding: 16px;
   }
 
   .conversation-list-panel-v2 {
     max-height: 300px;
     margin-bottom: 1rem;
+  }
+
+  .chat-area-v2 {
+    border-radius: 20px;
   }
 }

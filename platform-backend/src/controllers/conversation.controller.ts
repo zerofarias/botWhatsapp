@@ -673,24 +673,16 @@ export async function createConversationNoteHandler(
     content.trim(),
     req.user.id
   );
-  let noteContent = '';
-  if (
-    note.payload &&
-    typeof note.payload === 'object' &&
-    'content' in note.payload
-  ) {
-    noteContent = (note.payload as { content?: string }).content ?? '';
-  }
-
   // Emitir evento socket para que el frontend se actualice en tiempo real
   const io = getSocketServer();
   await broadcastConversationUpdate(io, conversationId);
 
   res.status(201).json({
     id: note.id.toString(),
-    content: noteContent,
+    content: note.content,
     createdAt: note.createdAt,
     createdById: note.createdById,
+    createdByName: note.createdByName,
   });
 }
 
@@ -715,22 +707,13 @@ export async function listConversationNotesHandler(
   }
   const notes = await listConversationNotes(conversationId);
   res.json(
-    notes.map((note) => {
-      let noteContent = '';
-      if (
-        note.payload &&
-        typeof note.payload === 'object' &&
-        'content' in note.payload
-      ) {
-        noteContent = (note.payload as { content?: string }).content ?? '';
-      }
-      return {
-        id: note.id.toString(),
-        content: noteContent,
-        createdAt: note.createdAt,
-        createdById: note.createdById,
-      };
-    })
+    notes.map((note) => ({
+      id: note.id.toString(),
+      content: note.content,
+      createdAt: note.createdAt,
+      createdById: note.createdById,
+      createdByName: note.createdByName,
+    }))
   );
 }
 

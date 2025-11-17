@@ -220,6 +220,48 @@
   margin: 12px 0;
 }
 
+.orders-notes-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 240px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.orders-note-entry {
+  border: 1px solid #fcd34d;
+  background-color: #fff8e1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.25);
+}
+
+.orders-note-entry-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.orders-note-entry-author {
+  font-weight: 700;
+}
+
+.orders-note-entry-time {
+  margin-left: auto;
+  font-size: 12px;
+  color: #b45309;
+}
+
+.orders-note-entry-error {
+  color: #b91c1c;
+  font-style: italic;
+}
+
 @media (max-width: 768px) {
   .orders-page-v2 {
     padding: 10px;
