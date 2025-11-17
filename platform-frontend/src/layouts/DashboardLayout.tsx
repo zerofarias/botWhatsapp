@@ -33,7 +33,6 @@ const NAVIGATION_LINKS: NavigationLink[] = [
     label: 'Contactos',
     roles: ['ADMIN', 'SUPERVISOR'],
   },
-  { to: '/dashboard/working-hours', label: 'Horarios', roles: ['ADMIN'] },
   { to: '/dashboard/settings', label: 'Configuracion' },
 ];
 
@@ -169,11 +168,6 @@ const PAGE_SHELL_CONFIG: ShellMeta[] = [
     path: '/dashboard/bots',
     title: 'Bots',
     subtitle: 'Crea y sincroniza asistentes para tus flujos',
-  },
-  {
-    path: '/dashboard/working-hours',
-    title: 'Horarios',
-    subtitle: 'Configura ventanas de atención',
   },
   {
     path: '/dashboard/settings',

@@ -590,23 +590,57 @@ button {
 
 .form__label {
   display: grid;
-  gap: 0.45rem;
-  font-weight: 600;
+  gap: 0.65rem;
+  font-weight: 700;
   color: #1e293b;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.form__label::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 12px;
+  background: linear-gradient(180deg, #facc15 0%, #f97316 100%);
+  margin-left: 6px;
+  border-radius: 1px;
+  align-self: start;
+  margin-top: 4px;
 }
 
 .form__label input,
 .form__label select,
 .form__label textarea {
-  padding: 0.65rem 1rem;
-  border-radius: 10px;
-  border: 1px solid #cbd5f5;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 2px solid rgba(226, 232, 240, 0.6);
   font: inherit;
-  background: #ffffff;
+  background: linear-gradient(135deg, #fffbf0 0%, #fef3c7 50%, #fffbf0 100%);
+  color: #1e293b;
+  transition: all 0.2s ease;
+  font-size: 0.95rem;
+}
+
+.form__label input::placeholder,
+.form__label select::placeholder,
+.form__label textarea::placeholder {
+  color: #cbd5e1;
+}
+
+.form__label input:focus,
+.form__label select:focus,
+.form__label textarea:focus {
+  outline: none;
+  border-color: rgba(250, 204, 21, 0.6);
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.1);
+  background: linear-gradient(135deg, #fffbf0 0%, #fef9e7 50%, #fffbf0 100%);
 }
 
 .form__label textarea {
   resize: vertical;
+  min-height: 100px;
 }
 
 .form__actions {
@@ -617,10 +651,16 @@ button {
 
 .form__error {
   color: #dc2626;
-  background: rgba(220, 38, 38, 0.12);
+  background: linear-gradient(
+    135deg,
+    rgba(220, 38, 38, 0.08) 0%,
+    rgba(185, 28, 28, 0.08) 100%
+  );
   border-radius: 8px;
-  padding: 0.5rem 0.75rem;
+  padding: 8px 12px;
   font-size: 0.9rem;
+  font-weight: 600;
+  border: 1px solid rgba(220, 38, 38, 0.2);
 }
 
 .table-wrapper {

@@ -154,7 +154,8 @@ const StatsPage = () => {
       {!loading && data && (
         <>
           <section className="stats-grid">
-            <article className="stat-card">
+            <article className="stat-card stat-card-contacts">
+              <div className="stat-card-icon">👥</div>
               <p>Total de contactos</p>
               <h3>{numberFormatter.format(data.contacts.total)}</h3>
               <span className="stat-foot">
@@ -162,26 +163,30 @@ const StatsPage = () => {
                 rango
               </span>
             </article>
-            <article className="stat-card">
+            <article className="stat-card stat-card-new">
+              <div className="stat-card-icon">✨</div>
               <p>Números nuevos</p>
               <h3>{numberFormatter.format(data.contacts.newNumbers)}</h3>
               <span className="stat-foot">
                 Personas que escribieron por primera vez
               </span>
             </article>
-            <article className="stat-card">
+            <article className="stat-card stat-card-night">
+              <div className="stat-card-icon">🌙</div>
               <p>Mensajes nocturnos</p>
               <h3>{numberFormatter.format(data.messaging.nightlyMessages)}</h3>
               <span className="stat-foot">Entre 22:00 y 06:00</span>
             </article>
-            <article className="stat-card">
+            <article className="stat-card stat-card-response">
+              <div className="stat-card-icon">⚡</div>
               <p>Respuesta promedio</p>
               <h3>{formatSeconds(data.messaging.avgResponseSeconds)}</h3>
               <span className="stat-foot">
                 Desde el último mensaje del contacto hasta un operador
               </span>
             </article>
-            <article className="stat-card">
+            <article className="stat-card stat-card-closure">
+              <div className="stat-card-icon">✅</div>
               <p>Cierre de pedidos</p>
               <h3>{formatMinutes(data.orders.avgClosureMinutes)}</h3>
               <span className="stat-foot">Promedio desde creación</span>

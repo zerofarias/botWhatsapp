@@ -13,3 +13,4 @@ userRouter.use(authenticate, authorize(['ADMIN']));
 userRouter.get('/', listUsersHandler);
 userRouter.post('/', createUserHandler);
 userRouter.put('/:id', updateUserHandler);
+userRouter.patch('/:id', updateUserHandler);

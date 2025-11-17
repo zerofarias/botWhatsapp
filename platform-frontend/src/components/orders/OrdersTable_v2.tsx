@@ -48,20 +48,30 @@ type ExportRow = Record<ExportKey, string>;
 const dataTableCustomStyles = {
   headCells: {
     style: {
-      paddingTop: '14px',
-      paddingBottom: '14px',
-      fontSize: '13px',
-      fontWeight: 600,
+      paddingTop: '16px',
+      paddingBottom: '16px',
+      fontSize: '0.85rem',
+      fontWeight: 700,
       textTransform: 'uppercase' as const,
-      color: '#475569',
-      backgroundColor: '#f5f5f5',
+      color: '#0f172a',
+      backgroundColor: '#f8fafc',
       borderBottom: '2px solid #e2e8f0',
+      letterSpacing: '0.3px',
     },
   },
   rows: {
     style: {
-      minHeight: '120px',
-      borderBottom: '1px solid #f1f5f9',
+      minHeight: '130px',
+      borderBottom: '1px solid #e2e8f0',
+      backgroundColor: '#ffffff',
+      transition: 'all 0.2s ease',
+    },
+    stripedStyle: {
+      backgroundColor: '#f9fafb',
+    },
+    highlightOnHoverStyle: {
+      backgroundColor: '#f0f9ff',
+      cursor: 'pointer',
     },
   },
   cells: {

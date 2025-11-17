@@ -1,0 +1,335 @@
+/* UserCard.css - Estilos para cards de usuarios */
+
+.user-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+.user-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+}
+
+.user-card:hover::before {
+  transform: translateX(0);
+}
+
+.user-card:hover {
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.1);
+  transform: translateY(-4px);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.user-card[data-active='false'] {
+  opacity: 0.75;
+}
+
+.user-card__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.user-card__photo-section {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.user-card__photo {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 2px solid rgba(59, 130, 246, 0.2);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
+.user-card__photo-placeholder {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 1.8rem;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
+.user-card__status {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid white;
+  bottom: 0;
+  right: 0;
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.1);
+}
+
+.user-card__status[data-active='true'] {
+  background: #10b981;
+  animation: pulse-active 2s ease-in-out infinite;
+}
+
+.user-card__status[data-active='false'] {
+  background: #ef4444;
+}
+
+@keyframes pulse-active {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.2);
+  }
+}
+
+.user-card__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-card__name {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-card__username {
+  margin: 0 0 4px;
+  font-size: 0.85rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.user-card__email {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-card__role {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.user-card__role-badge {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 2px solid;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.user-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(
+    135deg,
+    rgba(250, 204, 21, 0.02) 0%,
+    rgba(249, 115, 22, 0.02) 100%
+  );
+  border-radius: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.4);
+}
+
+.user-card__label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+.user-card__areas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.user-card__areas-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.user-card__area-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  color: #0c4a6e;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.user-card__default-area {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(59, 130, 246, 0.08);
+  border-radius: 8px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.user-card__area-main {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1e40af;
+}
+
+.user-card__status-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #1e293b;
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.03);
+  border-radius: 8px;
+}
+
+.user-card__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.user-card__status-dot[data-active='true'] {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+}
+
+.user-card__status-dot[data-active='false'] {
+  background: #ef4444;
+}
+
+.user-card__footer {
+  display: flex;
+  gap: 10px;
+}
+
+.user-card__btn {
+  flex: 1;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.user-card__btn--primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.2);
+}
+
+.user-card__btn--primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.user-card__btn--secondary {
+  background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+  color: #0f172a;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+.user-card__btn--secondary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+}
+
+.user-card__btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.user-card__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .user-card {
+    padding: 16px;
+  }
+
+  .user-card__header {
+    gap: 12px;
+  }
+
+  .user-card__photo,
+  .user-card__photo-placeholder {
+    width: 56px;
+    height: 56px;
+    font-size: 1.4rem;
+  }
+
+  .user-card__name {
+    font-size: 1rem;
+  }
+
+  .user-card__role {
+    justify-content: flex-start;
+  }
+
+  .user-card__body {
+    padding: 12px;
+  }
+
+  .user-card__footer {
+    gap: 8px;
+  }
+
+  .user-card__btn {
+    padding: 8px 12px;
+    font-size: 0.75rem;
+  }
+}

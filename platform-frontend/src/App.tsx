@@ -7,10 +7,9 @@ import DashboardOverview from './pages/DashboardOverview';
 import SettingsPage from './pages/SettingsPage';
 import ChatPage_v2 from './pages/ChatPage_v2';
 import OrdersPage_v2 from './pages/OrdersPage_v2';
-import UsersPage from './pages/UsersPage';
-import AreasPage from './pages/AreasPage';
+import UsersPage_v2 from './pages/UsersPage_v2';
+import AreasPage_v2 from './pages/AreasPage_v2';
 import ContactsPage from './pages/ContactsPage';
-import WorkingHoursPage from './pages/WorkingHoursPage';
 import FlowBuilder from './views/FlowBuilder/FlowBuilder';
 import BotsPage from './pages/BotsPage';
 import StatsPage from './pages/StatsPage';
@@ -29,10 +28,9 @@ export default function App() {
           <Route path="stats" element={<StatsPage />} />
           {/* Flows y Flow Builder eliminados, ahora solo desde Bots */}
           <Route path="bots" element={<BotsPage />} />
-          <Route path="users" element={<UsersPage />} />
-          <Route path="areas" element={<AreasPage />} />
+          <Route path="users" element={<UsersPage_v2 />} />
+          <Route path="areas" element={<AreasPage_v2 />} />
           <Route path="contacts" element={<ContactsPage />} />
-          <Route path="working-hours" element={<WorkingHoursPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Route>

@@ -5,10 +5,11 @@
 .orders-table-wrapper {
   width: 100%;
   background-color: #fff;
-  border: 1px solid #edf2f7;
+  border: 1px solid #e2e8f0;
   border-radius: 16px;
-  padding: 12px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  padding: 0;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
 }
 
 .orders-table-actions {
@@ -17,23 +18,26 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   width: 100%;
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .orders-table-action-btn {
-  border: 1px solid #cbd5f5;
-  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  background: white;
   color: #0f172a;
-  border-radius: 999px;
-  padding: 6px 14px;
+  border-radius: 10px;
+  padding: 8px 16px;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .orders-table-action-btn:hover:not(:disabled) {
-  border-color: #0ea5e9;
-  color: #0ea5e9;
+  border-color: #3b82f6;
+  background: linear-gradient(135deg, #e0f2fe, #cffafe);
+  color: #0e7490;
 }
 
 .orders-table-action-btn:disabled {
@@ -42,152 +46,171 @@
 }
 
 .order-overview {
-  min-width: 260px;
+  min-width: 300px;
 }
 
 .order-id {
-  font-weight: 600;
+  font-weight: 700;
   color: #0f172a;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  font-size: 1.1rem;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 .client-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .client-name {
-  font-weight: 500;
-  color: #111827;
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 1rem;
 }
 
 .client-type {
-  font-size: 12px;
-  color: #6b7280;
+  font-size: 0.8rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 .order-phone {
-  color: #475569;
+  color: #0f172a;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 13px;
-  margin-top: 4px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-top: 6px;
+  background: linear-gradient(135deg, #fffbf0, #fef3c7);
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: inline-block;
+  width: fit-content;
 }
 
 .order-meta {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-top: 6px;
-  font-size: 12px;
+  gap: 3px;
+  margin-top: 8px;
+  font-size: 0.85rem;
   color: #64748b;
 }
 
 .order-meta span {
-  line-height: 1.2;
+  line-height: 1.4;
 }
 
 .order-timeline {
   display: flex;
-  gap: 1.5rem;
+  gap: 2rem;
   flex-wrap: wrap;
-  min-width: 320px;
+  min-width: 380px;
 }
 
 .timeline-item {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 120px;
+  min-width: 140px;
 }
 
 .timeline-label {
-  font-size: 12px;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #94a3b8;
+  font-weight: 600;
 }
 
 .timeline-value {
-  font-weight: 600;
+  font-weight: 700;
   color: #0f172a;
-  font-size: 13px;
+  font-size: 0.95rem;
 }
 
 .timeline-relative {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: #9ca3af;
 }
 
 .timeline-item.duration .timeline-label {
-  color: #0ea5e9;
+  color: #0284c7;
 }
 
 .timeline-item.duration .timeline-value {
   color: #0284c7;
+  font-weight: 700;
 }
 
 .order-duration {
   text-align: center;
-  color: #666;
-  min-width: 80px;
-  font-weight: 600;
+  color: #0f172a;
+  min-width: 100px;
+  font-weight: 700;
 }
 
 .order-status {
-  min-width: 140px;
+  min-width: 160px;
   overflow: visible;
 }
 
 .status-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 16px;
-  font-size: 12px;
-  font-weight: 600;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 700;
   white-space: nowrap;
 }
 
 .status-yellow {
-  background-color: #fff3cd;
-  color: #856404;
+  background-color: #fef08a;
+  color: #854d0e;
+  box-shadow: 0 2px 8px rgba(250, 204, 21, 0.2);
 }
 
 .status-green {
-  background-color: #d4edda;
-  color: #155724;
+  background-color: #dcfce7;
+  color: #166534;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
 }
 
 .status-blue {
-  background-color: #d1ecf1;
-  color: #0c5460;
+  background-color: #cffafe;
+  color: #0e7490;
+  box-shadow: 0 2px 8px rgba(34, 211, 238, 0.2);
 }
 
 .status-red {
-  background-color: #f8d7da;
-  color: #721c24;
+  background-color: #fee2e2;
+  color: #991b1b;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
 }
 
 .order-reason {
-  min-width: 120px;
+  min-width: 140px;
 }
 
 .reason-badge {
   display: inline-block;
-  padding: 4px 8px;
-  background-color: #f0f0f0;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #666;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+  border-radius: 10px;
+  font-size: 0.85rem;
+  color: #475569;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
 }
 
 .order-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  min-width: 220px;
+  min-width: 280px;
   overflow: visible;
 }
 
@@ -195,21 +218,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: 1px solid #d1d5db;
-  background-color: #fff;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background-color: white;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 700;
   color: #0f172a;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
 .action-btn:hover {
-  border-color: #0ea5e9;
-  color: #0c4a6e;
-  background-color: #e0f2fe;
+  transform: translateY(-2px);
 }
 
 .action-btn:disabled {
@@ -218,29 +239,47 @@
 }
 
 .action-btn.details-btn {
-  border-color: #0ea5e9;
-  color: #0c4a6e;
+  border-color: #06b6d4;
+  color: #0e7490;
+  background: linear-gradient(135deg, #e0f2fe, #cffafe);
+}
+
+.action-btn.details-btn:hover:not(:disabled) {
+  border-color: #0891b2;
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.2);
 }
 
 .action-btn.notes-btn {
   border-color: #a855f7;
   color: #6b21a8;
+  background: linear-gradient(135deg, #f3e8ff, #e9d5ff);
+}
+
+.action-btn.notes-btn:hover:not(:disabled) {
+  border-color: #7e22ce;
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.2);
 }
 
 .action-btn.chat-btn {
-  border-color: #22c55e;
-  color: #166534;
+  border-color: #10b981;
+  color: #065f46;
+  background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+}
+
+.action-btn.chat-btn:hover:not(:disabled) {
+  border-color: #059669;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
 }
 
 .action-btn.complete-btn {
   border-color: #f97316;
   color: #9a3412;
+  background: linear-gradient(135deg, #fff7ed, #fed7aa);
 }
 
-.action-btn.complete-btn:hover {
-  background-color: #fff7ed;
+.action-btn.complete-btn:hover:not(:disabled) {
   border-color: #ea580c;
-  color: #7c2d12;
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
 }
 
 .orders-table-loading,
@@ -318,28 +357,68 @@
   cursor: not-allowed;
   background-color: #f5f5f5;
 }
-
 /* Colores para el select según el estado */
+.status-select {
+  width: 160px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 2px solid #e2e8f0;
+  font-size: 0.9rem;
+  background-color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 700;
+}
+
+.status-select:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.status-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.status-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: #f8fafc;
+}
+
 .status-select.pending {
-  color: #856404;
-  background-color: #fff3cd;
-  border-color: #ffeaa7;
+  color: #854d0e;
+  background-color: #fef08a;
+  border-color: #fcd34d;
 }
 
 .status-select.confirmado {
-  color: #0c5460;
-  background-color: #d1ecf1;
-  border-color: #bee5eb;
+  color: #0e7490;
+  background-color: #cffafe;
+  border-color: #a5f3fc;
 }
 
 .status-select.completado {
-  color: #155724;
-  background-color: #d4edda;
-  border-color: #c3e6cb;
+  color: #166534;
+  background-color: #dcfce7;
+  border-color: #bbf7d0;
 }
 
 .status-select.cancelado {
-  color: #721c24;
-  background-color: #f8d7da;
-  border-color: #f5c6cb;
+  color: #991b1b;
+  background-color: #fee2e2;
+  border-color: #fecaca;
 }
+
+/* Estilos para filas completadas */
+.rdt_TableRow.completed-row {
+  background-color: #f0fdf4 !important;
+  opacity: 0.85;
+}
+
+.rdt_TableRow.completed-row:hover {
+  background-color: #dcfce7 !important;
+}
+
+/* Responsive */
