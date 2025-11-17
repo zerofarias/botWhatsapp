@@ -89,3 +89,45 @@ export async function startConversationFlow(conversationId: string | number) {
   const res = await api.post(`/conversations/${conversationId}/start-flow`);
   return res.data;
 }
+
+export interface HotHourStat {
+  hour: number;
+  total: number;
+}
+
+export interface MessagesPerDayStat {
+  day: string;
+  total: number;
+}
+
+export interface AdminAnalyticsResponse {
+  range: {
+    days: number;
+    since: string;
+    until: string;
+  };
+  contacts: {
+    total: number;
+    newInRange: number;
+    newNumbers: number;
+  };
+  messaging: {
+    hotHours: HotHourStat[];
+    nightlyMessages: number;
+    messagesPerDay: MessagesPerDayStat[];
+    avgResponseSeconds: number | null;
+  };
+  orders: {
+    hotHours: HotHourStat[];
+    avgClosureMinutes: number | null;
+  };
+}
+
+export async function getAdminAnalyticsSummary(days?: number) {
+  const params =
+    typeof days === 'number' && !Number.isNaN(days) ? `?days=${days}` : '';
+  const res = await api.get<AdminAnalyticsResponse>(
+    `/analytics/summary${params}`
+  );
+  return res.data;
+}

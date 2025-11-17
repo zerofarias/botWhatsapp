@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import type { Prisma, OrderStatus } from '@prisma/client';
 import { prisma } from '../config/prisma';
 
 /**
@@ -10,6 +11,9 @@ function sanitizeBigInts(obj: any): any {
   }
   if (typeof obj === 'bigint') {
     return Number(obj);
+  }
+  if (obj instanceof Date) {
+    return obj.toISOString();
   }
   if (Array.isArray(obj)) {
     return obj.map(sanitizeBigInts);
@@ -76,19 +80,137 @@ async function sendWhatsAppMessage(phone: string, message: string) {
  */
 export const getOrdersHandler = async (req: Request, res: Response) => {
   try {
-    const { status, search, limit = '50', offset = '0' } = req.query;
+    const {
+      status,
+      search,
+      limit = '50',
+      offset = '0',
+      startDate,
+      endDate,
+      operatorId,
+      operatorName,
+      clientPhone,
+      conversationId,
+    } = req.query;
 
-    const where: any = {};
+    const where: Prisma.OrderWhereInput = {};
+    const andFilters: Prisma.OrderWhereInput[] = [];
 
-    if (status) {
-      where.status = status;
+    const validStatuses: ReadonlyArray<OrderStatus> = [
+      'PENDING',
+      'CONFIRMADO',
+      'COMPLETADO',
+      'CANCELADO',
+    ];
+
+    const statusValue =
+      typeof status === 'string' ? status.toUpperCase() : undefined;
+
+    if (statusValue && validStatuses.includes(statusValue as OrderStatus)) {
+      where.status = statusValue as OrderStatus;
     }
 
-    if (search) {
-      where.OR = [
-        { clientName: { contains: search as string } },
-        { clientPhone: { contains: search as string } },
+    const trimmedSearch = typeof search === 'string' ? search.trim() : '';
+    if (trimmedSearch.length) {
+      const orConditions: Prisma.OrderWhereInput[] = [
+        {
+          clientName: {
+            contains: trimmedSearch,
+          },
+        },
+        { clientPhone: { contains: trimmedSearch } },
+        {
+          tipoConversacion: {
+            contains: trimmedSearch,
+          },
+        },
+        {
+          conversation: {
+            is: {
+              userPhone: {
+                contains: trimmedSearch,
+              },
+            },
+          },
+        },
+        { itemsJson: { contains: trimmedSearch } },
       ];
+      const searchAsNumber = Number(trimmedSearch);
+      if (!Number.isNaN(searchAsNumber)) {
+        orConditions.push({ id: searchAsNumber });
+      }
+      andFilters.push({ OR: orConditions });
+    }
+
+    if (clientPhone && typeof clientPhone === 'string') {
+      andFilters.push({
+        clientPhone: {
+          contains: clientPhone,
+        },
+      });
+    }
+
+    if (startDate || endDate) {
+      const createdAtFilter: Prisma.DateTimeFilter = {};
+      if (startDate && typeof startDate === 'string') {
+        const parsed = new Date(startDate);
+        if (!Number.isNaN(parsed.getTime())) {
+          createdAtFilter.gte = parsed;
+        }
+      }
+      if (endDate && typeof endDate === 'string') {
+        const parsed = new Date(endDate);
+        if (!Number.isNaN(parsed.getTime())) {
+          createdAtFilter.lte = parsed;
+        }
+      }
+      if (Object.keys(createdAtFilter).length > 0) {
+        andFilters.push({ createdAt: createdAtFilter });
+      }
+    }
+
+    if (operatorId && typeof operatorId === 'string') {
+      const parsedOperatorId = parseInt(operatorId, 10);
+      if (!Number.isNaN(parsedOperatorId)) {
+        andFilters.push({
+          conversation: {
+            is: {
+              assignedToId: parsedOperatorId,
+            },
+          },
+        });
+      }
+    }
+
+    if (operatorName && typeof operatorName === 'string') {
+      andFilters.push({
+        conversation: {
+          is: {
+            assignedTo: {
+              is: {
+                name: {
+                  contains: operatorName,
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+
+    if (conversationId && typeof conversationId === 'string') {
+      try {
+        const parsedConversationId = BigInt(conversationId);
+        andFilters.push({
+          conversationId: parsedConversationId,
+        });
+      } catch {
+        // Ignorar conversaci��n inv��lida
+      }
+    }
+
+    if (andFilters.length > 0) {
+      where.AND = andFilters;
     }
 
     const orders = await (prisma as any).order.findMany({
@@ -98,6 +220,20 @@ export const getOrdersHandler = async (req: Request, res: Response) => {
           select: {
             userPhone: true,
             contactName: true,
+            assignedToId: true,
+            assignedTo: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            contact: {
+              select: {
+                id: true,
+                name: true,
+                dni: true,
+              },
+            },
           },
         },
       },
@@ -238,8 +374,10 @@ export const completeOrderHandler = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    if (order.status !== 'PENDING') {
-      return res.status(400).json({ error: 'Order is not pending' });
+    if (order.status !== 'PENDING' && order.status !== 'CONFIRMADO') {
+      return res
+        .status(400)
+        .json({ error: 'Order cannot be closed from current status' });
     }
 
     // Determinar nuevo estado

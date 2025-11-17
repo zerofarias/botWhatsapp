@@ -1036,7 +1036,8 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
       selectedNode.data.type !== 'TEXT' &&
       selectedNode.data.type !== 'CAPTURE' &&
       selectedNode.data.type !== 'SET_VARIABLE' &&
-      selectedNode.data.type !== 'NOTE'
+      selectedNode.data.type !== 'NOTE' &&
+      selectedNode.data.type !== 'AI'
     ) {
       return selectedNode;
     }
@@ -1321,7 +1322,8 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
           node.data.type === 'TEXT' ||
           node.data.type === 'CAPTURE' ||
           node.data.type === 'SET_VARIABLE' ||
-          node.data.type === 'NOTE'
+          node.data.type === 'NOTE' ||
+          node.data.type === 'AI'
         ) {
           const availableVars = getAvailableVariablesForNode(
             node.id,

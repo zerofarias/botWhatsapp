@@ -233,6 +233,13 @@ export interface AINodeData extends BaseNodeData {
   type: 'AI';
   prompt: string;
   model: string;
+  responseVariableName?: string | null;
+  availableVariables?: Array<{
+    name: string;
+    createdByNodeId?: string;
+    createdByNodeType?: string;
+    createdByNodeLabel?: string;
+  }>;
 }
 
 export interface SetVariableNodeData extends BaseNodeData {

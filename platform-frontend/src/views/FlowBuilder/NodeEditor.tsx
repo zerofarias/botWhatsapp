@@ -257,8 +257,23 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
         <AINodeForm
           prompt={data.prompt}
           model={data.model}
-          modelOptions={['gpt-3.5', 'gpt-4']}
-          onChange={({ prompt, model }) => handleUpdate({ prompt, model })}
+          responseVariableName={data.responseVariableName ?? ''}
+          modelOptions={[
+            'llama-3.3-70b-versatile',
+            'openai/gpt-oss-20b',
+            'llama-3.1-70b',
+            'gpt-4o-mini',
+          ]}
+          availableVariables={
+            Array.isArray((data as any).availableVariables)
+              ? (data as any).availableVariables.map(
+                  (item: { name?: string }) => item.name ?? ''
+                )
+              : []
+          }
+          onChange={({ prompt, model, responseVariableName }) =>
+            handleUpdate({ prompt, model, responseVariableName })
+          }
         />
       );
       break;

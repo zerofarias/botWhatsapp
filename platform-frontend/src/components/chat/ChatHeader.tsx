@@ -4,6 +4,7 @@ import type { ConversationSummary } from '../../types/chat';
 import AddContactModal from './AddContactModal';
 import { api } from '../../services/api';
 import { getApiErrorMessage } from '../../utils/apiError';
+import Swal from 'sweetalert2';
 
 const getDisplayName = (conversation: ConversationSummary) => {
   const name = conversation.contact?.name ?? conversation.contactName ?? '';
@@ -121,12 +122,15 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
               });
               onCloseConversation();
             } catch (error) {
-              alert(
-                getApiErrorMessage(
+              await Swal.fire({
+                icon: 'error',
+                title: 'No se pudo finalizar la conversación.',
+                text: getApiErrorMessage(
                   error,
-                  'No se pudo finalizar la conversacion.'
-                )
-              );
+                  'No se pudo finalizar la conversación.'
+                ),
+                confirmButtonText: 'Entendido',
+              });
             }
           }}
           disabled={isClosing || conversation.status === 'CLOSED'}

@@ -13,6 +13,7 @@ import ContactsPage from './pages/ContactsPage';
 import WorkingHoursPage from './pages/WorkingHoursPage';
 import FlowBuilder from './views/FlowBuilder/FlowBuilder';
 import BotsPage from './pages/BotsPage';
+import StatsPage from './pages/StatsPage';
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
           <Route index element={<DashboardOverview />} />
           <Route path="chat" element={<ChatPage_v2 />} />
           <Route path="orders" element={<OrdersPage_v2 />} />
+          <Route path="stats" element={<StatsPage />} />
           {/* Flows y Flow Builder eliminados, ahora solo desde Bots */}
           <Route path="bots" element={<BotsPage />} />
           <Route path="users" element={<UsersPage />} />

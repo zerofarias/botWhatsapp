@@ -22,6 +22,7 @@ import AddContactModal from './AddContactModal';
 import './ChatView_v2.css';
 import { api } from '../../services/api';
 import { getApiErrorMessage } from '../../utils/apiError';
+import Swal from 'sweetalert2';
 
 interface ChatViewProps {
   conversationId?: number;
@@ -95,6 +96,40 @@ const FINISH_REASON_LABELS: Record<string, string> = {
 };
 
 type FinishPresetKey = keyof typeof FINISH_PRESETS;
+
+const showSuccessAlert = (title: string, text?: string) =>
+  Swal.fire({
+    icon: 'success',
+    title,
+    text,
+    confirmButtonText: 'Aceptar',
+  });
+
+const showErrorAlert = (title: string, text?: string) =>
+  Swal.fire({
+    icon: 'error',
+    title,
+    text,
+    confirmButtonText: 'Entendido',
+  });
+
+const confirmAction = async (
+  title: string,
+  text?: string,
+  confirmButtonText = 'Sí',
+  cancelButtonText = 'Cancelar'
+) => {
+  const result = await Swal.fire({
+    title,
+    text,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText,
+    cancelButtonText,
+    reverseButtons: true,
+  });
+  return result.isConfirmed;
+};
 
 const normalizeConversationFromApi = (conv: any) => {
   if (!conv) return null;
@@ -384,16 +419,24 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
     const confirmed =
       typeof window === 'undefined'
         ? true
-        : window.confirm('¿Seguro que deseas finalizar este chat?');
+        : await confirmAction(
+            '¿Finalizar chat?',
+            'Se enviará un mensaje de cierre.',
+            'Sí, finalizar',
+            'Cancelar'
+          );
     if (!confirmed) {
       return;
     }
     try {
       setIsQuickFinishing(true);
       await finishConversationRequest('manual_close');
-      alert('La conversación fue finalizada.');
+      await showSuccessAlert('La conversación fue finalizada.');
     } catch (error) {
-      alert(getApiErrorMessage(error, 'No se pudo finalizar la conversación.'));
+      await showErrorAlert(
+        'No se pudo finalizar la conversación.',
+        getApiErrorMessage(error, 'No se pudo finalizar la conversación.')
+      );
     } finally {
       setIsQuickFinishing(false);
     }
@@ -418,9 +461,12 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
         closedAt: null,
         closedReason: null,
       });
-      alert('La conversación fue reactivada.');
+      await showSuccessAlert('La conversación fue reactivada.');
     } catch (error) {
-      alert(getApiErrorMessage(error, 'No se pudo reactivar la conversación.'));
+      await showErrorAlert(
+        'No se pudo reactivar la conversación.',
+        getApiErrorMessage(error, 'No se pudo reactivar la conversación.')
+      );
     } finally {
       setIsReopening(false);
     }
@@ -430,7 +476,7 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
     if (!activeConversation) return;
     try {
       await sendProgressStatus(selectedStatus);
-      alert('Estado guardado y enviado al cliente.');
+      await showSuccessAlert('Estado guardado y enviado al cliente.');
     } catch {
       // errors handled via statusError
     }
@@ -444,13 +490,13 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
         setFinishingReason(presetKey);
         await sendProgressStatus(preset.status, preset.message);
         await finishConversationRequest(preset.finishReason);
-        alert('La conversación fue finalizada.');
+        await showSuccessAlert('La conversación fue finalizada.');
       } catch (error) {
         const message =
           error instanceof Error
             ? error.message
             : 'No se pudo finalizar la conversación.';
-        alert(message);
+        await showErrorAlert('No se pudo finalizar la conversación.', message);
       } finally {
         setFinishingReason(null);
       }

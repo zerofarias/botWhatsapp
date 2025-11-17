@@ -1,94 +1,308 @@
 /**
- * OrdersPage_v2 - Panel de Pedidos
- * Página principal para gestionar todos los pedidos
+ * OrdersPage_v2 - Panel principal para gestionar pedidos
  */
 
-import React, { useState, useCallback } from 'react';
-import { useChatStore } from '../store/chatStore';
+import React, { useState, useCallback, useRef } from 'react';
+import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
-import { Order } from '../hooks/v2/useOrders';
+import { useChatStore } from '../store/chatStore';
+import { Order, type OrderFilters } from '../hooks/v2/useOrders';
 import OrdersTable_v2 from '../components/orders/OrdersTable_v2';
 import CompleteOrderModal_v2 from '../components/orders/CompleteOrderModal_v2';
+import OrderDetailsModal from '../components/orders/OrderDetailsModal';
 import './OrdersPage_v2.css';
+
+const escapeHtml = (value: string) =>
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+const formatForHtml = (value: string) =>
+  escapeHtml(value).replace(/\n/g, '<br/>');
 
 const OrdersPage_v2: React.FC = () => {
   const navigate = useNavigate();
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<string | undefined>(
-    undefined
+  const [orderForCompletion, setOrderForCompletion] = useState<Order | null>(
+    null
   );
+  const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
+  const [orderForDetails, setOrderForDetails] = useState<Order | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string | undefined>();
   const [searchQuery, setSearchQuery] = useState('');
-
-  const handleSelectOrder = useCallback((order: Order) => {
-    setSelectedOrder(order);
-  }, []);
-
-  const handleCompleteClick = useCallback((order: Order) => {
-    setSelectedOrder(order);
-    setIsCompleteModalOpen(true);
-  }, []);
+  const [advancedFilters, setAdvancedFilters] = useState<OrderFilters>({
+    startDate: '',
+    endDate: '',
+    clientPhone: '',
+    conversationId: '',
+    operatorName: '',
+    operatorId: '',
+  });
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   const handleChatClick = useCallback(
     (order: Order) => {
-      // Redirigir al chat con esa conversación
       useChatStore.setState({ activeConversationId: order.conversationId });
       navigate('/dashboard/chat');
     },
     [navigate]
   );
 
-  const handleCompleteOrder = useCallback((order: Order) => {
+  const handleCompleteClick = useCallback((order: Order) => {
+    setOrderForCompletion(order);
+    setIsCompleteModalOpen(true);
+  }, []);
+
+  const handleCompleteOrder = useCallback(() => {
     setIsCompleteModalOpen(false);
-    setSelectedOrder(null);
+    setOrderForCompletion(null);
+  }, []);
+
+  const handleInspectOrder = useCallback((order: Order) => {
+    setOrderForDetails(order);
+    setIsDetailsModalOpen(true);
+  }, []);
+
+  const handleShowNotes = useCallback((order: Order) => {
+    const notes = order.notas?.trim() || 'Sin notas registradas.';
+    const specs =
+      order.especificaciones?.trim() || 'Sin instrucciones adicionales.';
+
+    void Swal.fire({
+      title: `Notas del pedido #${order.id}`,
+      html: `
+        <div class="orders-notes-content">
+          <p><strong>Notas internas</strong></p>
+          <p>${formatForHtml(notes)}</p>
+          <hr />
+          <p><strong>Especificaciones</strong></p>
+          <p>${formatForHtml(specs)}</p>
+        </div>
+      `,
+      icon: 'info',
+      confirmButtonText: 'Cerrar',
+      focusConfirm: false,
+    });
+  }, []);
+
+  const playNewOrderTone = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    const AudioCtx =
+      window.AudioContext ||
+      (
+        window as typeof window & {
+          webkitAudioContext?: typeof AudioContext;
+        }
+      ).webkitAudioContext;
+    if (!AudioCtx) return;
+
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioCtx();
+    }
+
+    const ctx = audioContextRef.current;
+    if (ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+      } catch {
+        // Nada: el navegador bloqueó el audio hasta nueva interacción
+      }
+    }
+
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const now = ctx.currentTime;
+
+    oscillator.type = 'triangle';
+    oscillator.frequency.setValueAtTime(880, now);
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.25, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.4);
+  }, []);
+
+  const handleNewOrder = useCallback(
+    (order: Order) => {
+      console.info(`Nuevo pedido #${order.id} recibido`);
+      void playNewOrderTone();
+    },
+    [playNewOrderTone]
+  );
+
+  const handleFilterChange = useCallback(
+    (field: keyof OrderFilters, value: string) => {
+      setAdvancedFilters((prev) => ({
+        ...prev,
+        [field]: value,
+      }));
+    },
+    []
+  );
+
+  const handleResetFilters = useCallback(() => {
+    setAdvancedFilters({
+      startDate: '',
+      endDate: '',
+      clientPhone: '',
+      conversationId: '',
+      operatorName: '',
+      operatorId: '',
+    });
   }, []);
 
   return (
     <div className="orders-page-v2">
       <div className="orders-header">
-        <h1>📦 Panel de Pedidos</h1>
+        <div className="orders-header-text">
+          <span>Resumen diario de chats y pedidos</span>
+          <h1>Panel de pedidos</h1>
+        </div>
       </div>
 
       <div className="orders-controls">
         <div className="control-group">
-          <label>Estado:</label>
+          <label htmlFor="orders-status-filter">Estado:</label>
           <select
+            id="orders-status-filter"
             value={filterStatus || ''}
-            onChange={(e) => setFilterStatus(e.target.value || undefined)}
+            onChange={(event) =>
+              setFilterStatus(event.target.value || undefined)
+            }
             className="filter-select"
           >
             <option value="">Todos</option>
             <option value="PENDING">Pendientes</option>
-            <option value="CONFIRMADO">Confirmados</option>
+            <option value="CONFIRMADO">En proceso</option>
             <option value="COMPLETADO">Completados</option>
             <option value="CANCELADO">Cancelados</option>
           </select>
         </div>
 
         <div className="control-group search">
+          <label className="visually-hidden" htmlFor="orders-search-input">
+            Buscar pedidos
+          </label>
           <input
+            id="orders-search-input"
             type="text"
             placeholder="Buscar por cliente o teléfono..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(event) => setSearchQuery(event.target.value)}
             className="search-input"
           />
         </div>
       </div>
 
+      <div className="orders-advanced-filters">
+        <div className="filter-field">
+          <label htmlFor="orders-from-date">Desde</label>
+          <input
+            id="orders-from-date"
+            type="datetime-local"
+            value={advancedFilters.startDate || ''}
+            onChange={(event) =>
+              handleFilterChange('startDate', event.target.value)
+            }
+          />
+        </div>
+        <div className="filter-field">
+          <label htmlFor="orders-to-date">Hasta</label>
+          <input
+            id="orders-to-date"
+            type="datetime-local"
+            value={advancedFilters.endDate || ''}
+            onChange={(event) =>
+              handleFilterChange('endDate', event.target.value)
+            }
+          />
+        </div>
+        <div className="filter-field">
+          <label htmlFor="orders-client-phone">Teléfono</label>
+          <input
+            id="orders-client-phone"
+            type="text"
+            placeholder="Ej: 549351..."
+            value={advancedFilters.clientPhone || ''}
+            onChange={(event) =>
+              handleFilterChange('clientPhone', event.target.value)
+            }
+          />
+        </div>
+        <div className="filter-field">
+          <label htmlFor="orders-conversation-id">ID Conversación</label>
+          <input
+            id="orders-conversation-id"
+            type="text"
+            placeholder="Ej: 123456"
+            value={advancedFilters.conversationId || ''}
+            onChange={(event) =>
+              handleFilterChange('conversationId', event.target.value)
+            }
+          />
+        </div>
+        <div className="filter-field">
+          <label htmlFor="orders-operator-name">Operario</label>
+          <input
+            id="orders-operator-name"
+            type="text"
+            placeholder="Nombre del operador"
+            value={advancedFilters.operatorName || ''}
+            onChange={(event) =>
+              handleFilterChange('operatorName', event.target.value)
+            }
+          />
+        </div>
+        <div className="filter-field">
+          <label htmlFor="orders-operator-id">ID Operario</label>
+          <input
+            id="orders-operator-id"
+            type="text"
+            placeholder="ID exacto"
+            value={advancedFilters.operatorId || ''}
+            onChange={(event) =>
+              handleFilterChange('operatorId', event.target.value)
+            }
+          />
+        </div>
+        <div className="filter-actions">
+          <button
+            type="button"
+            className="btn-reset"
+            onClick={handleResetFilters}
+          >
+            Limpiar filtros
+          </button>
+        </div>
+      </div>
+
       <div className="orders-content">
         <OrdersTable_v2
-          onSelectOrder={handleSelectOrder}
+          onSelectOrder={handleShowNotes}
           onCompleteClick={handleCompleteClick}
           onChatClick={handleChatClick}
+          onInspectOrder={handleInspectOrder}
+          onNewOrder={handleNewOrder}
+          statusFilter={filterStatus}
+          searchQuery={searchQuery}
+          pollIntervalMs={60000}
+          filters={advancedFilters}
         />
       </div>
 
       <CompleteOrderModal_v2
-        order={selectedOrder}
+        order={orderForCompletion}
         isOpen={isCompleteModalOpen}
         onClose={() => setIsCompleteModalOpen(false)}
         onComplete={handleCompleteOrder}
+      />
+
+      <OrderDetailsModal
+        order={orderForDetails}
+        isOpen={isDetailsModalOpen}
+        onClose={() => setIsDetailsModalOpen(false)}
       />
     </div>
   );

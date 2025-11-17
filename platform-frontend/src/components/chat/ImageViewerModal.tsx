@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import '../../styles/ImageViewerModal.css';
+import Swal from 'sweetalert2';
 
 type ImageViewerModalProps = {
   isOpen: boolean;
@@ -30,7 +31,11 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error al descargar imagen:', error);
-      alert('Error al descargar la imagen');
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo descargar la imagen',
+        text: 'Intenta nuevamente en unos instantes.',
+      });
     }
   };
 

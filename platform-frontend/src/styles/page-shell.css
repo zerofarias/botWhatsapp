@@ -1,0 +1,71 @@
+/**
+ * Shared styles for dashboard pages (PageShell)
+ */
+
+.page-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+}
+
+.page-shell-header {
+  padding: 24px 32px;
+  border-radius: 26px;
+  background: linear-gradient(135deg, #0f172a, #312e81);
+  color: #f8fafc;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 25px 55px rgba(15, 23, 42, 0.4);
+}
+
+.page-shell-subtitle {
+  margin: 0;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.75;
+}
+
+.page-shell-title {
+  margin: 4px 0 0;
+  font-size: 28px;
+}
+
+.page-shell-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.page-shell-body {
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 22px;
+  padding: 24px;
+  box-shadow: 0 25px 50px rgba(15, 23, 42, 0.08);
+  min-height: 0;
+}
+
+.page-shell-body--full {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (max-width: 768px) {
+  .page-shell-header {
+    padding: 18px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .page-shell-title {
+    font-size: 22px;
+  }
+
+  .page-shell-body {
+    padding: 18px;
+  }
+}

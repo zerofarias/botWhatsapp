@@ -1,6 +1,7 @@
 ﻿// Servicio principal para ejecutar nodos del Flow Builder
 import { prisma } from '../config/prisma.js';
 import type { ConversationContext } from './flow.service';
+import { generateGroqResponse } from './groq.service.js';
 
 /**
  * Interfaz para datos de contacto que se pueden obtener de la conversación
@@ -63,6 +64,9 @@ type BuilderMetadata = {
   // SET_VARIABLE
   variable?: string;
   value?: string;
+  // AI
+  prompt?: string;
+  model?: string;
 };
 
 type ConditionOperator =
@@ -562,6 +566,77 @@ export async function executeNode({
       // Continuar al siguiente nodo sin esperar input
       updatedContext.waitingForInput = false;
       updatedContext.waitingVariable = null;
+      nextNodeId = resolveNextNodeId();
+      break;
+    }
+    case 'AI': {
+      updatedContext.waitingForInput = false;
+      updatedContext.waitingVariable = null;
+      const promptTemplate =
+        typeof builderMeta.prompt === 'string' && builderMeta.prompt.length
+          ? builderMeta.prompt
+          : typeof node.message === 'string'
+          ? node.message
+          : '';
+      if (!promptTemplate) {
+        console.warn(`[AI] Nodo ${node.id} sin prompt configurado.`);
+        nextNodeId = resolveNextNodeId();
+        break;
+      }
+      const interpolatedPrompt = interpolateVariables(
+        promptTemplate,
+        updatedContext
+      );
+      const model =
+        typeof builderMeta.model === 'string' && builderMeta.model.length
+          ? builderMeta.model
+          : undefined;
+      const responseVariableName =
+        typeof builderMeta.responseVariableName === 'string' &&
+        builderMeta.responseVariableName.length
+          ? builderMeta.responseVariableName
+          : null;
+      try {
+        const aiResponse =
+          (await generateGroqResponse({
+            prompt: interpolatedPrompt,
+            model,
+          })) ?? '';
+        const finalResponse =
+          aiResponse && aiResponse.trim().length
+            ? aiResponse.trim()
+            : '🧠 Estoy procesando tu información. Nuestro equipo te confirmará los detalles en breve.';
+        if (responseVariableName) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (updatedContext as any)[responseVariableName] = finalResponse;
+        }
+        actions.push({
+          type: 'send_message',
+          payload: {
+            message: finalResponse,
+            builder: builderMeta,
+            nodeId: node.id,
+            type: node.type,
+          },
+        });
+      } catch (error) {
+        console.error('[AI] Error generando respuesta:', error);
+        const fallbackMessage =
+          '⚠️ No pude obtener ayuda de la IA en este momento, intenta de nuevo más tarde.';
+        if (responseVariableName) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (updatedContext as any)[responseVariableName] = fallbackMessage;
+        }
+        actions.push({
+          type: 'send_message',
+          payload: {
+            message: fallbackMessage,
+            nodeId: node.id,
+            type: node.type,
+          },
+        });
+      }
+
       nextNodeId = resolveNextNodeId();
       break;
     }

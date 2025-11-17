@@ -92,6 +92,10 @@ function extractVariableFromNode(node: FlowBuilderNode): string | null {
     return varName || null;
   }
 
+  if (data.type === 'AI') {
+    return data.responseVariableName || null;
+  }
+
   return null;
 }
 

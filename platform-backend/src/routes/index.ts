@@ -13,6 +13,7 @@ import { workingHourRouter } from './working-hours.js';
 import { quickRepliesRouter } from './quick-replies.js';
 import nodesRouter from './nodes.routes.js';
 import ordersRouter from './orders.js';
+import analyticsRouter from './analytics.js';
 
 export const apiRouter = Router();
 
@@ -29,4 +30,5 @@ apiRouter.use('/contacts', contactRouter);
 apiRouter.use('/working-hours', workingHourRouter);
 apiRouter.use('/quick-replies', quickRepliesRouter);
 apiRouter.use('/orders', ordersRouter);
+apiRouter.use('/analytics', analyticsRouter);
 apiRouter.use(nodesRouter);

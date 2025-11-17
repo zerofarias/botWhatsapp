@@ -10,10 +10,12 @@ import {
   FaSitemap,
   FaRobot,
   FaShoppingCart,
+  FaChartLine,
 } from 'react-icons/fa';
 
 export const sidebarIcons: Record<string, JSX.Element> = {
   Estado: <FaHome />,
+  Estadísticas: <FaChartLine />,
   Chat: <FaComments />,
   Chat2: <FaComments />,
   Flujos: <FaProjectDiagram />,

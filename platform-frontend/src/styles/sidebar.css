@@ -3,7 +3,7 @@
 .dashboard-layout {
   display: flex;
   min-height: 100vh;
-  background: #f3f4f6;
+  background: linear-gradient(135deg, #0f172a 0%, #312e81 35%, #1d4ed8 100%);
 }
 
 .sidebar {
@@ -117,8 +117,17 @@
   flex: 1;
   padding: 2rem;
   min-width: 0;
-  background: #f3f4f6;
+  display: flex;
+  overflow-y: auto;
   transition: margin 0.2s;
+  background: transparent;
+}
+
+.dashboard-main__content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
 .dashboard-layout.collapsed .dashboard-main {

@@ -1,119 +1,207 @@
 /**
- * OrdersTable_v2.tsx - Tabla de pedidos estilo WhatsApp
- * Muestra todos los pedidos con opciones para ver, editar y completar
+ * OrdersTable_v2.tsx - Tabla de pedidos con controles modernos y DataTable
  */
 
-import React, { useState, useCallback } from 'react';
-import { useOrders, Order } from '../../hooks/v2/useOrders';
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+} from 'react';
+import DataTable, { type TableColumn } from 'react-data-table-component';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import {
+  useOrders,
+  type Order,
+  type OrderFilters,
+} from '../../hooks/v2/useOrders';
 import './OrdersTable_v2.css';
 
 interface Props {
   onSelectOrder?: (order: Order) => void;
   onCompleteClick?: (order: Order) => void;
   onChatClick?: (order: Order) => void;
+  onInspectOrder?: (order: Order) => void;
+  onNewOrder?: (order: Order) => void;
+  statusFilter?: string;
+  searchQuery?: string;
+  pollIntervalMs?: number;
+  filters?: OrderFilters;
 }
 
-// Calcular duración entre dos fechas
-const calculateDuration = (startDate: string, endDate?: string): string => {
-  try {
-    const start = new Date(startDate);
-    const end = endDate ? new Date(endDate) : new Date();
+const exportStructure = [
+  { key: 'pedido', label: 'Pedido' },
+  { key: 'cliente', label: 'Cliente' },
+  { key: 'dni', label: 'DNI' },
+  { key: 'telefono', label: 'Teléfono' },
+  { key: 'operario', label: 'Operario' },
+  { key: 'estado', label: 'Estado' },
+  { key: 'creado', label: 'Creado' },
+  { key: 'completado', label: 'Completado' },
+] as const;
 
-    // Verificar si las fechas son válidas
-    if (isNaN(start.getTime())) {
-      return 'Error fecha';
-    }
+type ExportKey = (typeof exportStructure)[number]['key'];
+type ExportRow = Record<ExportKey, string>;
 
-    if (endDate && isNaN(end.getTime())) {
-      return 'Error fecha';
-    }
-
-    const diffInMilliseconds = end.getTime() - start.getTime();
-
-    if (diffInMilliseconds < 0) {
-      return '0min';
-    }
-
-    const diffInMinutes = Math.floor(diffInMilliseconds / 1000 / 60);
-
-    if (diffInMinutes < 60) {
-      return `${diffInMinutes}min`;
-    }
-
-    const hours = Math.floor(diffInMinutes / 60);
-    const minutes = diffInMinutes % 60;
-
-    if (hours < 24) {
-      return minutes > 0 ? `${hours}h ${minutes}min` : `${hours}h`;
-    }
-
-    const days = Math.floor(hours / 24);
-    const remainingHours = hours % 24;
-
-    return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
-  } catch (error) {
-    console.error('Error calculating duration:', error, { startDate, endDate });
-    return 'Error';
-  }
+const dataTableCustomStyles = {
+  headCells: {
+    style: {
+      paddingTop: '14px',
+      paddingBottom: '14px',
+      fontSize: '13px',
+      fontWeight: 600,
+      textTransform: 'uppercase' as const,
+      color: '#475569',
+      backgroundColor: '#f5f5f5',
+      borderBottom: '2px solid #e2e8f0',
+    },
+  },
+  rows: {
+    style: {
+      minHeight: '120px',
+      borderBottom: '1px solid #f1f5f9',
+    },
+  },
+  cells: {
+    style: {
+      paddingTop: '16px',
+      paddingBottom: '16px',
+      color: '#0f172a',
+    },
+  },
 };
 
-// Función para formatear fecha de manera segura
-const formatDate = (dateString: string): string => {
-  try {
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-      return 'Fecha inválida';
+const escapeHtmlValue = (value: string) =>
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+const normalizeDateInput = (
+  value: string | number | Date | null | undefined
+) => {
+  if (value == null) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === 'number') return new Date(value);
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed.length) return null;
+    if (/^\d+$/.test(trimmed)) {
+      const timestamp = Number(trimmed);
+      if (!Number.isNaN(timestamp)) {
+        return new Date(timestamp);
+      }
     }
-
-    const dateFormatted = date.toLocaleDateString('es-AR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: '2-digit',
-    });
-
-    const timeFormatted = date.toLocaleTimeString('es-AR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    return `${dateFormatted} ${timeFormatted}`;
-  } catch (error) {
-    console.error('Error formatting date:', error, dateString);
-    return 'Error fecha';
+    return new Date(trimmed.replace(' ', 'T'));
   }
+  return null;
 };
 
-// Componente select para estado
+const formatRelativeTime = (
+  value: string | number | Date | null | undefined
+): string => {
+  const date = normalizeDateInput(value);
+  if (!date || Number.isNaN(date.getTime())) return '';
+  const diffMs = Date.now() - date.getTime();
+  if (diffMs < 0) return 'recién';
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return 'hace instantes';
+  if (minutes < 60) return `hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    const rest = minutes % 60;
+    return rest ? `hace ${hours} h ${rest} min` : `hace ${hours} h`;
+  }
+  const days = Math.floor(hours / 24);
+  return days === 1 ? 'hace 1 día' : `hace ${days} días`;
+};
+
+const formatDate = (
+  value: string | number | Date | null | undefined
+): string => {
+  const date = normalizeDateInput(value);
+  if (!date || Number.isNaN(date.getTime())) {
+    return 'Fecha inválida';
+  }
+  const dateFormatted = date.toLocaleDateString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+  });
+  const timeFormatted = date.toLocaleTimeString('es-AR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return `${dateFormatted} ${timeFormatted}`;
+};
+
+const calculateDuration = (
+  startDate: string | number | Date,
+  endDate?: string | number | Date | null
+): string => {
+  const start = normalizeDateInput(startDate);
+  const end = normalizeDateInput(endDate) ?? new Date();
+  if (
+    !start ||
+    !end ||
+    Number.isNaN(start.getTime()) ||
+    Number.isNaN(end.getTime())
+  ) {
+    return 'Sin datos';
+  }
+
+  const diffMs = end.getTime() - start.getTime();
+  if (diffMs <= 0) return '0 min';
+
+  const diffMinutes = Math.floor(diffMs / 60000);
+  if (diffMinutes < 60) return `${diffMinutes} min`;
+
+  const hours = Math.floor(diffMinutes / 60);
+  if (hours < 24) {
+    const minutes = diffMinutes % 60;
+    return minutes ? `${hours} h ${minutes} min` : `${hours} h`;
+  }
+
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours ? `${days} d ${remainingHours} h` : `${days} d`;
+};
+
+const STATUS_OPTIONS = [
+  { value: 'PENDING', label: 'Pendiente' },
+  { value: 'CONFIRMADO', label: 'En proceso' },
+  { value: 'COMPLETADO', label: 'Completado' },
+  { value: 'CANCELADO', label: 'Cancelado' },
+];
+
+const getDisplayName = (order: Order) =>
+  order.conversation?.contactName ||
+  order.conversation?.contact?.name ||
+  order.clientName ||
+  'Sin nombre';
+
+const getDni = (order: Order) => order.conversation?.contact?.dni || '—';
+
 const StatusSelect: React.FC<{
-  status: string;
+  status: Order['status'];
   orderId: number;
-  onStatusChange: (orderId: number, status: string) => void;
+  onStatusChange: (orderId: number, status: Order['status']) => void;
   disabled?: boolean;
 }> = ({ status, orderId, onStatusChange, disabled = false }) => {
-  const statusOptions = [
-    { value: 'PENDING', label: '🟡 Pendiente' },
-    { value: 'CONFIRMADO', label: '🔵 En Proceso' },
-    { value: 'COMPLETADO', label: '🟢 Completado' },
-    { value: 'CANCELADO', label: '🔴 Cancelado' },
-  ];
-
-  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newStatus = e.target.value;
+  const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const newStatus = event.target.value as Order['status'];
     if (newStatus !== status) {
       onStatusChange(orderId, newStatus);
     }
   };
-
-  const statusClass = status.toLowerCase();
 
   return (
     <select
       value={status}
       onChange={handleChange}
       disabled={disabled}
-      className={`status-select ${statusClass}`}
+      className={`status-select ${status.toLowerCase()}`}
     >
-      {statusOptions.map((option) => (
+      {STATUS_OPTIONS.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}
         </option>
@@ -121,164 +209,367 @@ const StatusSelect: React.FC<{
     </select>
   );
 };
-import './OrdersTable_v2.css';
 
-interface Props {
-  onSelectOrder?: (order: Order) => void;
-  onCompleteClick?: (order: Order) => void;
-  onChatClick?: (order: Order) => void;
-}
-
-export const OrdersTable_v2: React.FC<Props> = ({
+const OrdersTable_v2: React.FC<Props> = ({
   onSelectOrder,
   onCompleteClick,
   onChatClick,
+  onInspectOrder,
+  onNewOrder,
+  statusFilter,
+  searchQuery,
+  pollIntervalMs = 20000,
+  filters,
 }) => {
-  const { orders, loading, error, updateOrderStatus } = useOrders();
+  const { orders, loading, error, updateOrderStatus } = useOrders(
+    statusFilter,
+    searchQuery,
+    pollIntervalMs,
+    filters
+  );
   const [updatingOrders, setUpdatingOrders] = useState<Set<number>>(new Set());
+  const knownIdsRef = useRef<Set<number>>(new Set());
+  const initializedRef = useRef(false);
 
-  // Debug: Ver el formato de datos que llega
-  React.useEffect(() => {
-    if (orders.length > 0) {
-      console.log('Orders data sample:', {
-        firstOrder: orders[0],
-        createdAt: orders[0]?.createdAt,
-        closedAt: orders[0]?.closedAt,
-        createdAtType: typeof orders[0]?.createdAt,
-        parsedCreatedAt: orders[0]?.createdAt
-          ? new Date(orders[0].createdAt)
-          : null,
-      });
+  useEffect(() => {
+    knownIdsRef.current = new Set();
+    initializedRef.current = false;
+  }, [statusFilter, searchQuery]);
+
+  const sortedOrders = useMemo(
+    () =>
+      [...orders].sort((a, b) => {
+        const aDate = new Date(a.createdAt).getTime();
+        const bDate = new Date(b.createdAt).getTime();
+        return bDate - aDate;
+      }),
+    [orders]
+  );
+
+  const exportRows = useMemo<ExportRow[]>(() => {
+    return sortedOrders.map((order) => ({
+      pedido: `#${order.id}`,
+      cliente: getDisplayName(order),
+      dni: getDni(order),
+      telefono: order.clientPhone,
+      operario: order.conversation?.assignedTo?.name || 'Sin asignar',
+      estado: order.status,
+      creado: formatDate(order.createdAt),
+      completado: order.closedAt ? formatDate(order.closedAt) : 'Pendiente',
+    }));
+  }, [sortedOrders]);
+
+  useEffect(() => {
+    const currentIds = new Set(sortedOrders.map((order) => order.id));
+    const newOnes = sortedOrders.filter(
+      (order) => !knownIdsRef.current.has(order.id)
+    );
+    if (initializedRef.current && newOnes.length > 0) {
+      newOnes.forEach((order) => onNewOrder?.(order));
     }
-  }, [orders]);
+    if (!initializedRef.current && sortedOrders.length > 0) {
+      initializedRef.current = true;
+    }
+    knownIdsRef.current = currentIds;
+  }, [sortedOrders, onNewOrder]);
 
-  // Manejar cambio de estado
   const handleStatusChange = useCallback(
-    async (orderId: number, newStatus: string) => {
+    async (orderId: number, newStatus: Order['status']) => {
       try {
-        setUpdatingOrders((prev: Set<number>) => new Set(prev).add(orderId));
-        await updateOrderStatus(
-          orderId,
-          newStatus as 'PENDING' | 'CONFIRMADO' | 'COMPLETADO' | 'CANCELADO'
-        );
-      } catch (error) {
-        console.error('Error updating order status:', error);
-        // TODO: Mostrar toast de error
+        setUpdatingOrders((prev) => new Set(prev).add(orderId));
+        await updateOrderStatus(orderId, newStatus);
+      } catch (err) {
+        console.error('Error al actualizar el estado del pedido:', err);
       } finally {
-        setUpdatingOrders((prev: Set<number>) => {
-          const newSet = new Set(prev);
-          newSet.delete(orderId);
-          return newSet;
+        setUpdatingOrders((prev) => {
+          const next = new Set(prev);
+          next.delete(orderId);
+          return next;
         });
       }
     },
     [updateOrderStatus]
   );
 
+  const handleExportCSV = useCallback(() => {
+    if (!exportRows.length) return;
+    const header = exportStructure.map((field) => field.label);
+    const rows = exportRows.map((row) =>
+      exportStructure.map((field) => row[field.key])
+    );
+    const csvContent = [header, ...rows]
+      .map((line) =>
+        line.map((value) => `"${(value ?? '').replace(/"/g, '""')}"`).join(',')
+      )
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `pedidos_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [exportRows]);
+
+  const handleExportPDF = useCallback(() => {
+    if (!exportRows.length) return;
+    const doc = new jsPDF('landscape');
+    autoTable(doc, {
+      head: [exportStructure.map((field) => field.label)],
+      body: exportRows.map((row) =>
+        exportStructure.map((field) => row[field.key])
+      ),
+      styles: {
+        fontSize: 10,
+      },
+      headStyles: {
+        fillColor: [14, 165, 233],
+      },
+    });
+    doc.save(`pedidos_${new Date().toISOString().slice(0, 10)}.pdf`);
+  }, [exportRows]);
+
+  const handlePrint = useCallback(() => {
+    if (!exportRows.length) return;
+    const tableRows = exportRows
+      .map(
+        (row) =>
+          `<tr>${exportStructure
+            .map((field) => `<td>${escapeHtmlValue(row[field.key] ?? '')}</td>`)
+            .join('')}</tr>`
+      )
+      .join('');
+    const tableHead = exportStructure
+      .map((field) => `<th>${field.label}</th>`)
+      .join('');
+    const printWindow = window.open('', '', 'width=1000,height=700');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Pedidos</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #cbd5f5; padding: 8px; text-align: left; font-size: 12px; }
+            th { background: #e2e8f0; }
+            caption { font-size: 18px; margin-bottom: 12px; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <caption>Listado de pedidos</caption>
+          <table>
+            <thead><tr>${tableHead}</tr></thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }, [exportRows]);
+
+  const columns = useMemo<TableColumn<Order>[]>(() => {
+    return [
+      {
+        name: 'Pedido',
+        minWidth: '260px',
+        grow: 2,
+        cell: (order) => (
+          <div className="order-overview">
+            <div className="order-id">#{order.id}</div>
+            <div className="client-info">
+              <span className="client-name">{getDisplayName(order)}</span>
+              <span className="client-type">
+                {order.tipoConversacion || 'General'}
+              </span>
+            </div>
+            <div className="order-phone">{order.clientPhone}</div>
+            <div className="order-meta">
+              <span>
+                Chat:{' '}
+                {order.conversationId ? order.conversationId.toString() : '—'}
+              </span>
+              <span>
+                Operario:{' '}
+                {order.conversation?.assignedTo?.name || 'Sin asignar'}
+              </span>
+              {order.conversation?.contact?.dni && (
+                <span>DNI: {order.conversation.contact.dni}</span>
+              )}
+            </div>
+          </div>
+        ),
+      },
+      {
+        name: 'Tiempos',
+        grow: 2,
+        cell: (order) => (
+          <div className="order-timeline">
+            <div className="timeline-item">
+              <span className="timeline-label">Llegó</span>
+              <span className="timeline-value">
+                {formatDate(order.createdAt)}
+              </span>
+              <span className="timeline-relative">
+                {formatRelativeTime(order.createdAt)}
+              </span>
+            </div>
+            <div className="timeline-item">
+              <span className="timeline-label">Completado</span>
+              {order.closedAt ? (
+                <>
+                  <span className="timeline-value">
+                    {formatDate(order.closedAt)}
+                  </span>
+                  <span className="timeline-relative">
+                    {formatRelativeTime(order.closedAt)}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="timeline-value">Pendiente</span>
+                  <span className="timeline-relative">
+                    {formatRelativeTime(order.createdAt)}
+                  </span>
+                </>
+              )}
+            </div>
+            <div className="timeline-item duration">
+              <span className="timeline-label">Tiempo de atención</span>
+              <span className="timeline-value">
+                {calculateDuration(order.createdAt, order.closedAt)}
+              </span>
+            </div>
+          </div>
+        ),
+      },
+      {
+        name: 'Estado',
+        grow: 1,
+        cell: (order) => (
+          <div className="order-status">
+            <StatusSelect
+              status={order.status}
+              orderId={order.id}
+              onStatusChange={handleStatusChange}
+              disabled={updatingOrders.has(order.id)}
+            />
+            {order.closeReason && (
+              <span className="reason-badge">{order.closeReason}</span>
+            )}
+          </div>
+        ),
+        ignoreRowClick: true,
+        allowOverflow: true,
+      },
+      {
+        name: 'Acciones',
+        grow: 1,
+        cell: (order) => (
+          <div className="order-actions">
+            <button
+              className="action-btn details-btn"
+              onClick={() => onInspectOrder?.(order)}
+              type="button"
+            >
+              Ver pedido
+            </button>
+            <button
+              className="action-btn notes-btn"
+              onClick={() => onSelectOrder?.(order)}
+              type="button"
+            >
+              Notas
+            </button>
+            <button
+              className="action-btn chat-btn"
+              onClick={() => onChatClick?.(order)}
+              type="button"
+            >
+              Ir al chat
+            </button>
+            {order.status !== 'COMPLETADO' && (
+              <button
+                className="action-btn complete-btn"
+                onClick={() => onCompleteClick?.(order)}
+                type="button"
+              >
+                Finalizar
+              </button>
+            )}
+          </div>
+        ),
+        ignoreRowClick: true,
+        allowOverflow: true,
+      },
+    ];
+  }, [
+    handleStatusChange,
+    updatingOrders,
+    onInspectOrder,
+    onSelectOrder,
+    onChatClick,
+    onCompleteClick,
+  ]);
+
   if (error) {
     return <div className="orders-table error">Error: {error}</div>;
   }
 
-  if (loading) {
-    return <div className="orders-table loading">Cargando pedidos...</div>;
-  }
-
-  if (orders.length === 0) {
-    return <div className="orders-table empty">No hay pedidos</div>;
-  }
-
   return (
-    <div className="orders-table-container">
-      <table className="orders-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Cliente</th>
-            <th>Teléfono</th>
-            <th>Llegó</th>
-            <th>Cerrado</th>
-            <th>Duración</th>
-            <th>Estado</th>
-            <th>Motivo</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map((order) => (
-            <tr key={order.id} className="order-row">
-              <td className="order-id">#{order.id}</td>
-              <td className="order-client">
-                <div className="client-info">
-                  <span className="client-name">
-                    {order.clientName || 'Desconocido'}
-                  </span>
-                  <span className="client-type">{order.tipoConversacion}</span>
-                </div>
-              </td>
-              <td className="order-phone">{order.clientPhone}</td>
-              <td className="order-time">
-                <div className="datetime-display">
-                  {formatDate(order.createdAt)}
-                </div>
-              </td>
-              <td className="order-time">
-                {order.closedAt ? (
-                  <div className="datetime-display">
-                    {formatDate(order.closedAt)}
-                  </div>
-                ) : (
-                  <span style={{ color: '#ccc', fontStyle: 'italic' }}>
-                    Pendiente
-                  </span>
-                )}
-              </td>
-              <td className="order-duration">
-                {calculateDuration(order.createdAt, order.closedAt)}
-              </td>
-              <td className="order-status">
-                <StatusSelect
-                  status={order.status}
-                  orderId={order.id}
-                  onStatusChange={handleStatusChange}
-                  disabled={updatingOrders.has(order.id)}
-                />
-              </td>
-              <td className="order-reason">
-                {order.closeReason ? (
-                  <span className="reason-badge">{order.closeReason}</span>
-                ) : (
-                  '—'
-                )}
-              </td>
-              <td className="order-actions">
-                <button
-                  className="action-btn view-btn"
-                  onClick={() => onSelectOrder?.(order)}
-                  title="Ver detalles"
-                >
-                  👁️
-                </button>
-                <button
-                  className="action-btn chat-btn"
-                  onClick={() => onChatClick?.(order)}
-                  title="Abrir chat"
-                >
-                  💬
-                </button>
-                {order.status === 'PENDING' && (
-                  <button
-                    className="action-btn complete-btn"
-                    onClick={() => onCompleteClick?.(order)}
-                    title="Completar"
-                  >
-                    ✓
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="orders-table-wrapper">
+      <DataTable
+        columns={columns}
+        data={sortedOrders}
+        keyField="id"
+        pagination
+        paginationPerPage={25}
+        paginationRowsPerPageOptions={[25, 50, 100]}
+        highlightOnHover
+        responsive
+        persistTableHead
+        progressPending={loading}
+        progressComponent={
+          <div className="orders-table-loading">Cargando pedidos...</div>
+        }
+        noDataComponent={
+          <div className="orders-table-empty">No hay pedidos</div>
+        }
+        customStyles={dataTableCustomStyles}
+        actions={
+          <div className="orders-table-actions">
+            <button
+              type="button"
+              className="orders-table-action-btn"
+              onClick={handleExportCSV}
+              disabled={!sortedOrders.length}
+            >
+              Exportar CSV
+            </button>
+            <button
+              type="button"
+              className="orders-table-action-btn"
+              onClick={handleExportPDF}
+              disabled={!sortedOrders.length}
+            >
+              Exportar PDF
+            </button>
+            <button
+              type="button"
+              className="orders-table-action-btn"
+              onClick={handlePrint}
+              disabled={!sortedOrders.length}
+            >
+              Imprimir
+            </button>
+          </div>
+        }
+      />
     </div>
   );
 };

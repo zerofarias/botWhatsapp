@@ -82,4 +82,6 @@ export const env = {
   email: process.env.EMAIL || 'admin@localhost',
   staging: process.env.STAGING !== 'false',
   greenlockConfigDir: process.env.GREENLOCK_CONFIG_DIR || './greenlock.d',
+  groqApiKey: process.env.GROQ_API_KEY || '',
+  groqDefaultModel: process.env.GROQ_DEFAULT_MODEL || 'llama-3.3-70b-versatile',
 };

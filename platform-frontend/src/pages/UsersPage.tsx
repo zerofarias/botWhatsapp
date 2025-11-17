@@ -1,7 +1,6 @@
 ﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 import type { AreaMembership } from '../context/AuthContext';
-
 type Role = 'ADMIN' | 'SUPERVISOR' | 'OPERATOR' | 'SUPPORT' | 'SALES';
 
 type UserListItem = {

@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../../services/api';
 import { getSocketManager } from '../../services/socket/SocketManager';
+import { useChatStore } from '../../store/chatStore';
 
 export interface OrderItem {
   nombre: string;
@@ -30,7 +31,26 @@ export interface Order {
   conversation?: {
     userPhone: string;
     contactName?: string;
+    assignedToId?: number;
+    assignedTo?: {
+      id: number;
+      name: string;
+    } | null;
+    contact?: {
+      id: number;
+      name: string;
+      dni?: string | null;
+    } | null;
   };
+}
+
+export interface OrderFilters {
+  clientPhone?: string;
+  conversationId?: string;
+  startDate?: string;
+  endDate?: string;
+  operatorName?: string;
+  operatorId?: string;
 }
 
 export interface UseOrdersResult {
@@ -54,10 +74,25 @@ export interface UseOrdersResult {
   deleteOrder: (orderId: number) => Promise<void>;
 }
 
-export function useOrders(status?: string, search?: string): UseOrdersResult {
+const normalizeOrderRecord = (order: Order): Order => ({
+  ...order,
+  createdAt: new Date(
+    order.createdAt ?? order.updatedAt ?? Date.now()
+  ).toISOString(),
+  closedAt: order.closedAt ? new Date(order.closedAt).toISOString() : undefined,
+  updatedAt: new Date(order.updatedAt ?? Date.now()).toISOString(),
+});
+
+export function useOrders(
+  status?: string,
+  search?: string,
+  pollIntervalMs = 30000,
+  filters?: OrderFilters
+): UseOrdersResult {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const socketConnected = useChatStore((state) => state.socketConnected);
 
   // Cargar pedidos del servidor
   const refetch = useCallback(async () => {
@@ -68,9 +103,19 @@ export function useOrders(status?: string, search?: string): UseOrdersResult {
       const params = new URLSearchParams();
       if (status) params.append('status', status);
       if (search) params.append('search', search);
+      if (filters) {
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value && value.toString().trim().length > 0) {
+            params.append(key, value.toString());
+          }
+        });
+      }
 
       const response = await api.get(`/orders?${params.toString()}`);
-      setOrders(response.data.orders || []);
+      const normalizedOrders: Order[] = (response.data.orders || []).map(
+        (order: Order) => normalizeOrderRecord(order)
+      );
+      setOrders(normalizedOrders);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to load orders';
@@ -79,29 +124,34 @@ export function useOrders(status?: string, search?: string): UseOrdersResult {
     } finally {
       setLoading(false);
     }
-  }, [status, search]);
+  }, [status, search, filters]);
 
   // Cargar pedidos al montar el componente
   useEffect(() => {
     refetch();
-  }, [refetch]);
+    if (pollIntervalMs > 0) {
+      const interval = setInterval(() => {
+        void refetch();
+      }, pollIntervalMs);
+      return () => clearInterval(interval);
+    }
+    return;
+  }, [refetch, pollIntervalMs]);
 
   // Suscribirse a eventos de socket
   useEffect(() => {
+    if (!socketConnected) {
+      return;
+    }
+
     try {
       const socket = getSocketManager();
-
-      // Si el socket no está inicializado, no hacer nada
       if (!socket) {
-        console.log(
-          '[useOrders] Socket manager not initialized yet, skipping socket setup'
-        );
         return;
       }
 
-      // Crear unsubscribe functions
       const unsubCreateOrder = socket.on('order:created', (newOrder: Order) => {
-        setOrders((prev) => [newOrder, ...prev]);
+        setOrders((prev) => [normalizeOrderRecord(newOrder), ...prev]);
       });
 
       const unsubUpdateOrder = socket.on(
@@ -109,7 +159,9 @@ export function useOrders(status?: string, search?: string): UseOrdersResult {
         (updatedOrder: Order) => {
           setOrders((prev) =>
             prev.map((order) =>
-              order.id === updatedOrder.id ? updatedOrder : order
+              order.id === updatedOrder.id
+                ? normalizeOrderRecord(updatedOrder)
+                : order
             )
           );
         }
@@ -125,7 +177,6 @@ export function useOrders(status?: string, search?: string): UseOrdersResult {
       );
 
       return () => {
-        // Solo hacer cleanup si las funciones existen
         if (unsubCreateOrder) unsubCreateOrder();
         if (unsubUpdateOrder) unsubUpdateOrder();
         if (unsubDeleteOrder) unsubDeleteOrder();
@@ -134,7 +185,7 @@ export function useOrders(status?: string, search?: string): UseOrdersResult {
       console.error('Error setting up socket listeners:', error);
       return;
     }
-  }, []);
+  }, [socketConnected]);
 
   // Completar pedido
   const completeOrder = useCallback(
@@ -145,10 +196,9 @@ export function useOrders(status?: string, search?: string): UseOrdersResult {
           mensaje,
         });
 
+        const normalized = normalizeOrderRecord(response.data.order);
         setOrders((prev) =>
-          prev.map((order) =>
-            order.id === orderId ? response.data.order : order
-          )
+          prev.map((order) => (order.id === orderId ? normalized : order))
         );
       } catch (err) {
         const message =
@@ -169,8 +219,9 @@ export function useOrders(status?: string, search?: string): UseOrdersResult {
       try {
         const response = await api.patch(`/orders/${orderId}`, data);
 
+        const normalized = normalizeOrderRecord(response.data);
         setOrders((prev) =>
-          prev.map((order) => (order.id === orderId ? response.data : order))
+          prev.map((order) => (order.id === orderId ? normalized : order))
         );
       } catch (err) {
         const message =
@@ -193,10 +244,11 @@ export function useOrders(status?: string, search?: string): UseOrdersResult {
           status,
         });
 
+        const normalizedStatus = response.data.status || status;
         setOrders((prev) =>
           prev.map((order) =>
             order.id === orderId
-              ? { ...order, status: response.data.status || status }
+              ? { ...order, status: normalizedStatus }
               : order
           )
         );

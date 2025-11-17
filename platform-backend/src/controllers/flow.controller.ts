@@ -1183,21 +1183,20 @@ export async function saveFlowGraph(req: Request, res: Response) {
           listSettingsRecord ? listSettingsRecord['description'] : undefined
         );
 
+        const rawResponseVariable = sanitizeStringValue(
+          dataRecord.responseVariableName ?? dataRecord.saveResponseToVariable
+        );
         const waitForResponse =
           typeof dataRecord.waitForResponse === 'boolean'
             ? dataRecord.waitForResponse
-            : Boolean(
-                sanitizeStringValue(
-                  dataRecord.responseVariableName ??
-                    dataRecord.saveResponseToVariable
-                )
-              );
+            : Boolean(rawResponseVariable);
         const responseVariableName = waitForResponse
-          ? sanitizeStringValue(
-              dataRecord.responseVariableName ??
-                dataRecord.saveResponseToVariable
-            )
+          ? rawResponseVariable
           : null;
+        const aiResponseVariable =
+          flowType === 'AI' ? rawResponseVariable : null;
+        const effectiveWaitForResponse =
+          flowType === 'AI' ? false : waitForResponse;
 
         // DEBUG: Log responseVariableName
         if (flowType === 'CAPTURE') {
@@ -1261,12 +1260,18 @@ export async function saveFlowGraph(req: Request, res: Response) {
             listButtonText: listButtonText ?? null,
             listTitle: listTitle ?? null,
             listDescription: listDescription ?? null,
-            waitForResponse: waitForResponse || undefined,
-            responseVariableName: responseVariableName ?? undefined,
+            waitForResponse: effectiveWaitForResponse || undefined,
+            responseVariableName:
+              flowType === 'AI'
+                ? aiResponseVariable ?? undefined
+                : responseVariableName ?? undefined,
             responseVariableType,
             audioModel: audioModelValue ?? undefined,
             imageModel: imageModelValue ?? undefined,
-            saveResponseToVariable: responseVariableName ?? undefined,
+            saveResponseToVariable:
+              flowType === 'AI'
+                ? aiResponseVariable ?? undefined
+                : responseVariableName ?? undefined,
             // Campos para DELAY
             seconds: flowType === 'DELAY' ? secondsValue : undefined,
             // Campos para SCHEDULE

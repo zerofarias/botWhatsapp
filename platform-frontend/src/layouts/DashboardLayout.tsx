@@ -1,9 +1,10 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth, type Role } from '../context/AuthContext';
 import { useState, useEffect } from 'react';
 import '../styles/sidebar.css';
 import { sidebarIcons } from '../components/SidebarIcons';
 import { initializeSocket } from '../services/socket/SocketManager';
+import PageShell from '../components/layout/PageShell';
 
 type NavigationLink = {
   to: string;
@@ -13,6 +14,11 @@ type NavigationLink = {
 
 const NAVIGATION_LINKS: NavigationLink[] = [
   { to: '/dashboard', label: 'Estado' },
+  {
+    to: '/dashboard/stats',
+    label: 'Estadísticas',
+    roles: ['ADMIN', 'SUPERVISOR'],
+  },
   { to: '/dashboard/chat', label: 'Chat' },
   {
     to: '/dashboard/orders',
@@ -122,8 +128,94 @@ export default function DashboardLayout() {
         </button>
       </aside>
       <main className="dashboard-main">
-        <Outlet />
+        <div className="dashboard-main__content">
+          <ShellOutlet />
+        </div>
       </main>
     </div>
+  );
+}
+
+type ShellMeta = {
+  path: string;
+  title: string;
+  subtitle: string;
+  fullHeight?: boolean;
+};
+
+const DISABLED_SHELL_PATHS = [
+  '/dashboard/orders',
+  '/dashboard/chat',
+  '/dashboard/stats',
+] as const;
+
+const PAGE_SHELL_CONFIG: ShellMeta[] = [
+  {
+    path: '/dashboard/users',
+    title: 'Usuarios',
+    subtitle: 'Gestiona roles, accesos y permisos',
+  },
+  {
+    path: '/dashboard/areas',
+    title: 'Áreas',
+    subtitle: 'Define equipos y horarios de atención',
+  },
+  {
+    path: '/dashboard/contacts',
+    title: 'Contactos',
+    subtitle: 'Administra tu libreta de clientes',
+  },
+  {
+    path: '/dashboard/bots',
+    title: 'Bots',
+    subtitle: 'Crea y sincroniza asistentes para tus flujos',
+  },
+  {
+    path: '/dashboard/working-hours',
+    title: 'Horarios',
+    subtitle: 'Configura ventanas de atención',
+  },
+  {
+    path: '/dashboard/settings',
+    title: 'Configuración',
+    subtitle: 'Preferencias generales del sistema',
+  },
+  {
+    path: '/dashboard',
+    title: 'Estado general',
+    subtitle: 'Monitorea bots y conversaciones en tiempo real',
+  },
+];
+
+function ShellOutlet() {
+  const location = useLocation();
+  const currentPath = location.pathname;
+
+  const isDisabled = DISABLED_SHELL_PATHS.some((path) =>
+    currentPath.startsWith(path)
+  );
+
+  if (isDisabled) {
+    return <Outlet />;
+  }
+
+  const meta =
+    PAGE_SHELL_CONFIG.find(
+      (entry) =>
+        currentPath === entry.path || currentPath.startsWith(`${entry.path}/`)
+    ) ?? PAGE_SHELL_CONFIG[PAGE_SHELL_CONFIG.length - 1];
+
+  if (!meta) {
+    return <Outlet />;
+  }
+
+  return (
+    <PageShell
+      title={meta.title}
+      subtitle={meta.subtitle}
+      fullHeight={meta.fullHeight}
+    >
+      <Outlet />
+    </PageShell>
   );
 }
