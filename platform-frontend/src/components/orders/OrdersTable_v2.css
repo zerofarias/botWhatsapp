@@ -42,7 +42,7 @@
 }
 
 .order-overview {
-  min-width: 220px;
+  min-width: 260px;
 }
 
 .order-id {
@@ -136,6 +136,7 @@
 
 .order-status {
   min-width: 140px;
+  overflow: visible;
 }
 
 .status-badge {
@@ -187,6 +188,7 @@
   flex-wrap: wrap;
   gap: 8px;
   min-width: 220px;
+  overflow: visible;
 }
 
 .action-btn {

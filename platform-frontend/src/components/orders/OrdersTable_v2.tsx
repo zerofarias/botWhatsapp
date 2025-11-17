@@ -377,7 +377,6 @@ const OrdersTable_v2: React.FC<Props> = ({
     return [
       {
         name: 'Pedido',
-        minWidth: '260px',
         grow: 2,
         cell: (order) => (
           <div className="order-overview">
@@ -465,7 +464,6 @@ const OrdersTable_v2: React.FC<Props> = ({
           </div>
         ),
         ignoreRowClick: true,
-        allowOverflow: true,
       },
       {
         name: 'Acciones',
@@ -505,7 +503,6 @@ const OrdersTable_v2: React.FC<Props> = ({
           </div>
         ),
         ignoreRowClick: true,
-        allowOverflow: true,
       },
     ];
   }, [

@@ -66,18 +66,18 @@ const OrderDetailsModal: React.FC<Props> = ({ order, isOpen, onClose }) => {
           </button>
         </header>
         <section className="order-details-section">
-          <h3>Datos del cliente</h3>
+          <h3>📋 Datos del cliente</h3>
           <div className="order-details-grid">
-            <span>Teléfono</span>
+            <span>📞 Teléfono</span>
             <strong>{order.clientPhone}</strong>
-            <span>Tipo</span>
+            <span>💬 Tipo</span>
             <strong>{order.tipoConversacion}</strong>
-            <span>Estado</span>
+            <span>🔔 Estado</span>
             <strong>{order.status}</strong>
           </div>
         </section>
         <section className="order-details-section">
-          <h3>Pedido</h3>
+          <h3>📦 Pedido</h3>
           {Array.isArray(parsedItems) ? (
             <ul className="order-details-list">
               {parsedItems.map((item, index) => (

@@ -1,5 +1,5 @@
 /**
- * CompleteOrderModal_v2.css - Estilos para el modal de completar pedidos
+ * CompleteOrderModal_v2.css - Estilos mejorados para el modal de completar pedidos
  */
 
 .modal-overlay {
@@ -8,12 +8,14 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  animation: fadeIn 0.2s;
+  animation: fadeIn 0.2s ease;
+  padding: 20px;
 }
 
 @keyframes fadeIn {
@@ -26,14 +28,32 @@
 }
 
 .modal-content {
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  max-width: 500px;
-  width: 90%;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.4), 0 0 1px rgba(15, 23, 42, 0.1);
+  max-width: 540px;
+  width: 100%;
   max-height: 90vh;
   overflow-y: auto;
-  animation: slideUp 0.3s;
+  animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  border: 1px solid rgba(226, 232, 240, 0.5);
+}
+
+.modal-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.modal-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.modal-content::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 @keyframes slideUp {
@@ -51,33 +71,52 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 32px 32px 24px;
+  border-bottom: 2px solid rgba(226, 232, 240, 0.6);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(248, 250, 252, 0.5) 100%
+  );
 }
 
 .modal-header h2 {
   margin: 0;
-  font-size: 18px;
-  color: #333;
+  font-size: 1.75rem;
+  color: #0f172a;
+  font-weight: 700;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .close-btn {
-  background: none;
+  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
   border: none;
-  font-size: 24px;
-  color: #999;
+  font-size: 1.8rem;
+  color: #0f172a;
   cursor: pointer;
   padding: 0;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.2s;
+  transition: all 0.2s ease;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  flex-shrink: 0;
 }
 
 .close-btn:hover {
-  color: #333;
+  background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+}
+
+.close-btn:active {
+  transform: scale(0.95);
 }
 
 .modal-form {
@@ -88,80 +127,111 @@
 
 .modal-body {
   flex: 1;
-  padding: 20px;
+  padding: 28px 32px;
   overflow-y: auto;
 }
 
 .order-info {
-  background-color: #f9f9f9;
-  padding: 12px;
-  border-radius: 4px;
-  margin-bottom: 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.05) 0%,
+    rgba(99, 102, 241, 0.05) 100%
+  );
+  padding: 16px;
+  border-radius: 14px;
+  margin-bottom: 28px;
+  border: 1px solid rgba(59, 130, 246, 0.1);
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
-  padding: 6px 0;
-  font-size: 14px;
+  padding: 8px 0;
+  font-size: 0.95rem;
+  align-items: center;
 }
 
 .info-row .label {
-  font-weight: 600;
-  color: #666;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
 }
 
 .info-row .value {
-  color: #333;
+  color: #0f172a;
+  font-weight: 600;
+  font-size: 1rem;
 }
 
 .reason-section,
 .message-section {
-  margin-bottom: 20px;
+  margin-bottom: 28px;
 }
 
 .section-label {
   display: block;
-  margin-bottom: 12px;
-  font-weight: 600;
-  color: #333;
-  font-size: 14px;
+  margin-bottom: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 1.05rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-label::before {
+  content: '';
+  width: 4px;
+  height: 20px;
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  border-radius: 2px;
 }
 
 .reason-options {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .reason-option {
   display: flex;
   align-items: center;
-  padding: 12px;
-  border: 2px solid #e0e0e0;
-  border-radius: 6px;
+  padding: 14px 16px;
+  border: 2px solid rgba(226, 232, 240, 0.6);
+  border-radius: 12px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(248, 250, 252, 0.3) 100%
+  );
 }
 
 .reason-option:hover {
-  border-color: #999;
-  background-color: #f9f9f9;
+  border-color: rgba(59, 130, 246, 0.3);
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.05) 0%,
+    rgba(99, 102, 241, 0.05) 100%
+  );
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
 }
 
 .reason-option input[type='radio'] {
-  width: 18px;
-  height: 18px;
-  margin-right: 12px;
+  width: 20px;
+  height: 20px;
+  margin-right: 14px;
   cursor: pointer;
-}
-
-.reason-option input[type='radio']:checked {
-  accent-color: #2196f3;
+  accent-color: #3b82f6;
 }
 
 .reason-option input[type='radio']:checked + .reason-content {
-  color: #2196f3;
+  color: #3b82f6;
 }
 
 .reason-content {
@@ -172,105 +242,208 @@
 }
 
 .reason-icon {
-  font-size: 20px;
+  font-size: 1.4rem;
   flex-shrink: 0;
 }
 
 .reason-text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .reason-label {
-  font-weight: 600;
-  color: #333;
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 1rem;
 }
 
 .reason-description {
-  font-size: 12px;
-  color: #999;
+  font-size: 0.85rem;
+  color: #94a3b8;
 }
 
 .custom-message {
   width: 100%;
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-family: Arial, sans-serif;
-  font-size: 13px;
+  padding: 14px 16px;
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.95rem;
   resize: vertical;
-  transition: border-color 0.2s;
+  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.5);
+  color: #0f172a;
+  min-height: 100px;
+}
+
+.custom-message::placeholder {
+  color: #cbd5e1;
 }
 
 .custom-message:focus {
   outline: none;
-  border-color: #2196f3;
-  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  background: rgba(255, 255, 255, 0.8);
 }
 
 .error-message {
-  background-color: #ffebee;
-  color: #c62828;
-  padding: 12px;
-  border-radius: 4px;
-  margin-top: 12px;
-  font-size: 13px;
+  background: linear-gradient(
+    135deg,
+    rgba(220, 38, 38, 0.08) 0%,
+    rgba(185, 28, 28, 0.08) 100%
+  );
+  color: #991b1b;
+  padding: 14px 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.error-message::before {
+  content: '⚠️';
+  flex-shrink: 0;
 }
 
 .modal-footer {
   display: flex;
   gap: 12px;
-  padding: 20px;
-  border-top: 1px solid #f0f0f0;
+  padding: 20px 32px;
+  border-top: 1px solid rgba(226, 232, 240, 0.4);
+  background: rgba(248, 250, 252, 0.3);
 }
 
 .btn {
   flex: 1;
-  padding: 10px 16px;
+  padding: 12px 20px;
   border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 600;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .btn-secondary {
-  background-color: #f0f0f0;
-  color: #333;
+  background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+  color: #0f172a;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
 }
 
-.btn-secondary:hover:not(:disabled) {
-  background-color: #e0e0e0;
+.btn-secondary:hover {
+  background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+}
+
+.btn-secondary:active {
+  transform: translateY(0);
 }
 
 .btn-primary {
-  background-color: #2196f3;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: white;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
 }
 
-.btn-primary:hover:not(:disabled) {
-  background-color: #1976d2;
+.btn-primary:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
 }
 
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  transform: none !important;
 }
 
 /* Responsive */
-@media (max-width: 600px) {
-  .modal-content {
-    width: 95%;
-    max-height: 95vh;
+@media (max-width: 640px) {
+  .modal-overlay {
+    padding: 16px;
   }
 
-  .reason-option {
-    padding: 10px;
+  .modal-content {
+    width: 100%;
+    max-height: 90vh;
+    border-radius: 20px;
+  }
+
+  .modal-header {
+    padding: 24px 24px 20px;
   }
 
   .modal-header h2 {
-    font-size: 16px;
+    font-size: 1.4rem;
+  }
+
+  .close-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 1.6rem;
+  }
+
+  .modal-body {
+    padding: 20px 24px;
+  }
+
+  .order-info {
+    padding: 12px;
+    margin-bottom: 24px;
+  }
+
+  .info-row {
+    padding: 6px 0;
+    font-size: 0.9rem;
+  }
+
+  .reason-section,
+  .message-section {
+    margin-bottom: 20px;
+  }
+
+  .section-label {
+    font-size: 0.95rem;
+    margin-bottom: 12px;
+  }
+
+  .reason-option {
+    padding: 12px;
+  }
+
+  .reason-icon {
+    font-size: 1.2rem;
+  }
+
+  .reason-label {
+    font-size: 0.95rem;
+  }
+
+  .custom-message {
+    padding: 12px;
+    font-size: 0.9rem;
+    min-height: 80px;
+  }
+
+  .modal-footer {
+    padding: 16px 24px;
+    gap: 10px;
+  }
+
+  .btn {
+    padding: 10px 16px;
+    font-size: 0.9rem;
   }
 }
