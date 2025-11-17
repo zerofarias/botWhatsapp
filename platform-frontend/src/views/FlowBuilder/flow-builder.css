@@ -1086,12 +1086,12 @@
 /* SCHEDULE Node - Gray */
 
 .node-schedule {
-  background-color: #607d8b !important;
-  border-color: #37474f !important;
-  color: #ffffff !important;
+  background-color: #f5fbe9 !important;
+  border-color: #c5e1a5 !important;
+  color: #2e7d32 !important;
   border-width: 2px !important;
   border-radius: 8px !important;
-  box-shadow: 0 2px 8px rgba(96, 125, 139, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.25) !important;
 }
 
 .node-schedule::before {
@@ -1112,8 +1112,18 @@
   justify-content: space-between;
 }
 
+.schedule-node__title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.schedule-node__icon {
+  font-size: 1.1rem;
+}
+
 .schedule-node__chip {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(76, 175, 80, 0.15);
   border-radius: 999px;
   padding: 2px 8px;
   font-size: 0.75rem;
@@ -1124,7 +1134,7 @@
 .schedule-node__title {
   border: none;
   background: transparent;
-  color: inherit;
+  color: #2e7d32;
   font-weight: 600;
   font-size: 1rem;
   cursor: pointer;
@@ -1139,14 +1149,14 @@
   flex: 1;
   margin-left: 12px;
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(76, 175, 80, 0.4);
   padding: 4px 6px;
-  background: rgba(0, 0, 0, 0.2);
-  color: inherit;
+  background: rgba(255, 255, 255, 0.6);
+  color: #2e7d32;
 }
 
 .schedule-node__body {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(193, 225, 193, 0.35);
   border-radius: 6px;
   padding: 10px;
   display: flex;
@@ -1164,7 +1174,7 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(46, 125, 50, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1180,12 +1190,12 @@
 
 .schedule-node__placeholder {
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(46, 125, 50, 0.7);
   text-align: center;
 }
 
 .schedule-node__branches {
-  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-top: 1px solid rgba(46, 125, 50, 0.2);
   padding-top: 8px;
   display: flex;
   flex-direction: column;
@@ -1204,7 +1214,7 @@
 }
 
 .schedule-node--selected {
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 0 3px rgba(102, 187, 106, 0.4);
 }
 
 /* REDIRECT_BOT Node - Cyan */

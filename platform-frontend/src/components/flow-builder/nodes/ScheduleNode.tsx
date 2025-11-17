@@ -106,9 +106,13 @@ export const ScheduleNode: React.FC<NodeProps<ScheduleNodeData>> = ({
       className={`schedule-node ${selected ? 'schedule-node--selected' : ''}`}
     >
       <Handle type="target" position={Position.Left} style={{ top: '50%' }} />
-
       <div className="schedule-node__header">
-        <span className="schedule-node__chip">Horarios</span>
+        <div className="schedule-node__title-wrapper">
+          <span className="schedule-node__icon" aria-hidden="true">
+            🕒
+          </span>
+          <span className="schedule-node__chip">Horarios</span>
+        </div>
         {isEditing ? (
           <input
             ref={inputRef}

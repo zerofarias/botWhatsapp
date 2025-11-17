@@ -44,6 +44,12 @@ type BuilderCondition = {
   targetId?: string | null;
 };
 
+import {
+  evaluateScheduleNode,
+  type ScheduleEvaluationInput,
+  type ScheduleWeekConfig,
+} from './schedule.service.js';
+
 type BuilderMetadata = {
   waitForResponse?: boolean;
   responseVariableName?: string;
@@ -67,6 +73,9 @@ type BuilderMetadata = {
   // AI
   prompt?: string;
   model?: string;
+  // SCHEDULE
+  week?: ScheduleWeekConfig;
+  timezone?: string | null;
 };
 
 type ConditionOperator =
@@ -267,6 +276,31 @@ function evaluateConditional(
     default:
       return false;
   }
+}
+
+function extractHandleId(trigger?: string | null): string | null {
+  if (!trigger || typeof trigger !== 'string') return null;
+  if (trigger.includes('||')) {
+    const [handleId] = trigger.split('||');
+    return handleId || null;
+  }
+  if (trigger.startsWith('handle:')) {
+    return trigger.slice('handle:'.length) || null;
+  }
+  return null;
+}
+
+function mapConnectionsByHandle(
+  connections: Array<{ trigger: string | null; toId: number }>
+): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const connection of connections) {
+    const handleId = extractHandleId(connection.trigger);
+    if (handleId) {
+      map.set(handleId, connection.toId);
+    }
+  }
+  return map;
 }
 
 export async function executeNode({
@@ -488,6 +522,37 @@ export async function executeNode({
       updatedContext.waitingForInput = false;
       updatedContext.waitingVariable = null;
       nextNodeId = resolveNextNodeId();
+      break;
+    }
+    case 'SCHEDULE': {
+      updatedContext.waitingForInput = false;
+      updatedContext.waitingVariable = null;
+
+      const scheduleInput: ScheduleEvaluationInput = {
+        week: builderMeta.week,
+        timezone:
+          typeof builderMeta.timezone === 'string' &&
+          builderMeta.timezone.length
+            ? builderMeta.timezone
+            : undefined,
+      };
+
+      const scheduleStatus = evaluateScheduleNode(scheduleInput);
+      // Exponer resultado para nodos posteriores (por ejemplo, condicionales)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (updatedContext as any).lastScheduleStatus = scheduleStatus;
+
+      const handleId =
+        scheduleStatus === 'open' ? 'schedule-open' : 'schedule-closed';
+      const handleConnections = mapConnectionsByHandle(connections);
+      nextNodeId = handleConnections.get(handleId) ?? resolveNextNodeId();
+
+      if (!nextNodeId) {
+        console.warn(
+          `[SCHEDULE] Node ${node.id}: no se encontró conexión para handle "${handleId}", usando fallback.`
+        );
+      }
+
       break;
     }
     case 'END': {
