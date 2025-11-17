@@ -810,6 +810,8 @@ type GraphNodePayload = {
 type GraphEdgePayload = {
   source?: string;
   target?: string;
+  sourceHandle?: string;
+  targetHandle?: string;
   label?: unknown;
   data?: unknown;
 };
@@ -901,7 +903,22 @@ function normalizeGraphEdge(raw: unknown): GraphEdgePayload | null {
   if (typeof edge.source !== 'string' || typeof edge.target !== 'string') {
     return null;
   }
-  return edge as GraphEdgePayload;
+
+  const normalized: GraphEdgePayload = {
+    source: edge.source,
+    target: edge.target,
+    label: edge.label,
+    data: edge.data,
+  };
+
+  if (typeof edge.sourceHandle === 'string' && edge.sourceHandle.length > 0) {
+    normalized.sourceHandle = edge.sourceHandle;
+  }
+  if (typeof edge.targetHandle === 'string' && edge.targetHandle.length > 0) {
+    normalized.targetHandle = edge.targetHandle;
+  }
+
+  return normalized;
 }
 
 export async function saveFlowGraph(req: Request, res: Response) {
@@ -1480,7 +1497,10 @@ export async function saveFlowGraph(req: Request, res: Response) {
         if (!fromId || !toId) continue;
 
         let trigger = '';
-        let sourceHandle = ''; // Nueva variable para almacenar el sourceHandle
+        let sourceHandle =
+          typeof normalized.sourceHandle === 'string'
+            ? normalized.sourceHandle
+            : ''; // Nueva variable para almacenar el sourceHandle
 
         if (normalized.data && typeof normalized.data === 'object') {
           const dataRecord = normalized.data as Record<string, unknown>;
@@ -1490,7 +1510,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
               : typeof dataRecord.conditionId === 'string'
               ? dataRecord.conditionId
               : null;
-          if (connectionId) {
+          if (connectionId && !sourceHandle) {
             sourceHandle = connectionId; // Guardar el connectionId como sourceHandle
             const lookup = connectionLookup.get(connectionId);
             if (lookup?.condition) {

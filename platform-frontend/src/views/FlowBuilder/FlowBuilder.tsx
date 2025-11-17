@@ -41,6 +41,7 @@ import { getFlowGraph, saveFlowGraph } from '../../api/flows';
 import { FlowToolbar } from '../../components/flow-builder/FlowToolbar';
 import { ConditionalNode } from '../../components/flow-builder/nodes/ConditionalNode';
 import { GenericNode } from '../../components/flow-builder/nodes/GenericNode';
+import { ScheduleNode } from '../../components/flow-builder/nodes/ScheduleNode';
 import { DeleteableEdge } from './components/DeleteableEdge';
 import {
   buildVariableAvailabilityMap,
@@ -1288,6 +1289,7 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
     () => ({
       default: GenericNode,
       conditionalNode: ConditionalNode,
+      scheduleNode: ScheduleNode,
     }),
     []
   );
@@ -1303,10 +1305,12 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
     () =>
       nodes.map((node) => {
         const isCaptureNode = (node.data as any)?.isCaptureNode === true;
-        const nodeType =
-          node.data.type === 'CONDITIONAL'
-            ? 'conditionalNode'
-            : DEFAULT_NODE_TYPE;
+        let nodeType = DEFAULT_NODE_TYPE;
+        if (node.data.type === 'CONDITIONAL') {
+          nodeType = 'conditionalNode';
+        } else if (node.data.type === 'SCHEDULE') {
+          nodeType = 'scheduleNode';
+        }
 
         // Generar clases para color-coding y forma
         const nodeDataType = node.data.type || 'default';
