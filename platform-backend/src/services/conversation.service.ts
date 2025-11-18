@@ -694,9 +694,11 @@ function areaFilterForUser(
           },
         ],
       });
+    } else {
+      conditions.push({ assignedToId: null });
     }
 
-    return conditions.length === 1 ? conditions[0] : { OR: conditions };
+    return { OR: conditions };
   }
 
   if (user.role === 'SUPERVISOR') {
@@ -770,7 +772,11 @@ export async function ensureConversationAccess(
   }
 
   if (AREA_SCOPED_ROLES.has(user.role)) {
-    if (record.areaId && areaIds.includes(record.areaId)) {
+    if (
+      (record.areaId && areaIds.includes(record.areaId)) ||
+      record.assignedToId === null ||
+      (record.areaId === null && areaIds.length === 0)
+    ) {
       return record;
     }
     return null;

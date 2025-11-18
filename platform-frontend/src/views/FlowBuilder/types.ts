@@ -15,6 +15,7 @@ export const FLOW_NODE_TYPES = [
   'NOTE',
   'DATA_LOG',
   'END',
+  'END_CLOSED',
 ] as const;
 
 export type FlowNodeType = (typeof FLOW_NODE_TYPES)[number];
@@ -33,6 +34,7 @@ export const FLOW_NODE_TYPE_LABELS: Record<FlowNodeType, string> = {
   NOTE: 'Nota Interna',
   DATA_LOG: 'Guardar Datos',
   END: 'Fin del Flujo',
+  END_CLOSED: 'Fin y Cierre',
 };
 
 export const FLOW_NODE_TYPE_DESCRIPTIONS: Record<FlowNodeType, string> = {
@@ -51,6 +53,8 @@ export const FLOW_NODE_TYPE_DESCRIPTIONS: Record<FlowNodeType, string> = {
   DATA_LOG:
     'Captura todas las variables actuales y las guarda en el panel de órdenes.',
   END: 'Termina el flujo.',
+  END_CLOSED:
+    'Termina el flujo, cierra la conversación y finaliza el chat automáticamente.',
 };
 
 export type FlowMessageKind = 'TEXT' | 'BUTTONS' | 'LIST';
@@ -99,7 +103,8 @@ export type FlowNodeData =
   | SetVariableNodeData
   | NoteNodeData
   | DataLogNodeData
-  | EndNodeData;
+  | EndNodeData
+  | EndClosedNodeData;
 
 // Permite cargar nodos legacy 'MENU' como si fueran TEXT
 export type LegacyMenuNodeData = Omit<TextNodeData, 'type'> & { type: 'MENU' };
@@ -283,6 +288,10 @@ export interface DataLogNodeData extends BaseNodeData {
 
 export interface EndNodeData extends BaseNodeData {
   type: 'END';
+}
+
+export interface EndClosedNodeData extends BaseNodeData {
+  type: 'END_CLOSED';
 }
 
 export type FlowBuilderNode = Node<FlowNodeData>;

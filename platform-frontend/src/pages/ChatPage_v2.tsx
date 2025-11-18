@@ -69,6 +69,16 @@ const ChatPage: React.FC = () => {
               sender: normalizeSender(
                 message.senderType ?? message.sender ?? 'contact'
               ),
+              senderId:
+                typeof message.senderId === 'string'
+                  ? parseInt(message.senderId, 10)
+                  : message.senderId ?? null,
+              senderName:
+                message.senderName ??
+                message.sender?.name ??
+                (message.senderType === 'BOT' ? 'Bot' : null),
+              senderUsername:
+                message.senderUsername ?? message.sender?.username ?? null,
               timestamp: message.createdAt
                 ? new Date(message.createdAt).getTime()
                 : message.timestamp || Date.now(),
@@ -86,7 +96,16 @@ const ChatPage: React.FC = () => {
                 undefined,
               metadata: {
                 senderType: message.senderType,
-                senderId: message.senderId,
+                senderId:
+                  typeof message.senderId === 'string'
+                    ? parseInt(message.senderId, 10)
+                    : message.senderId ?? null,
+                senderName:
+                  message.senderName ??
+                  message.sender?.name ??
+                  (message.senderType === 'BOT' ? 'Bot' : null),
+                senderUsername:
+                  message.senderUsername ?? message.sender?.username ?? null,
                 mediaUrl: message.mediaUrl ?? message.metadata?.mediaUrl,
                 mediaType:
                   message.mediaType ??

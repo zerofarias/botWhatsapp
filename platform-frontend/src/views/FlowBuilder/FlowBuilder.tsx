@@ -62,6 +62,7 @@ function getNodeShapeClass(nodeType: string): string {
   switch (nodeType) {
     case 'START':
     case 'END':
+    case 'END_CLOSED':
       return 'node-shape-circle';
     case 'NOTE':
       return 'node-shape-note'; // Forma especial para notas (si la quieres diferente)
@@ -364,6 +365,12 @@ function normalizeNodeFromServer(node: SerializedNode): FlowBuilderNode {
         label: legacy.label ?? 'Fin',
       };
       break;
+    case 'END_CLOSED':
+      data = {
+        type: 'END_CLOSED',
+        label: legacy.label ?? 'Fin y Cierre',
+      };
+      break;
     case 'DATA_LOG':
       data = {
         type: 'DATA_LOG',
@@ -577,6 +584,13 @@ function toSerializedNode(node: FlowBuilderNode): SerializedNode {
           flowId: node.data.flowId ?? null,
           parentId: node.data.parentId ?? null,
         };
+      case 'END_CLOSED':
+        return {
+          type: 'END_CLOSED',
+          label: node.data.label,
+          flowId: node.data.flowId ?? null,
+          parentId: node.data.parentId ?? null,
+        };
       case 'NOTE': {
         const noteData = node.data as any;
         return {
@@ -702,6 +716,12 @@ function createNode(type: FlowNodeType, position: XYPosition): FlowBuilderNode {
       data = {
         type: 'END',
         label: 'Fin',
+      };
+      break;
+    case 'END_CLOSED':
+      data = {
+        type: 'END_CLOSED',
+        label: 'Fin y Cierre',
       };
       break;
     case 'NOTE':
@@ -1629,6 +1649,7 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
         case 'SET_VARIABLE':
         case 'NOTE':
         case 'END':
+        case 'END_CLOSED':
         case 'START':
           newData = {
             ...originalData,

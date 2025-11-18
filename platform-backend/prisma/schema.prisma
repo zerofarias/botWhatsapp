@@ -433,6 +433,7 @@ enum NodeType {
   AI
   SET_VARIABLE
   END
+  END_CLOSED
   SCHEDULE
   DATA_LOG
 }

@@ -30,6 +30,14 @@ export const NODE_STYLE_CONFIG: Record<FlowNodeType, NodeStyleConfig> = {
     borderWidth: 3,
     icon: '⏹️',
   },
+  END_CLOSED: {
+    backgroundColor: '#7c3aed',
+    borderColor: '#5b21b6',
+    textColor: '#ffffff',
+    shape: 'circle',
+    borderWidth: 3,
+    icon: '🔚',
+  },
   TEXT: {
     backgroundColor: '#2196f3',
     borderColor: '#1565c0',

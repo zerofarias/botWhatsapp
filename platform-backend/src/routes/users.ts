@@ -9,8 +9,13 @@ import {
 
 export const userRouter = Router();
 
-userRouter.use(authenticate, authorize(['ADMIN']));
-userRouter.get('/', listUsersHandler);
-userRouter.post('/', createUserHandler);
-userRouter.put('/:id', updateUserHandler);
-userRouter.patch('/:id', updateUserHandler);
+userRouter.use(authenticate);
+
+userRouter.get(
+  '/',
+  authorize(['ADMIN', 'SUPERVISOR', 'OPERATOR', 'SUPPORT', 'SALES']),
+  listUsersHandler
+);
+userRouter.post('/', authorize(['ADMIN']), createUserHandler);
+userRouter.put('/:id', authorize(['ADMIN']), updateUserHandler);
+userRouter.patch('/:id', authorize(['ADMIN']), updateUserHandler);

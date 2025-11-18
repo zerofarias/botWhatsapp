@@ -328,6 +328,9 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
     case 'END':
       nodeForm = <EndNodeForm />;
       break;
+    case 'END_CLOSED':
+      nodeForm = <EndNodeForm variant="closed" />;
+      break;
     default:
       nodeForm = <div>Tipo de nodo no soportado.</div>;
   }

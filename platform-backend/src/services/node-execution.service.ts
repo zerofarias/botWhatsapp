@@ -569,6 +569,21 @@ export async function executeNode({
       nextNodeId = null;
       break;
     }
+    case 'END_CLOSED': {
+      actions.push({
+        type: 'end_flow',
+        payload: {
+          nodeId: node.id,
+          shouldDeactivateBot: true,
+          shouldCreateOrder: true,
+          shouldCloseConversation: true,
+        },
+      });
+      updatedContext.waitingForInput = false;
+      updatedContext.waitingVariable = null;
+      nextNodeId = null;
+      break;
+    }
     case 'DELAY': {
       // Obtener los segundos del metadata
       const secondsRaw = (builderMeta as unknown as Record<string, unknown>)

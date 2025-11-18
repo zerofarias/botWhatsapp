@@ -67,7 +67,8 @@ export const GenericNode: React.FC<NodeProps<FlowNodeData>> = ({
   const nodeType = rawType;
   const nodeKindClass = `generic-node--${nodeType.toLowerCase()}`;
   const badgeLabel = FLOW_NODE_TYPE_LABELS[nodeType] ?? nodeType;
-  const isCircleNode = nodeType === 'START' || nodeType === 'END';
+  const isTerminalNode = nodeType === 'END' || nodeType === 'END_CLOSED';
+  const isCircleNode = nodeType === 'START' || isTerminalNode;
 
   const renderMessagePreview = (value?: string | null): string => {
     if (!value) return 'Sin contenido';
@@ -250,7 +251,11 @@ export const GenericNode: React.FC<NodeProps<FlowNodeData>> = ({
     nodeKindClass,
     selected ? 'generic-node--selected' : '',
     isCircleNode ? 'generic-node--minimal' : '',
-    nodeType === 'END' ? 'generic-node--end' : '',
+    nodeType === 'END'
+      ? 'generic-node--end'
+      : nodeType === 'END_CLOSED'
+      ? 'generic-node--end-closed'
+      : '',
     nodeType === 'START' ? 'generic-node--start' : '',
   ]
     .filter(Boolean)
@@ -303,7 +308,9 @@ export const GenericNode: React.FC<NodeProps<FlowNodeData>> = ({
 
   const showSourceHandle =
     (nodeType === 'START' && (data.type ?? nodeType) === 'START') ||
-    (!isCircleNode && (data.type ?? nodeType) !== 'END');
+    (!isCircleNode &&
+      (data.type ?? nodeType) !== 'END' &&
+      (data.type ?? nodeType) !== 'END_CLOSED');
 
   return (
     <div

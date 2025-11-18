@@ -54,6 +54,12 @@ export function useSocketListeners() {
           typeof payload.senderId === 'string'
             ? parseInt(payload.senderId, 10)
             : payload.senderId ?? null;
+        const resolvedSenderName =
+          payload.senderName ??
+          payload.sender?.name ??
+          (payload.senderType === 'BOT' ? 'Bot' : null);
+        const resolvedSenderUsername =
+          payload.senderUsername ?? payload.sender?.username ?? null;
         const normalizedMessage = {
           id:
             typeof payload.id === 'string'
@@ -68,8 +74,8 @@ export function useSocketListeners() {
             payload.senderType ?? payload.sender ?? 'contact'
           ),
           senderId: parsedSenderId,
-          senderName: payload.senderName ?? null,
-          senderUsername: payload.senderUsername ?? null,
+          senderName: resolvedSenderName,
+          senderUsername: resolvedSenderUsername,
           timestamp:
             typeof payload.timestamp === 'string'
               ? new Date(payload.timestamp).getTime()
@@ -88,8 +94,8 @@ export function useSocketListeners() {
           metadata: {
             senderType: payload.senderType,
             senderId: parsedSenderId,
-            senderName: payload.senderName ?? null,
-            senderUsername: payload.senderUsername ?? null,
+            senderName: resolvedSenderName,
+            senderUsername: resolvedSenderUsername,
             ...(payload.metadata || {}),
           },
         };
@@ -109,6 +115,12 @@ export function useSocketListeners() {
           typeof payload.senderId === 'string'
             ? parseInt(payload.senderId, 10)
             : payload.senderId ?? null;
+        const updateSenderName =
+          payload.senderName ??
+          payload.sender?.name ??
+          (payload.senderType === 'BOT' ? 'Bot' : null);
+        const updateSenderUsername =
+          payload.senderUsername ?? payload.sender?.username ?? null;
         const normalizedUpdate = {
           id: messageId,
           conversationId:
@@ -120,8 +132,8 @@ export function useSocketListeners() {
             payload.senderType ?? payload.sender ?? 'contact'
           ),
           senderId: updateSenderId,
-          senderName: payload.senderName ?? null,
-          senderUsername: payload.senderUsername ?? null,
+          senderName: updateSenderName,
+          senderUsername: updateSenderUsername,
           timestamp:
             typeof payload.timestamp === 'string'
               ? new Date(payload.timestamp).getTime()

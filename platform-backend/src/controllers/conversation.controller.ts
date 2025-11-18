@@ -109,6 +109,8 @@ import {
   broadcastConversationEvent,
   broadcastConversationUpdate,
   resolveTemplateVariables,
+  getActiveSessionOwnerIds,
+  getSessionInfo,
 } from '../services/wpp.service.js';
 import { executeNode } from '../services/node-execution.service.js';
 
@@ -864,11 +866,31 @@ export async function sendConversationMessageHandler(
     bodyContent
   );
 
-  const outbound = await sendTextFromSession(
-    req.user.id,
-    conversation.userPhone,
-    hydratedContent
-  );
+  let sessionOwnerId = req.user.id;
+  let outboundSession = getSessionInfo(sessionOwnerId);
+
+  if (!outboundSession) {
+    const activeSessions = getActiveSessionOwnerIds();
+
+    if (
+      conversation.assignedToId &&
+      activeSessions.includes(conversation.assignedToId)
+    ) {
+      sessionOwnerId = conversation.assignedToId;
+    } else if (activeSessions.length > 0) {
+      sessionOwnerId = activeSessions[0];
+    }
+
+    outboundSession = getSessionInfo(sessionOwnerId) ?? null;
+  }
+
+  const outbound = outboundSession
+    ? await sendTextFromSession(
+        sessionOwnerId,
+        conversation.userPhone,
+        hydratedContent
+      )
+    : null;
   if (!outbound) {
     await addConversationEvent(conversationId, 'NOTE', {
       type: 'send_fail',

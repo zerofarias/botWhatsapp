@@ -476,6 +476,7 @@ const NODE_TYPE_SET = new Set<NodeType>([
   'AI',
   'SET_VARIABLE',
   'END',
+  'END_CLOSED',
 ]);
 const VARIABLE_TYPE_SET = new Set(['STRING', 'NUMBER', 'BOOLEAN', 'JSON']);
 

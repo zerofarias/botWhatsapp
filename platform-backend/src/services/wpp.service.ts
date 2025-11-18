@@ -137,6 +137,7 @@ import {
   isActiveConversationStatus,
   touchConversation,
   addConversationNote,
+  closeConversationRecord,
 } from './conversation.service.js';
 import {
   createConversationMessage,
@@ -1744,6 +1745,12 @@ async function handleIncomingMessage(
                   ? (endFlowAction.payload as Record<string, unknown>)
                       .shouldCreateOrder === true
                   : false;
+              const shouldCloseConversation =
+                endFlowAction?.payload &&
+                typeof endFlowAction.payload === 'object'
+                  ? (endFlowAction.payload as Record<string, unknown>)
+                      .shouldCloseConversation === true
+                  : false;
 
               // Crear orden si llegó al nodo END desde START
               if (shouldCreateOrder) {
@@ -1761,6 +1768,33 @@ async function handleIncomingMessage(
                   console.error(
                     `[FLOW] Error creando orden para conversación ${conversationId}:`,
                     orderError
+                  );
+                }
+              }
+
+              if (shouldCloseConversation) {
+                try {
+                  await closeConversationRecord(BigInt(conversationId), {
+                    closedById: null,
+                    reason: 'flow_end_closed_node',
+                  });
+                  await broadcastConversationUpdate(io, conversationId);
+                  if (io) {
+                    const snapshot = await fetchConversationSnapshot(
+                      conversationId
+                    );
+                    if (snapshot) {
+                      io.emit('conversation:end_flow', {
+                        conversationId,
+                        botActive: false,
+                        snapshot,
+                      });
+                    }
+                  }
+                } catch (closeError) {
+                  console.error(
+                    '[FLOW] Error closing conversation from END_CLOSED:',
+                    closeError
                   );
                 }
               }
@@ -2003,6 +2037,11 @@ async function handleIncomingMessage(
             ? (endFlowAction.payload as Record<string, unknown>)
                 .shouldCreateOrder === true
             : false;
+        const shouldCloseConversation =
+          endFlowAction?.payload && typeof endFlowAction.payload === 'object'
+            ? (endFlowAction.payload as Record<string, unknown>)
+                .shouldCloseConversation === true
+            : false;
 
         // Crear orden si llegó al nodo END y completó el flujo
         if (shouldCreateOrder) {
@@ -2031,9 +2070,23 @@ async function handleIncomingMessage(
           ...(shouldDeactivateBot && { botActive: false }),
         });
 
-        if (shouldDeactivateBot) {
+        if (shouldCloseConversation) {
+          try {
+            await closeConversationRecord(BigInt(conversationId), {
+              closedById: null,
+              reason: 'flow_end_closed_node',
+            });
+          } catch (closeError) {
+            console.error(
+              '[FLOW] Error closing conversation from END_CLOSED:',
+              closeError
+            );
+          }
+        }
+
+        if (shouldDeactivateBot || shouldCloseConversation) {
           console.log(
-            `[FLOW] END node ejecutado, bot desactivado para conversación ${conversationId}`
+            `[FLOW] END node ejecutado, estado actualizado para conversación ${conversationId}`
           );
           await broadcastConversationUpdate(io, conversationId);
 

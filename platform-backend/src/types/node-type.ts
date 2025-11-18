@@ -9,4 +9,5 @@ export type NodeType =
   | 'REDIRECT_AGENT'
   | 'AI'
   | 'SET_VARIABLE'
-  | 'END';
+  | 'END'
+  | 'END_CLOSED';
