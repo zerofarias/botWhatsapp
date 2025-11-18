@@ -75,6 +75,7 @@ model User {
   quickReplies       QuickReply[]
   areas              UserArea[]
   defaultArea        Area?               @relation("AreaDefaultUsers", fields: [defaultAreaId], references: [id])
+  settingsAudits     SettingsAudit[]
 
   @@index([defaultAreaId], map: "users_default_area_id_fkey")
   @@map("users")
@@ -115,6 +116,7 @@ model BotSession {
   lastQr      String?          @map("last_qr")
   headless    Boolean          @default(true)
   paused      Boolean          @default(false)
+  autoStart   Boolean          @default(false) @map("auto_start")
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
   owner       User             @relation(fields: [ownerUserId], references: [id])
@@ -301,6 +303,35 @@ model QuickReply {
   @@index([areaId])
   @@index([userId])
   @@map("quick_replies")
+}
+
+model SystemSettings {
+  id                 Int      @id @default(1)
+  timezone           String   @default("America/Buenos_Aires")
+  language           String   @default("es")
+  dateFormat         String   @default("DD/MM/YYYY") @map("date_format")
+  autoCloseMinutes   Int      @default(30) @map("auto_close_minutes")
+  notificationsEmail Boolean  @default(true) @map("notifications_email")
+  notificationsWeb   Boolean  @default(true) @map("notifications_web")
+  notificationsPush  Boolean  @default(false) @map("notifications_push")
+  quietHours         Json?    @map("quiet_hours")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+model SettingsAudit {
+  id          Int      @id @default(autoincrement())
+  userId      Int?     @map("user_id")
+  action      String
+  description String?
+  changes     Json?    @map("changes")
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId], map: "settings_audit_user_id_fkey")
+  @@map("settings_audit")
 }
 
 model Order {

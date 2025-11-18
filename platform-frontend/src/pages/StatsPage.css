@@ -295,70 +295,80 @@
 }
 
 .stats-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 14px;
-  min-height: 220px;
-  padding: 16px 0;
   background: linear-gradient(
     135deg,
-    rgba(59, 130, 246, 0.02) 0%,
-    rgba(99, 102, 241, 0.02) 100%
+    rgba(59, 130, 246, 0.03) 0%,
+    rgba(99, 102, 241, 0.03) 100%
   );
-  border-radius: 16px;
-  padding: 16px;
+  border-radius: 18px;
+  padding: 18px;
 }
 
-.chart-bar {
-  flex: 1;
+.stats-chart--line {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 8px;
-  min-height: 100%;
-  position: relative;
-  cursor: pointer;
-  transition: transform 0.2s ease;
+  gap: 16px;
 }
 
-.chart-bar:hover {
-  transform: scaleY(1.05);
-}
-
-.chart-bar-fill {
+.stats-chart__canvas {
   width: 100%;
-  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%);
-  border-radius: 14px 14px 0 0;
-  position: relative;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  min-height: 8px;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2),
-    inset 0 1px 2px rgba(255, 255, 255, 0.2);
-  transition: all 0.2s ease;
+  overflow-x: auto;
 }
 
-.chart-bar:hover .chart-bar-fill {
-  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4),
-    inset 0 1px 2px rgba(255, 255, 255, 0.3);
+.stats-chart-svg {
+  width: 100%;
+  height: auto;
 }
 
-.chart-bar-fill span {
+.chart-line {
+  fill: none;
+  stroke-width: 4;
+  filter: drop-shadow(0 6px 12px rgba(37, 99, 235, 0.25));
+}
+
+.chart-area {
+  opacity: 0.4;
+}
+
+.chart-point circle {
+  fill: #fff;
+  stroke: #2563eb;
+  stroke-width: 2;
+}
+
+.chart-point text {
   font-size: 0.75rem;
-  color: #ffffff;
-  font-weight: 700;
-  margin-bottom: 6px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  text-anchor: middle;
+  fill: #0f172a;
+  font-weight: 600;
 }
 
-.chart-bar small {
-  color: #64748b;
-  font-size: 0.8rem;
-  font-weight: 600;
+.chart-labels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 10px;
+}
+
+.chart-label {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+  padding: 8px;
+  text-align: center;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.2);
+}
+
+.chart-label-date {
+  display: block;
+  font-size: 0.75rem;
   text-transform: capitalize;
-  letter-spacing: 0.02em;
+  color: #64748b;
+}
+
+.chart-label-total {
+  display: block;
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 0.9rem;
 }
 
 .stats-error,

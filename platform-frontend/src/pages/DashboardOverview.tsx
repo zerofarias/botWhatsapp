@@ -17,6 +17,7 @@ interface BotStatus {
     connectedAt?: string;
     paused: boolean;
   } | null;
+  autoStart?: boolean;
 }
 
 interface MessagePreview {
@@ -42,6 +43,8 @@ export default function DashboardOverview() {
   const [stopLoading, setStopLoading] = useState(false);
   const [pauseLoading, setPauseLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [autoStartEnabled, setAutoStartEnabled] = useState(false);
+  const [autoStartLoading, setAutoStartLoading] = useState(false);
   const [conversationStats, setConversationStats] = useState<ConversationStats>(
     {
       active: 0,
@@ -93,6 +96,7 @@ export default function DashboardOverview() {
     try {
       const response = await api.get<BotStatus>('/bot/status');
       setStatus(response.data);
+      setAutoStartEnabled(Boolean(response.data.autoStart));
     } catch (error) {
       console.error('[Dashboard] Failed to load bot status', error);
     } finally {
@@ -330,6 +334,21 @@ export default function DashboardOverview() {
     }
   };
 
+  const handleAutoStartToggle = async () => {
+    const nextValue = !autoStartEnabled;
+    setAutoStartLoading(true);
+    try {
+      await api.post('/bot/auto-start', { autoStart: nextValue });
+      setAutoStartEnabled(nextValue);
+      await fetchStatus();
+    } catch (error) {
+      console.error('[Dashboard] Failed to toggle auto start', error);
+      alert('No se pudo actualizar el inicio automático.');
+    } finally {
+      setAutoStartLoading(false);
+    }
+  };
+
   if (loading && !status) {
     return <div>Cargando...</div>;
   }
@@ -428,7 +447,14 @@ export default function DashboardOverview() {
             <strong>{currentStatus}</strong>
           </div>
         </header>
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '1rem',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+          }}
+        >
           <button
             onClick={handleStart}
             disabled={startLoading}
@@ -495,8 +521,76 @@ export default function DashboardOverview() {
               opacity: resetLoading ? 0.75 : 1,
             }}
           >
-            {resetLoading ? 'Borrando...' : 'Borrar número'}
+            {resetLoading ? 'Borrando...' : 'Borrar numero'}
           </button>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.35rem',
+              padding: '0.75rem 1rem',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0',
+              background: '#f8fafc',
+              minWidth: '220px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <div>
+                <strong>Inicio automático</strong>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
+                  Mantiene el bot activo después de reiniciar.
+                </p>
+              </div>
+              <span
+                style={{
+                  fontSize: '0.8rem',
+                  color: autoStartEnabled ? '#16a34a' : '#ef4444',
+                  fontWeight: 600,
+                }}
+              >
+                {autoStartEnabled ? 'ON' : 'OFF'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleAutoStartToggle}
+              disabled={autoStartLoading}
+              style={{
+                width: '64px',
+                height: '32px',
+                borderRadius: '999px',
+                border: 'none',
+                background: autoStartEnabled ? '#22c55e' : '#cbd5f5',
+                position: 'relative',
+                cursor: autoStartLoading ? 'not-allowed' : 'pointer',
+                opacity: autoStartLoading ? 0.6 : 1,
+                transition: 'background 0.2s ease',
+                alignSelf: 'flex-start',
+              }}
+              aria-pressed={autoStartEnabled}
+            >
+              <span
+                style={{
+                  position: 'absolute',
+                  width: '28px',
+                  height: '28px',
+                  top: '2px',
+                  left: autoStartEnabled ? '34px' : '2px',
+                  borderRadius: '50%',
+                  background: '#fff',
+                  boxShadow: '0 2px 6px rgba(15, 23, 42, 0.25)',
+                  transition: 'left 0.2s ease',
+                }}
+              />
+            </button>
+          </div>
         </div>
       </section>
 

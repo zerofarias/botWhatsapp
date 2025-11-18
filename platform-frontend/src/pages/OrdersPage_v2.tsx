@@ -7,7 +7,7 @@ import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
 import { useChatStore } from '../store/chatStore';
 import { Order, type OrderFilters } from '../hooks/v2/useOrders';
-import { listConversationNotes } from '../services/api';
+import { listConversationNotes, getAllChatsByPhone } from '../services/api';
 import OrdersTable_v2 from '../components/orders/OrdersTable_v2';
 import CompleteOrderModal_v2 from '../components/orders/CompleteOrderModal_v2';
 import OrderDetailsModal from '../components/orders/OrderDetailsModal';
@@ -21,10 +21,9 @@ const formatForHtml = (value: string) =>
 
 const OrdersPage_v2: React.FC = () => {
   const navigate = useNavigate();
-  const [orderForCompletion, setOrderForCompletion] = useState<Order | null>(
-    null
-  );
-  const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
+  const [orderForStatusChange, setOrderForStatusChange] =
+    useState<Order | null>(null);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [orderForDetails, setOrderForDetails] = useState<Order | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string | undefined>();
@@ -40,21 +39,87 @@ const OrdersPage_v2: React.FC = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
 
   const handleChatClick = useCallback(
-    (order: Order) => {
-      useChatStore.setState({ activeConversationId: order.conversationId });
-      navigate('/dashboard/chat');
+    async (order: Order) => {
+      const fallbackConversationId = order.conversationId
+        ? Number(order.conversationId)
+        : null;
+
+      const normalizeConversationId = (conversation: any): number | null => {
+        if (!conversation) return null;
+        const rawId = conversation.id;
+        const numericId =
+          typeof rawId === 'number'
+            ? rawId
+            : typeof rawId === 'string'
+            ? Number(rawId)
+            : NaN;
+        return Number.isFinite(numericId) ? numericId : null;
+      };
+
+      const normalizeTimestamp = (conversation: any): number => {
+        const candidate =
+          conversation?.updatedAt ??
+          conversation?.lastActivity ??
+          conversation?.lastMessageTime ??
+          conversation?.createdAt ??
+          0;
+        const date =
+          typeof candidate === 'number'
+            ? new Date(candidate)
+            : candidate
+            ? new Date(candidate)
+            : null;
+        return date?.getTime() ?? 0;
+      };
+
+      const findLatestConversation = (items: any[]): any | null => {
+        if (!Array.isArray(items) || !items.length) return null;
+        return items.reduce((latest, current) => {
+          if (!latest) return current;
+          const currentTime = normalizeTimestamp(current);
+          const latestTime = normalizeTimestamp(latest);
+          return currentTime > latestTime ? current : latest;
+        });
+      };
+
+      try {
+        let targetConversationId = fallbackConversationId;
+
+        if (!targetConversationId && order.clientPhone) {
+          const response = await getAllChatsByPhone(order.clientPhone);
+          const latestOpen = findLatestConversation(response?.abiertos ?? []);
+          const latestClosed =
+            latestOpen ?? findLatestConversation(response?.cerrados ?? []);
+          targetConversationId = normalizeConversationId(latestClosed);
+        }
+
+        if (targetConversationId) {
+          useChatStore.setState({
+            activeConversationId: targetConversationId,
+            selectedContactGroup: null,
+          });
+          navigate('/dashboard/chat');
+        } else {
+          window.alert(
+            'No se encontró un chat reciente para este contacto. Verifica que exista una conversación asociada.'
+          );
+        }
+      } catch (error) {
+        console.error('[OrdersPage_v2] Failed to open chat', error);
+        window.alert('No se pudo abrir el chat. Intenta nuevamente.');
+      }
     },
     [navigate]
   );
 
-  const handleCompleteClick = useCallback((order: Order) => {
-    setOrderForCompletion(order);
-    setIsCompleteModalOpen(true);
+  const handleChangeStatusClick = useCallback((order: Order) => {
+    setOrderForStatusChange(order);
+    setIsStatusModalOpen(true);
   }, []);
 
-  const handleCompleteOrder = useCallback(() => {
-    setIsCompleteModalOpen(false);
-    setOrderForCompletion(null);
+  const handleStatusUpdated = useCallback(() => {
+    setIsStatusModalOpen(false);
+    setOrderForStatusChange(null);
   }, []);
 
   const handleInspectOrder = useCallback((order: Order) => {
@@ -328,7 +393,7 @@ const OrdersPage_v2: React.FC = () => {
       <div className="orders-content">
         <OrdersTable_v2
           onSelectOrder={handleShowNotes}
-          onCompleteClick={handleCompleteClick}
+          onCompleteClick={handleChangeStatusClick}
           onChatClick={handleChatClick}
           onInspectOrder={handleInspectOrder}
           onNewOrder={handleNewOrder}
@@ -340,10 +405,10 @@ const OrdersPage_v2: React.FC = () => {
       </div>
 
       <CompleteOrderModal_v2
-        order={orderForCompletion}
-        isOpen={isCompleteModalOpen}
-        onClose={() => setIsCompleteModalOpen(false)}
-        onComplete={handleCompleteOrder}
+        order={orderForStatusChange}
+        isOpen={isStatusModalOpen}
+        onClose={() => setIsStatusModalOpen(false)}
+        onComplete={handleStatusUpdated}
       />
 
       <OrderDetailsModal

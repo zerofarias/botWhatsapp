@@ -1,8 +1,4 @@
-/**
- * CompleteOrderModal_v2 - Modal para completar/cancelar pedidos
- */
-
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Order, useOrders } from '../../hooks/v2/useOrders';
 import './CompleteOrderModal_v2.css';
 
@@ -13,60 +9,112 @@ interface Props {
   onComplete: (order: Order) => void;
 }
 
-const reasons = [
+const STATUS_CHOICES: Array<{
+  value: Order['status'];
+  label: string;
+  description: string;
+  finalizes: boolean;
+}> = [
+  {
+    value: 'PENDING',
+    label: 'Pendiente',
+    description: 'Pedido en espera.',
+    finalizes: false,
+  },
+  {
+    value: 'CONFIRMADO',
+    label: 'En preparación',
+    description: 'Operario trabajando en el pedido.',
+    finalizes: false,
+  },
   {
     value: 'COMPLETADO',
-    label: '✅ Completado',
-    icon: '✅',
-    description: 'Pedido entregado/listo',
+    label: 'Completado',
+    description: 'Cierra el chat y envía mensaje de cierre.',
+    finalizes: true,
+  },
+  {
+    value: 'CANCELADO',
+    label: 'Cancelado',
+    description: 'Cierra el chat e informa el motivo.',
+    finalizes: true,
+  },
+];
+
+const CLOSING_REASONS = [
+  {
+    value: 'COMPLETADO',
+    label: '🏁 Pedido entregado',
+    icon: '🏁',
+    description: 'Pedido finalizado correctamente.',
   },
   {
     value: 'CANCELADO_CLIENTE',
-    label: '❌ Cancelado por Cliente',
-    icon: '❌',
-    description: 'Cliente decidió cancelar',
+    label: '🙋 Cancelado por cliente',
+    icon: '🙋',
+    description: 'El cliente decidió cancelar.',
   },
   {
     value: 'ARREPENTIDO',
-    label: '😞 Arrepentido',
-    icon: '😞',
-    description: 'Cliente se arrepintió',
+    label: '🤷 Arrepentido',
+    icon: '🤷',
+    description: 'El cliente cambió de opinión.',
   },
   {
     value: 'INACTIVIDAD',
     label: '⏱️ Inactividad',
     icon: '⏱️',
-    description: 'Sin respuesta del cliente',
+    description: 'Sin respuesta del cliente.',
   },
 ];
 
-export const CompleteOrderModal_v2: React.FC<Props> = ({
+const CompleteOrderModal_v2: React.FC<Props> = ({
   order,
   isOpen,
   onClose,
   onComplete,
 }) => {
-  const { completeOrder } = useOrders();
+  const { completeOrder, updateOrderStatus } = useOrders();
+  const [selectedStatus, setSelectedStatus] =
+    useState<Order['status']>('PENDING');
   const [selectedReason, setSelectedReason] = useState<string>('COMPLETADO');
-  const [customMessage, setCustomMessage] = useState<string>('');
+  const [customMessage, setCustomMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (order) {
+      setSelectedStatus(order.status);
+      setSelectedReason(
+        order.status === 'CANCELADO' ? 'CANCELADO_CLIENTE' : 'COMPLETADO'
+      );
+      setCustomMessage('');
+      setError(null);
+    }
+  }, [order]);
 
+  const isClosingStatus = useMemo(
+    () => selectedStatus === 'COMPLETADO' || selectedStatus === 'CANCELADO',
+    [selectedStatus]
+  );
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!order) return;
-
     setLoading(true);
     setError(null);
 
     try {
-      await completeOrder(order.id, selectedReason, customMessage);
+      if (isClosingStatus) {
+        await completeOrder(order.id, selectedReason, customMessage);
+      } else {
+        await updateOrderStatus(order.id, selectedStatus);
+      }
       onComplete(order);
       handleClose();
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : 'Error al completar pedido';
+        err instanceof Error ? err.message : 'Error al actualizar el pedido';
       setError(message);
     } finally {
       setLoading(false);
@@ -74,7 +122,10 @@ export const CompleteOrderModal_v2: React.FC<Props> = ({
   };
 
   const handleClose = () => {
-    setSelectedReason('COMPLETADO');
+    setSelectedStatus(order?.status ?? 'PENDING');
+    setSelectedReason(
+      order?.status === 'CANCELADO' ? 'CANCELADO_CLIENTE' : 'COMPLETADO'
+    );
     setCustomMessage('');
     setError(null);
     onClose();
@@ -86,7 +137,7 @@ export const CompleteOrderModal_v2: React.FC<Props> = ({
     <div className="modal-overlay" onClick={handleClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Cerrar Pedido #{order.id}</h2>
+          <h2>Cambiar estado del Pedido #{order.id}</h2>
           <button className="close-btn" onClick={handleClose}>
             ✕
           </button>
@@ -98,7 +149,7 @@ export const CompleteOrderModal_v2: React.FC<Props> = ({
               <div className="info-row">
                 <span className="label">Cliente:</span>
                 <span className="value">
-                  {order.clientName || 'Desconocido'}
+                  {order.clientName || order.conversation?.contactName || 'N/D'}
                 </span>
               </div>
               <div className="info-row">
@@ -107,24 +158,23 @@ export const CompleteOrderModal_v2: React.FC<Props> = ({
               </div>
             </div>
 
-            <div className="reason-section">
-              <label className="section-label">Razón de cierre:</label>
-              <div className="reason-options">
-                {reasons.map((reason) => (
-                  <label key={reason.value} className="reason-option">
+            <div className="status-section">
+              <label className="section-label">Selecciona el estado:</label>
+              <div className="status-options">
+                {STATUS_CHOICES.map((choice) => (
+                  <label key={choice.value} className="status-option">
                     <input
                       type="radio"
-                      value={reason.value}
-                      checked={selectedReason === reason.value}
-                      onChange={(e) => setSelectedReason(e.target.value)}
+                      value={choice.value}
+                      checked={selectedStatus === choice.value}
+                      onChange={(event) =>
+                        setSelectedStatus(event.target.value as Order['status'])
+                      }
                     />
-                    <span className="reason-content">
-                      <span className="reason-icon">{reason.icon}</span>
-                      <span className="reason-text">
-                        <span className="reason-label">{reason.label}</span>
-                        <span className="reason-description">
-                          {reason.description}
-                        </span>
+                    <span className="status-content">
+                      <span className="status-label">{choice.label}</span>
+                      <span className="status-description">
+                        {choice.description}
                       </span>
                     </span>
                   </label>
@@ -132,15 +182,49 @@ export const CompleteOrderModal_v2: React.FC<Props> = ({
               </div>
             </div>
 
-            {selectedReason === 'COMPLETADO' && (
+            {isClosingStatus ? (
+              <div className="reason-section">
+                <label className="section-label">Motivo:</label>
+                <div className="reason-options">
+                  {CLOSING_REASONS.map((reason) => (
+                    <label key={reason.value} className="reason-option">
+                      <input
+                        type="radio"
+                        value={reason.value}
+                        checked={selectedReason === reason.value}
+                        onChange={(event) =>
+                          setSelectedReason(event.target.value)
+                        }
+                      />
+                      <span className="reason-content">
+                        <span className="reason-icon">{reason.icon}</span>
+                        <span className="reason-text">
+                          <span className="reason-label">{reason.label}</span>
+                          <span className="reason-description">
+                            {reason.description}
+                          </span>
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="info-hint">
+                Este cambio no cierra el pedido; permanecerá abierto para
+                seguimiento.
+              </div>
+            )}
+
+            {isClosingStatus && (
               <div className="message-section">
                 <label className="section-label">
                   Mensaje personalizado (opcional):
                 </label>
                 <textarea
                   value={customMessage}
-                  onChange={(e) => setCustomMessage(e.target.value)}
-                  placeholder="ej: Tu pedido está listo para retirar"
+                  onChange={(event) => setCustomMessage(event.target.value)}
+                  placeholder="Ej: Tu pedido está listo para retirar"
                   rows={3}
                   className="custom-message"
                 />
@@ -164,7 +248,7 @@ export const CompleteOrderModal_v2: React.FC<Props> = ({
               className="btn btn-primary"
               disabled={loading}
             >
-              {loading ? 'Procesando...' : 'Confirmar'}
+              {loading ? 'Procesando...' : 'Actualizar estado'}
             </button>
           </div>
         </form>

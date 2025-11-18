@@ -18,10 +18,6 @@ const shortDateFormatter = new Intl.DateTimeFormat('es-AR', {
   day: '2-digit',
   month: 'short',
 });
-const longDateFormatter = new Intl.DateTimeFormat('es-AR', {
-  day: '2-digit',
-  month: 'long',
-});
 
 const formatHourRange = (hour: number) => {
   const normalized = ((hour % 24) + 24) % 24;
@@ -33,9 +29,7 @@ const formatHourRange = (hour: number) => {
 
 const formatSeconds = (seconds: number | null) => {
   if (seconds === null) return 'Sin datos';
-  if (seconds < 60) {
-    return `${Math.max(1, Math.round(seconds))} s`;
-  }
+  if (seconds < 60) return `${Math.max(1, Math.round(seconds))} s`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) {
     const rem = Math.round(seconds % 60);
@@ -82,12 +76,9 @@ const StatsPage = () => {
             : 'No se pudieron cargar los datos';
         setError(message);
       } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+        if (isMounted) setLoading(false);
       }
     };
-
     void loadData();
     return () => {
       isMounted = false;
@@ -119,23 +110,51 @@ const StatsPage = () => {
     0
   );
 
+  const dailyChart = useMemo(() => {
+    if (messagesPerDay.length === 0) return null;
+    const width = Math.max(messagesPerDay.length * 36, 320);
+    const height = 220;
+    const padX = 28;
+    const padY = 24;
+    const denominator = Math.max(maxDailyMessages, 1);
+    const points = messagesPerDay.map((item, index) => {
+      const x =
+        padX +
+        (index / Math.max(messagesPerDay.length - 1, 1)) * (width - padX * 2);
+      const normalized = item.total / denominator;
+      const y = height - padY - normalized * Math.max(height - padY * 2, 1);
+      return {
+        x,
+        y,
+        label: shortDateFormatter.format(new Date(item.day)),
+        total: item.total,
+        day: item.day,
+      };
+    });
+    const linePath = points
+      .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+      .join(' ');
+    const first = points[0];
+    const last = points[points.length - 1];
+    const areaPath =
+      linePath +
+      ` L ${last.x} ${height - padY} L ${first.x} ${height - padY} Z`;
+    return { width, height, points, linePath, areaPath };
+  }, [messagesPerDay, maxDailyMessages]);
+
   return (
     <div className="stats-page">
       <header className="stats-header">
         <div>
           <p className="stats-subtitle">Estado general del sistema</p>
           <h1>Estadísticas</h1>
-          {data && (
-            <span className="stats-range-label">
-              Del {longDateFormatter.format(new Date(data.range.since))} al{' '}
-              {longDateFormatter.format(new Date(data.range.until))}
-            </span>
-          )}
+          <p className="stats-range-label">
+            Última actualización: {new Date().toLocaleString('es-AR')}
+          </p>
         </div>
-        <div className="stats-range-selector">
-          <label htmlFor="stats-range">Rango:</label>
+        <label className="stats-range-selector">
+          Rango:
           <select
-            id="stats-range"
             value={range}
             onChange={(event) => setRange(Number(event.target.value))}
           >
@@ -145,13 +164,13 @@ const StatsPage = () => {
               </option>
             ))}
           </select>
-        </div>
+        </label>
       </header>
 
-      {error && <div className="stats-error">{error}</div>}
-      {loading && <div className="stats-loading">Cargando métricas...</div>}
+      {error && <div className="stats-error">⚠️ {error}</div>}
+      {loading && <div className="stats-loading">Cargando métricas…</div>}
 
-      {!loading && data && (
+      {data && !loading && (
         <>
           <section className="stats-grid">
             <article className="stat-card stat-card-contacts">
@@ -255,33 +274,71 @@ const StatsPage = () => {
           <section className="stats-card stats-chart-card">
             <div className="stats-card-header">
               <h3>Mensajes por día</h3>
-              <span>actividad diaria</span>
+              <span>Actividad diaria</span>
             </div>
-            {messagesPerDay.length === 0 ? (
+            {messagesPerDay.length === 0 || !dailyChart ? (
               <p className="stats-empty">Aún no hay mensajes en este rango.</p>
             ) : (
-              <div className="stats-chart">
-                {messagesPerDay.map((item) => {
-                  const label = shortDateFormatter.format(new Date(item.day));
-                  const height =
-                    maxDailyMessages > 0
-                      ? Math.max(
-                          4,
-                          Math.round((item.total / maxDailyMessages) * 100)
-                        )
-                      : 0;
-                  return (
-                    <div key={item.day} className="chart-bar">
-                      <div
-                        className="chart-bar-fill"
-                        style={{ height: `${height}%` }}
+              <div className="stats-chart stats-chart--line">
+                <div className="stats-chart__canvas">
+                  <svg
+                    width={dailyChart.width}
+                    height={dailyChart.height}
+                    viewBox={`0 0 ${dailyChart.width} ${dailyChart.height}`}
+                    className="stats-chart-svg"
+                  >
+                    <defs>
+                      <linearGradient
+                        id="messagesLine"
+                        x1="0%"
+                        y1="0%"
+                        x2="0%"
+                        y2="100%"
                       >
-                        <span>{numberFormatter.format(item.total)}</span>
-                      </div>
-                      <small>{label}</small>
+                        <stop offset="0%" stopColor="#3b82f6" />
+                        <stop offset="100%" stopColor="#1d4ed8" />
+                      </linearGradient>
+                      <linearGradient
+                        id="messagesFill"
+                        x1="0%"
+                        y1="0%"
+                        x2="0%"
+                        y2="100%"
+                      >
+                        <stop offset="0%" stopColor="rgba(59,130,246,0.35)" />
+                        <stop offset="100%" stopColor="rgba(59,130,246,0)" />
+                      </linearGradient>
+                    </defs>
+                    <path
+                      d={dailyChart.areaPath}
+                      className="chart-area"
+                      fill="url(#messagesFill)"
+                    />
+                    <path
+                      d={dailyChart.linePath}
+                      className="chart-line"
+                      stroke="url(#messagesLine)"
+                    />
+                    {dailyChart.points.map((point) => (
+                      <g key={`point-${point.day}`} className="chart-point">
+                        <circle cx={point.x} cy={point.y} r={5} />
+                        <text x={point.x} y={point.y - 12}>
+                          {numberFormatter.format(point.total)}
+                        </text>
+                      </g>
+                    ))}
+                  </svg>
+                </div>
+                <div className="chart-labels">
+                  {dailyChart.points.map((point) => (
+                    <div key={`label-${point.day}`} className="chart-label">
+                      <span className="chart-label-date">{point.label}</span>
+                      <span className="chart-label-total">
+                        {numberFormatter.format(point.total)}
+                      </span>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
             )}
           </section>

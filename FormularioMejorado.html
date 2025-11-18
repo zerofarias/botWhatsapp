@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Formulario Moderno - Crear Bot</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto',
+          'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans',
+          'Helvetica Neue', sans-serif;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .form-container {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+        max-width: 500px;
+        width: 100%;
+        overflow: hidden;
+        animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      @keyframes slideUp {
+        from {
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .form-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 40px 30px;
+        color: white;
+        text-align: center;
+      }
+
+      .form-header h1 {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+        letter-spacing: -0.5px;
+      }
+
+      .form-header p {
+        font-size: 0.95rem;
+        opacity: 0.9;
+        font-weight: 500;
+      }
+
+      .form-body {
+        padding: 40px;
+      }
+
+      .form-group {
+        margin-bottom: 28px;
+      }
+
+      .form-group:last-of-type {
+        margin-bottom: 0;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 10px;
+        font-weight: 600;
+        color: #2d3748;
+        font-size: 0.95rem;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+        color: #475569;
+      }
+
+      label::after {
+        content: '*';
+        color: #ef4444;
+        margin-left: 4px;
+        font-weight: 700;
+      }
+
+      label.optional::after {
+        content: '';
+        color: transparent;
+      }
+
+      input[type='text'],
+      textarea {
+        width: 100%;
+        padding: 14px 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        font-size: 1rem;
+        font-family: inherit;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        background-color: #f8fafc;
+        color: #0f172a;
+      }
+
+      input[type='text']:hover,
+      textarea:hover {
+        border-color: #cbd5e1;
+        background-color: #ffffff;
+      }
+
+      input[type='text']:focus,
+      textarea:focus {
+        outline: none;
+        border-color: #667eea;
+        background-color: #ffffff;
+        box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+      }
+
+      textarea {
+        resize: vertical;
+        min-height: 110px;
+        font-family: inherit;
+      }
+
+      .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 18px;
+        background: linear-gradient(135deg, #f0f9ff 0%, #f0fdf4 100%);
+        border-radius: 12px;
+        border: 1px solid #d1e7f0;
+        transition: all 0.2s ease;
+        cursor: pointer;
+      }
+
+      .checkbox-group:hover {
+        border-color: #667eea;
+        background: linear-gradient(135deg, #e0f2fe 0%, #e0f8f7 100%);
+      }
+
+      input[type='checkbox'] {
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+        accent-color: #667eea;
+        flex-shrink: 0;
+      }
+
+      .checkbox-group label {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 500;
+        text-transform: none;
+        color: #1e293b;
+        cursor: pointer;
+      }
+
+      .checkbox-group label::after {
+        content: '';
+      }
+
+      .form-actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 32px;
+      }
+
+      button {
+        flex: 1;
+        padding: 14px 20px;
+        border: none;
+        border-radius: 12px;
+        font-size: 1rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+      }
+
+      button::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 0;
+        height: 0;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.3);
+        transform: translate(-50%, -50%);
+        transition: width 0.6s, height 0.6s;
+      }
+
+      button:active::before {
+        width: 300px;
+        height: 300px;
+      }
+
+      .btn-cancel {
+        background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+        color: #1e293b;
+        border: 2px solid #cbd5e1;
+      }
+
+      .btn-cancel:hover {
+        background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+      }
+
+      .btn-cancel:active {
+        transform: translateY(0);
+      }
+
+      .btn-submit {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+      }
+
+      .btn-submit:hover {
+        background: linear-gradient(135deg, #5568d3 0%, #6b3f8f 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 12px 25px rgba(102, 126, 234, 0.4);
+      }
+
+      .btn-submit:active {
+        transform: translateY(0);
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+      }
+
+      .btn-submit:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none !important;
+      }
+
+      /* Helper text */
+      .helper-text {
+        font-size: 0.8rem;
+        color: #64748b;
+        margin-top: 6px;
+        font-weight: 500;
+      }
+
+      /* Responsive */
+      @media (max-width: 640px) {
+        .form-container {
+          border-radius: 16px;
+        }
+
+        .form-header {
+          padding: 32px 24px;
+        }
+
+        .form-header h1 {
+          font-size: 1.5rem;
+        }
+
+        .form-body {
+          padding: 28px 24px;
+        }
+
+        .form-group {
+          margin-bottom: 24px;
+        }
+
+        input[type='text'],
+        textarea {
+          padding: 12px 14px;
+          font-size: 16px;
+        }
+
+        .form-actions {
+          gap: 10px;
+        }
+
+        button {
+          padding: 12px 16px;
+          font-size: 0.9rem;
+          letter-spacing: 0.6px;
+        }
+      }
+
+      /* Validación */
+      input:invalid {
+        border-color: #fca5a5;
+      }
+
+      input:valid {
+        border-color: #86efac;
+      }
+
+      .success-message {
+        background: #ecfdf5;
+        color: #166534;
+        padding: 12px 16px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        border-left: 4px solid #22c55e;
+        font-weight: 600;
+      }
+
+      .error-message {
+        background: #fef2f2;
+        color: #991b1b;
+        padding: 12px 16px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        border-left: 4px solid #ef4444;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="form-container">
+      <div class="form-header">
+        <h1>🤖 Crear Bot</h1>
+        <p>Configure los detalles de su nuevo bot inteligente</p>
+      </div>
+
+      <form class="form-body">
+        <div class="form-group">
+          <label for="name">Nombre del Bot</label>
+          <input
+            type="text"
+            id="name"
+            name="name"
+            placeholder="Ej: Asistente de Ventas"
+            required
+          />
+          <div class="helper-text">Nombre único para identificar su bot</div>
+        </div>
+
+        <div class="form-group">
+          <label for="description" class="optional">Descripción</label>
+          <textarea
+            id="description"
+            name="description"
+            placeholder="Describe el propósito y funcionalidad del bot..."
+          ></textarea>
+          <div class="helper-text">Opcional. Máximo 500 caracteres</div>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-group">
+            <input type="checkbox" id="isDefault" name="isDefault" />
+            <label for="isDefault" style="margin: 0; text-transform: none">
+              Establecer como bot predeterminado
+            </label>
+          </label>
+          <div class="helper-text" style="margin-top: 10px">
+            Este bot será utilizado en todas las nuevas conversaciones
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn-cancel" onclick="resetForm()">
+            Cancelar
+          </button>
+          <button type="submit" class="btn-submit">Crear Bot</button>
+        </div>
+      </form>
+    </div>
+
+    <script>
+      function resetForm() {
+        document.querySelector('form').reset();
+      }
+
+      document.querySelector('form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const formData = {
+          name: document.getElementById('name').value,
+          description: document.getElementById('description').value,
+          isDefault: document.getElementById('isDefault').checked,
+        };
+        console.log('Form submitted:', formData);
+        alert(
+          '✅ Bot creado exitosamente!\n\nDetalles:\n' +
+            JSON.stringify(formData, null, 2)
+        );
+      });
+    </script>
+  </body>
+</html>

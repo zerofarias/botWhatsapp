@@ -22,7 +22,11 @@ export const ConditionalNode: React.FC<NodeProps<ConditionalNodeData>> = ({
       }`}
       data-nodeid={id}
     >
-      <Handle type="target" position={Position.Left} />
+      <Handle
+        type="target"
+        position={Position.Left}
+        style={{ top: '50%', left: -6, transform: 'translateY(-50%)' }}
+      />
       <div className="conditional-node__header">
         <span className="conditional-node__title">{data.label}</span>
         {data.availableVariables && data.availableVariables.length > 0 ? (
@@ -70,6 +74,7 @@ export const ConditionalNode: React.FC<NodeProps<ConditionalNodeData>> = ({
                 id={evaluation.id}
                 className="conditional-node__handle"
                 data-handleid={evaluation.id}
+                style={{ top: '50%', right: -6, transform: 'translateY(-50%)' }}
               />
               {/* DEBUG: Badge visual con el ID del handle */}
               <div
@@ -105,6 +110,7 @@ export const ConditionalNode: React.FC<NodeProps<ConditionalNodeData>> = ({
             id={defaultHandleId}
             className="conditional-node__handle conditional-node__handle--default"
             data-handleid={defaultHandleId}
+            style={{ top: '50%', right: -6, transform: 'translateY(-50%)' }}
           />
           {/* DEBUG: Badge visual con el ID del handle */}
           <div

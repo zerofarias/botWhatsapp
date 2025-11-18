@@ -3,6 +3,7 @@ import { env } from '../config/env.js';
 import { prisma } from '../config/prisma.js';
 import { addConversationEvent } from '../services/conversation.service.js';
 import { createConversationMessage } from '../services/message.service.js';
+import { getSystemSettingsCached } from '../services/settings.service.js';
 import {
   broadcastConversationEvent,
   broadcastConversationUpdate,
@@ -19,7 +20,10 @@ const AUTO_CLOSE_REASON = 'auto_inactivity';
 let schedulerStarted = false;
 
 async function closeInactiveConversations(io: SocketIOServer) {
-  const threshold = new Date(Date.now() - env.autoCloseMinutes * 60 * 1000);
+  const settings = await getSystemSettingsCached();
+  const minutes = settings.autoCloseMinutes ?? env.autoCloseMinutes;
+  const autoCloseMinutes = minutes > 0 ? minutes : env.autoCloseMinutes;
+  const threshold = new Date(Date.now() - autoCloseMinutes * 60 * 1000);
 
   const staleConversations = await prisma.conversation.findMany({
     where: {

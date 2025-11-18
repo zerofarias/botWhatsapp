@@ -8,6 +8,7 @@ import {
   togglePause,
   updateMetadata,
   resetBotSession,
+  setAutoStartPreference,
 } from '../controllers/bot.controller.js';
 
 export const botRouter = Router();
@@ -16,6 +17,7 @@ botRouter.use(authenticate);
 botRouter.get('/status', getBotStatus);
 botRouter.post('/start', startBot);
 botRouter.post('/stop', stopBot);
+botRouter.post('/auto-start', setAutoStartPreference);
 botRouter.get('/qr', getBotQr);
 botRouter.post('/pause', togglePause);
 botRouter.post('/reset', resetBotSession);

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { getSocketServer } from '../lib/socket.js';
+import { prisma } from '../config/prisma.js';
 import {
   getSessionInfo,
   startSession,
@@ -13,12 +14,29 @@ export async function getBotStatus(req: Request, res: Response) {
   if (!req.user) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
-  const session = getSessionInfo(req.user.id);
-  if (session) {
-    return res.json({ status: session.status });
-  }
   const record = await getOrCreateBotSessionRecord(req.user.id);
-  return res.json({ status: record.status });
+  const session = getSessionInfo(req.user.id);
+  return res.json({
+    record: {
+      status: record.status,
+      connectedAt: record.connectedAt ? record.connectedAt.toISOString() : null,
+      paused: record.paused,
+      lastQr: record.lastQr,
+      lastQrAscii: null,
+    },
+    cache: session
+      ? {
+          status: session.status,
+          lastQr: session.lastQr,
+          lastQrAscii: session.lastQrAscii ?? null,
+          connectedAt: session.connectedAt
+            ? session.connectedAt.toISOString()
+            : undefined,
+          paused: session.paused,
+        }
+      : null,
+    autoStart: record.autoStart ?? false,
+  });
 }
 
 export async function startBot(req: Request, res: Response) {
@@ -83,5 +101,36 @@ export async function resetBotSession(req: Request, res: Response) {
     res.status(500).json({
       message: 'No se pudo borrar la sesión. Intenta nuevamente.',
     });
+  }
+}
+
+export async function setAutoStartPreference(req: Request, res: Response) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  const autoStart = Boolean(req.body?.autoStart);
+  try {
+    await getOrCreateBotSessionRecord(req.user.id);
+    await prisma.botSession.update({
+      where: {
+        ownerUserId_sessionName: {
+          ownerUserId: req.user.id,
+          sessionName: 'default',
+        },
+      },
+      data: {
+        autoStart,
+      },
+    });
+    if (autoStart) {
+      const io = getSocketServer();
+      await startSession(req.user.id, io);
+    }
+    res.json({ autoStart });
+  } catch (error) {
+    console.error('[BotController] Failed to update autoStart', error);
+    res
+      .status(500)
+      .json({ message: 'No se pudo actualizar el inicio automático.' });
   }
 }

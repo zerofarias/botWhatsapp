@@ -1,9 +1,10 @@
 import 'dotenv/config';
 import { createApp, initializeSocketServer } from './app.js';
 import { env } from './config/env.js';
-import { connectPrisma } from './config/prisma.js';
+import { connectPrisma, prisma } from './config/prisma.js';
 import { createHybridServer, httpsRedirectMiddleware } from './config/ssl.js';
 import express from 'express';
+import { startSession } from './services/wpp.service.js';
 
 async function bootstrap() {
   await connectPrisma();
@@ -16,7 +17,8 @@ async function bootstrap() {
 
   // Crear servidor con soporte SSL opcional
   const { server, protocol } = createHybridServer(app);
-  initializeSocketServer(server, sessionMiddleware, corsOrigin);
+  const io = initializeSocketServer(server, sessionMiddleware, corsOrigin);
+  await autoStartBotSessions(io);
 
   const port = env.enableSsl ? 443 : env.port;
   const httpPort = env.enableSsl ? 80 : env.port;
@@ -47,3 +49,26 @@ bootstrap().catch((error) => {
   console.error('Failed to start server', error);
   process.exit(1);
 });
+
+async function autoStartBotSessions(
+  io: ReturnType<typeof initializeSocketServer>
+) {
+  try {
+    const autoSessions = await prisma.botSession.findMany({
+      where: { autoStart: true },
+      select: { ownerUserId: true },
+    });
+    for (const session of autoSessions) {
+      try {
+        await startSession(session.ownerUserId, io);
+      } catch (error) {
+        console.error(
+          `[AutoStart] Failed to start session for user ${session.ownerUserId}`,
+          error
+        );
+      }
+    }
+  } catch (error) {
+    console.error('[AutoStart] Failed to load auto-start sessions', error);
+  }
+}

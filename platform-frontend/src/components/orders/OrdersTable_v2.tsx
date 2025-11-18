@@ -2,13 +2,7 @@
  * OrdersTable_v2.tsx - Tabla de pedidos con controles modernos y DataTable
  */
 
-import React, {
-  useState,
-  useCallback,
-  useEffect,
-  useRef,
-  useMemo,
-} from 'react';
+import React, { useCallback, useEffect, useRef, useMemo } from 'react';
 import DataTable, { type TableColumn } from 'react-data-table-component';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -178,7 +172,7 @@ const calculateDuration = (
 
 const STATUS_OPTIONS = [
   { value: 'PENDING', label: 'Pendiente' },
-  { value: 'CONFIRMADO', label: 'En proceso' },
+  { value: 'CONFIRMADO', label: 'En preparación' },
   { value: 'COMPLETADO', label: 'Completado' },
   { value: 'CANCELADO', label: 'Cancelado' },
 ];
@@ -191,35 +185,6 @@ const getDisplayName = (order: Order) =>
 
 const getDni = (order: Order) => order.conversation?.contact?.dni || '—';
 
-const StatusSelect: React.FC<{
-  status: Order['status'];
-  orderId: number;
-  onStatusChange: (orderId: number, status: Order['status']) => void;
-  disabled?: boolean;
-}> = ({ status, orderId, onStatusChange, disabled = false }) => {
-  const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const newStatus = event.target.value as Order['status'];
-    if (newStatus !== status) {
-      onStatusChange(orderId, newStatus);
-    }
-  };
-
-  return (
-    <select
-      value={status}
-      onChange={handleChange}
-      disabled={disabled}
-      className={`status-select ${status.toLowerCase()}`}
-    >
-      {STATUS_OPTIONS.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  );
-};
-
 const OrdersTable_v2: React.FC<Props> = ({
   onSelectOrder,
   onCompleteClick,
@@ -231,13 +196,12 @@ const OrdersTable_v2: React.FC<Props> = ({
   pollIntervalMs = 20000,
   filters,
 }) => {
-  const { orders, loading, error, updateOrderStatus } = useOrders(
+  const { orders, loading, error } = useOrders(
     statusFilter,
     searchQuery,
     pollIntervalMs,
     filters
   );
-  const [updatingOrders, setUpdatingOrders] = useState<Set<number>>(new Set());
   const knownIdsRef = useRef<Set<number>>(new Set());
   const initializedRef = useRef(false);
 
@@ -282,24 +246,6 @@ const OrdersTable_v2: React.FC<Props> = ({
     }
     knownIdsRef.current = currentIds;
   }, [sortedOrders, onNewOrder]);
-
-  const handleStatusChange = useCallback(
-    async (orderId: number, newStatus: Order['status']) => {
-      try {
-        setUpdatingOrders((prev) => new Set(prev).add(orderId));
-        await updateOrderStatus(orderId, newStatus);
-      } catch (err) {
-        console.error('Error al actualizar el estado del pedido:', err);
-      } finally {
-        setUpdatingOrders((prev) => {
-          const next = new Set(prev);
-          next.delete(orderId);
-          return next;
-        });
-      }
-    },
-    [updateOrderStatus]
-  );
 
   const handleExportCSV = useCallback(() => {
     if (!exportRows.length) return;
@@ -462,12 +408,10 @@ const OrdersTable_v2: React.FC<Props> = ({
         grow: 1,
         cell: (order) => (
           <div className="order-status">
-            <StatusSelect
-              status={order.status}
-              orderId={order.id}
-              onStatusChange={handleStatusChange}
-              disabled={updatingOrders.has(order.id)}
-            />
+            <span className={`status-pill ${order.status.toLowerCase()}`}>
+              {STATUS_OPTIONS.find((opt) => opt.value === order.status)
+                ?.label ?? order.status}
+            </span>
             {order.closeReason && (
               <span className="reason-badge">{order.closeReason}</span>
             )}
@@ -501,28 +445,19 @@ const OrdersTable_v2: React.FC<Props> = ({
             >
               Ir al chat
             </button>
-            {order.status !== 'COMPLETADO' && (
-              <button
-                className="action-btn complete-btn"
-                onClick={() => onCompleteClick?.(order)}
-                type="button"
-              >
-                Finalizar
-              </button>
-            )}
+            <button
+              className="action-btn complete-btn"
+              onClick={() => onCompleteClick?.(order)}
+              type="button"
+            >
+              Cambiar estado
+            </button>
           </div>
         ),
         ignoreRowClick: true,
       },
     ];
-  }, [
-    handleStatusChange,
-    updatingOrders,
-    onInspectOrder,
-    onSelectOrder,
-    onChatClick,
-    onCompleteClick,
-  ]);
+  }, [onInspectOrder, onSelectOrder, onChatClick, onCompleteClick]);
 
   if (error) {
     return <div className="orders-table error">Error: {error}</div>;
