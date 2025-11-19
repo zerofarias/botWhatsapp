@@ -213,7 +213,17 @@ export const getOrdersHandler = async (req: Request, res: Response) => {
       where.AND = andFilters;
     }
 
-    const orders = await (prisma as any).order.findMany({
+    const limitParam =
+      typeof limit === 'string' ? limit.trim().toLowerCase() : '50';
+    let finalLimit: number | undefined;
+    if (limitParam === 'all') {
+      finalLimit = undefined;
+    } else {
+      const parsed = parseInt(limitParam, 10);
+      finalLimit = Number.isFinite(parsed) && parsed > 0 ? parsed : 50;
+    }
+
+    const orderQuery: Prisma.OrderFindManyArgs = {
       where,
       include: {
         conversation: {
@@ -238,9 +248,14 @@ export const getOrdersHandler = async (req: Request, res: Response) => {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: parseInt(limit as string),
-      skip: parseInt(offset as string),
-    });
+      skip: parseInt(offset as string, 10),
+    };
+
+    if (typeof finalLimit === 'number') {
+      orderQuery.take = finalLimit;
+    }
+
+    const orders = await (prisma as any).order.findMany(orderQuery);
 
     const total = await (prisma as any).order.count({ where });
 
@@ -250,8 +265,8 @@ export const getOrdersHandler = async (req: Request, res: Response) => {
     return res.status(200).json({
       orders: sanitizedOrders,
       total,
-      limit: parseInt(limit as string),
-      offset: parseInt(offset as string),
+      limit: typeof finalLimit === 'number' ? finalLimit : null,
+      offset: parseInt(offset as string, 10),
     });
   } catch (error) {
     console.error('Error fetching orders:', error);

@@ -2,7 +2,7 @@
  * OrdersTable_v2.tsx - Tabla de pedidos con controles modernos y DataTable
  */
 
-import React, { useCallback, useEffect, useRef, useMemo } from 'react';
+import React, { useCallback, useEffect, useRef, useMemo, useState } from 'react';
 import DataTable, { type TableColumn } from 'react-data-table-component';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -204,6 +204,13 @@ const OrdersTable_v2: React.FC<Props> = ({
   );
   const knownIdsRef = useRef<Set<number>>(new Set());
   const initializedRef = useRef(false);
+  const triedAudioRef = useRef(false);
+  const [recentOrderIds, setRecentOrderIds] = useState<Set<number>>(
+    () => new Set()
+  );
+  const [unreadOrderIds, setUnreadOrderIds] = useState<Set<number>>(
+    () => new Set()
+  );
 
   useEffect(() => {
     knownIdsRef.current = new Set();
@@ -240,12 +247,54 @@ const OrdersTable_v2: React.FC<Props> = ({
     );
     if (initializedRef.current && newOnes.length > 0) {
       newOnes.forEach((order) => onNewOrder?.(order));
+      const audio = new Audio('/notification.mp3');
+      audio.play().then(
+        () => {
+          triedAudioRef.current = true;
+        },
+        (error) => {
+          if (triedAudioRef.current) {
+            console.warn('[OrdersTable] Notification sound failed', error);
+          }
+        }
+      );
+      setRecentOrderIds((prev) => {
+        const next = new Set(prev);
+        newOnes.forEach((order) => next.add(order.id));
+        return next;
+      });
+      setUnreadOrderIds((prev) => {
+        const next = new Set(prev);
+        newOnes.forEach((order) => next.add(order.id));
+        return next;
+      });
     }
     if (!initializedRef.current && sortedOrders.length > 0) {
       initializedRef.current = true;
     }
     knownIdsRef.current = currentIds;
   }, [sortedOrders, onNewOrder]);
+
+  useEffect(() => {
+    setUnreadOrderIds((prev) => {
+      const next = new Set<number>();
+      prev.forEach((id) => {
+        if (knownIdsRef.current.has(id)) {
+          next.add(id);
+        }
+      });
+      return next;
+    });
+  }, [sortedOrders]);
+
+  const markOrderAsRead = useCallback((orderId: number) => {
+    setUnreadOrderIds((prev) => {
+      if (!prev.has(orderId)) return prev;
+      const next = new Set(prev);
+      next.delete(orderId);
+      return next;
+    });
+  }, []);
 
   const handleExportCSV = useCallback(() => {
     if (!exportRows.length) return;
@@ -426,28 +475,40 @@ const OrdersTable_v2: React.FC<Props> = ({
           <div className="order-actions">
             <button
               className="action-btn details-btn"
-              onClick={() => onInspectOrder?.(order)}
+              onClick={() => {
+                markOrderAsRead(order.id);
+                onInspectOrder?.(order);
+              }}
               type="button"
             >
               Ver pedido
             </button>
             <button
               className="action-btn notes-btn"
-              onClick={() => onSelectOrder?.(order)}
+              onClick={() => {
+                markOrderAsRead(order.id);
+                onSelectOrder?.(order);
+              }}
               type="button"
             >
               Notas
             </button>
             <button
               className="action-btn chat-btn"
-              onClick={() => onChatClick?.(order)}
+              onClick={() => {
+                markOrderAsRead(order.id);
+                onChatClick?.(order);
+              }}
               type="button"
             >
               Ir al chat
             </button>
             <button
               className="action-btn complete-btn"
-              onClick={() => onCompleteClick?.(order)}
+              onClick={() => {
+                markOrderAsRead(order.id);
+                onCompleteClick?.(order);
+              }}
               type="button"
             >
               Cambiar estado
@@ -457,7 +518,7 @@ const OrdersTable_v2: React.FC<Props> = ({
         ignoreRowClick: true,
       },
     ];
-  }, [onInspectOrder, onSelectOrder, onChatClick, onCompleteClick]);
+  }, [onInspectOrder, onSelectOrder, onChatClick, onCompleteClick, markOrderAsRead]);
 
   if (error) {
     return <div className="orders-table error">Error: {error}</div>;
@@ -466,6 +527,24 @@ const OrdersTable_v2: React.FC<Props> = ({
   return (
     <div className="orders-table-wrapper">
       <DataTable
+        conditionalRowStyles={[
+          {
+            when: (row) => recentOrderIds.has(row.id),
+            style: {
+              backgroundColor: '#fff8e1',
+              boxShadow: 'inset 0 0 0 2px rgba(255, 152, 0, 0.35)',
+              animation: 'pulseHighlight 1.2s ease-in-out 3',
+            },
+          },
+          {
+            when: (row) => unreadOrderIds.has(row.id),
+            style: {
+              backgroundColor: '#fff8e1',
+              boxShadow: 'inset 0 0 0 2px rgba(255, 152, 0, 0.35)',
+              animation: 'pulseHighlight 1.2s ease-in-out infinite',
+            },
+          },
+        ]}
         columns={columns}
         data={sortedOrders}
         keyField="id"

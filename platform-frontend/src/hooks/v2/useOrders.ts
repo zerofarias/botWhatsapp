@@ -102,7 +102,14 @@ export function useOrders(
 
       const params = new URLSearchParams();
       if (status) params.append('status', status);
-      if (search) params.append('search', search);
+      const trimmedSearch =
+        typeof search === 'string' ? search.trim() : search ?? '';
+      if (trimmedSearch) {
+        params.append('search', trimmedSearch);
+        params.append('limit', 'all');
+      } else {
+        params.append('limit', '100');
+      }
       if (filters) {
         Object.entries(filters).forEach(([key, value]) => {
           if (value && value.toString().trim().length > 0) {
