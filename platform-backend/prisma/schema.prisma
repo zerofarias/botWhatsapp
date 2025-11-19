@@ -336,12 +336,18 @@ model SettingsAudit {
 
 model Order {
   id                  Int             @id @default(autoincrement())
-  conversationId      BigInt          @unique @map("conversation_id")
+  conversationId      BigInt          @map("conversation_id")
   conversation        Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   clientPhone         String          @map("client_phone")
   clientName          String?         @map("client_name")
   tipoConversacion    String          @map("tipo_conversacion")
   itemsJson           String          @map("items_json") @db.LongText
+  concept             String?         @map("concept")
+  requestDetails      String?         @map("request_details") @db.Text
+  customerData        String?         @map("customer_data") @db.Text
+  paymentMethod       String?         @map("payment_method")
+  confirmationMessage String?         @map("confirmation_message") @db.Text
+  confirmationSentAt  DateTime?       @map("confirmation_sent_at")
   notas               String?         @map("notas") @db.Text
   especificaciones    String?         @map("especificaciones") @db.Text
   status              OrderStatus     @default(PENDING) @map("status")
@@ -350,6 +356,7 @@ model Order {
   closedAt            DateTime?       @map("closed_at")
   updatedAt           DateTime        @updatedAt @map("updated_at")
 
+  @@index([conversationId], map: "idx_orders_conversation_id")
   @@index([status], map: "idx_orders_status")
   @@index([clientPhone], map: "idx_orders_client_phone")
   @@index([createdAt], map: "idx_orders_created_at")
@@ -434,6 +441,7 @@ enum NodeType {
   SET_VARIABLE
   END
   END_CLOSED
+  ORDER
   SCHEDULE
   DATA_LOG
 }

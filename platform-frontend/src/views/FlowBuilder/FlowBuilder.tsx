@@ -24,6 +24,7 @@ import {
   FlowBuilderNode,
   FlowNodeData,
   FlowNodeDataWithLegacy,
+  OrderNodeData,
   FlowOption,
   ConditionalNodeData,
   ConditionalEvaluation,
@@ -379,6 +380,38 @@ function normalizeNodeFromServer(node: SerializedNode): FlowBuilderNode {
         description: (legacy as any).description ?? undefined,
       };
       break;
+    case 'ORDER': {
+      const orderLegacy = legacy as any;
+      data = {
+        type: 'ORDER',
+        label: orderLegacy.label ?? 'Crear Pedido',
+        orderConcept:
+          typeof orderLegacy.orderConcept === 'string'
+            ? orderLegacy.orderConcept
+            : '',
+        orderRequest:
+          typeof orderLegacy.orderRequest === 'string'
+            ? orderLegacy.orderRequest
+            : '',
+        orderCustomerData:
+          typeof orderLegacy.orderCustomerData === 'string'
+            ? orderLegacy.orderCustomerData
+            : '',
+        orderPaymentMethod:
+          typeof orderLegacy.orderPaymentMethod === 'string'
+            ? orderLegacy.orderPaymentMethod
+            : '',
+        orderSendConfirmation:
+          typeof orderLegacy.orderSendConfirmation === 'boolean'
+            ? orderLegacy.orderSendConfirmation
+            : false,
+        orderConfirmationMessage:
+          typeof orderLegacy.orderConfirmationMessage === 'string'
+            ? orderLegacy.orderConfirmationMessage
+            : '',
+      };
+      break;
+    }
     default: {
       const fallback: any = legacy;
       data = {
@@ -577,6 +610,21 @@ function toSerializedNode(node: FlowBuilderNode): SerializedNode {
           flowId: node.data.flowId ?? null,
           parentId: node.data.parentId ?? null,
         };
+      case 'ORDER': {
+        const orderData = node.data as OrderNodeData;
+        return {
+          type: 'ORDER',
+          label: orderData.label,
+          orderConcept: orderData.orderConcept ?? '',
+          orderRequest: orderData.orderRequest ?? '',
+          orderCustomerData: orderData.orderCustomerData ?? '',
+          orderPaymentMethod: orderData.orderPaymentMethod ?? '',
+          orderSendConfirmation: Boolean(orderData.orderSendConfirmation),
+          orderConfirmationMessage: orderData.orderConfirmationMessage ?? '',
+          flowId: orderData.flowId ?? null,
+          parentId: orderData.parentId ?? null,
+        };
+      }
       case 'END':
         return {
           type: 'END',
@@ -722,6 +770,18 @@ function createNode(type: FlowNodeType, position: XYPosition): FlowBuilderNode {
       data = {
         type: 'END_CLOSED',
         label: 'Fin y Cierre',
+      };
+      break;
+    case 'ORDER':
+      data = {
+        type: 'ORDER',
+        label: 'Crear Pedido',
+        orderConcept: '',
+        orderRequest: '',
+        orderCustomerData: '',
+        orderPaymentMethod: '',
+        orderSendConfirmation: false,
+        orderConfirmationMessage: '',
       };
       break;
     case 'NOTE':
@@ -953,6 +1013,45 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
               )}`
             );
           }
+        }
+
+        if (node.data.type === 'ORDER') {
+          const orderData = node.data as OrderNodeData;
+          const availableVarNames = getAvailableVariableNames(
+            node.id,
+            variabilityMap
+          );
+          const orderFields: Array<{ label: string; value: string }> = [
+            { label: 'concepto', value: orderData.orderConcept ?? '' },
+            { label: 'detalle', value: orderData.orderRequest ?? '' },
+            {
+              label: 'datos del cliente',
+              value: orderData.orderCustomerData ?? '',
+            },
+            {
+              label: 'mÃ©todo de pago',
+              value: orderData.orderPaymentMethod ?? '',
+            },
+            {
+              label: 'mensaje de confirmaciÃ³n',
+              value: orderData.orderConfirmationMessage ?? '',
+            },
+          ];
+
+          orderFields.forEach(({ label: fieldLabel, value }) => {
+            if (!value || !value.trim()) return;
+            const result = validateVariableReferences(
+              value,
+              availableVarNames
+            );
+            if (!result.valid && result.missingVariables.length > 0) {
+              errors.push(
+                `Nodo "${orderData.label}": variables no disponibles en ${fieldLabel}: ${result.missingVariables.join(
+                  ', '
+                )}`
+              );
+            }
+          });
         }
 
         if (node.data.type === 'CONDITIONAL') {
@@ -1347,7 +1446,8 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
           node.data.type === 'CAPTURE' ||
           node.data.type === 'SET_VARIABLE' ||
           node.data.type === 'NOTE' ||
-          node.data.type === 'AI'
+          node.data.type === 'AI' ||
+          node.data.type === 'ORDER'
         ) {
           const availableVars = getAvailableVariablesForNode(
             node.id,
@@ -1755,20 +1855,33 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
           )}
         </div>
 
-        {!loading && enrichedSelectedNode && (
-          <NodeEditor
-            node={enrichedSelectedNode}
-            onChange={(node) => {
-              void handleNodeUpdate(node);
-            }}
-            onDeleteNode={(nodeId) => {
-              void handleDeleteNode(nodeId);
-            }}
-            onDuplicateNode={(nodeId) => {
-              void handleDuplicateNode(nodeId);
-            }}
-          />
-        )}
+        <div
+          className={`flow-builder__side-panel${
+            !loading && enrichedSelectedNode ? ' flow-builder__side-panel--open' : ''
+          }`}
+        >
+          {!loading && enrichedSelectedNode ? (
+            <NodeEditor
+              node={enrichedSelectedNode}
+              onChange={(node) => {
+                void handleNodeUpdate(node);
+              }}
+              onDeleteNode={(nodeId) => {
+                void handleDeleteNode(nodeId);
+              }}
+              onDuplicateNode={(nodeId) => {
+                void handleDuplicateNode(nodeId);
+              }}
+            />
+          ) : (
+            <div
+              className="node-editor node-editor--placeholder"
+              aria-hidden="true"
+            >
+              <p>Selecciona un nodo para editarlo</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

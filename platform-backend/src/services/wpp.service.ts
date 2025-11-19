@@ -1735,6 +1735,13 @@ async function handleIncomingMessage(
                 );
               }
 
+              await processOrderCreationActions(
+                chainResult.actions,
+                conversationId,
+                conversation,
+                contact
+              );
+
               // Verificar si hay acción end_flow (también puede ocurrir desde START)
               const endFlowAction = chainResult.actions.find(
                 (a) => a.type === 'end_flow'
@@ -1913,6 +1920,47 @@ async function handleIncomingMessage(
 
           (workingContext as any)[waitingVariable] = valueToCapture;
 
+          // Registrar adjuntos capturados para este nodo/variable
+          const capturedMediaKey = '__capturedMedia';
+          const currentCapturedRaw =
+            workingContext[capturedMediaKey as keyof typeof workingContext];
+          const capturedStore =
+            currentCapturedRaw &&
+            typeof currentCapturedRaw === 'object' &&
+            !Array.isArray(currentCapturedRaw)
+              ? { ...(currentCapturedRaw as Record<string, unknown>) }
+              : {};
+
+          const attachmentRecord: Record<string, unknown> = {
+            text: valueToCapture,
+          };
+
+          const mediaEntryUrl =
+            (record?.mediaUrl as string | null) ?? mediaUrl ?? null;
+
+          if (mediaEntryUrl) {
+            attachmentRecord.attachments = [
+              {
+                url: mediaEntryUrl,
+                type:
+                  (record?.mediaType as string | null) ??
+                  mediaType ??
+                  null,
+                caption,
+                fileName: messageFilename ?? null,
+                mimetype: messageMimetype ?? null,
+                capturedAt: record?.createdAt
+                  ? new Date(record.createdAt).toISOString()
+                  : new Date().toISOString(),
+              },
+            ];
+          } else {
+            attachmentRecord.attachments = [];
+          }
+
+          capturedStore[waitingVariable] = attachmentRecord;
+          (workingContext as any)[capturedMediaKey] = capturedStore;
+
           if (
             workingContext.variables &&
             typeof workingContext.variables === 'object' &&
@@ -1997,6 +2045,13 @@ async function handleIncomingMessage(
               io
             );
           }
+
+          await processOrderCreationActions(
+            chainResult.actions,
+            conversationId,
+            conversation,
+            contact
+          );
 
           // Procesar notas
           const saveNoteActions = chainResult.actions.filter(
@@ -2390,6 +2445,237 @@ export async function startSession(ownerUserId: number, io?: SocketIOServer) {
   return cache;
 }
 
+interface OrderNodeAttachmentPayload {
+  url: string;
+  type: string | null;
+  caption: string | null;
+  fileName: string | null;
+  mimetype: string | null;
+  variable: string | null;
+  capturedAt: string | null;
+  text: string | null;
+}
+
+interface OrderNodeActionPayload {
+  concept?: string | null;
+  requestDetails?: string | null;
+  customerData?: string | null;
+  paymentMethod?: string | null;
+  confirmationMessage?: string | null;
+  contextSnapshot?: unknown;
+  nodeId?: number | null;
+  attachments?: OrderNodeAttachmentPayload[];
+}
+
+function normalizeOrderText(input: unknown): string | null {
+  if (typeof input !== 'string') {
+    return null;
+  }
+  const trimmed = input.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function parseOrderSnapshot(snapshot: unknown): Record<string, unknown> {
+  if (!snapshot) {
+    return {};
+  }
+  if (typeof snapshot === 'string') {
+    try {
+      const parsed = JSON.parse(snapshot);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return {};
+    }
+  }
+  if (typeof snapshot === 'object' && !Array.isArray(snapshot)) {
+    try {
+      return JSON.parse(JSON.stringify(snapshot));
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+async function processOrderCreationActions(
+  actions: Array<{ type: string; payload?: unknown }> | undefined,
+  conversationId: bigint,
+  conversation: any,
+  contact: any
+) {
+  if (!Array.isArray(actions) || !actions.length) {
+    return;
+  }
+
+  for (const action of actions) {
+    if (
+      action.type !== 'create_order' ||
+      !action.payload ||
+      typeof action.payload !== 'object'
+    ) {
+      continue;
+    }
+    try {
+      await createOrderFromNodeAction(
+        conversationId,
+        action.payload as OrderNodeActionPayload,
+        contact,
+        conversation
+      );
+    } catch (error) {
+      console.error(
+        `[ORDER_NODE] Failed to create order for conversation ${conversationId}:`,
+        error
+      );
+    }
+  }
+}
+
+async function createOrderFromNodeAction(
+  conversationId: bigint | number,
+  payload: OrderNodeActionPayload,
+  contact: any,
+  conversation: any
+) {
+  const clientPhone =
+    conversation?.userPhone ??
+    conversation?.clientPhone ??
+    contact?.phone ??
+    '';
+  const clientName =
+    contact?.name ??
+    conversation?.contactName ??
+    conversation?.clientName ??
+    'Cliente';
+
+  const concept = normalizeOrderText(payload.concept) ?? 'Pedido';
+  const requestDetails = normalizeOrderText(payload.requestDetails);
+  const customerData = normalizeOrderText(payload.customerData);
+  const paymentMethod = normalizeOrderText(payload.paymentMethod);
+  const confirmationMessage = normalizeOrderText(payload.confirmationMessage);
+  const attachments =
+    Array.isArray(payload.attachments) && payload.attachments.length
+      ? payload.attachments
+          .map((attachment) => {
+            if (!attachment || typeof attachment !== 'object') {
+              return null;
+            }
+            const urlValue =
+              typeof attachment.url === 'string' ? attachment.url : null;
+            if (!urlValue) {
+              return null;
+            }
+            return {
+              url: urlValue,
+              type:
+                typeof attachment.type === 'string' ? attachment.type : null,
+              caption:
+                typeof attachment.caption === 'string'
+                  ? attachment.caption
+                  : null,
+              fileName:
+                typeof attachment.fileName === 'string'
+                  ? attachment.fileName
+                  : null,
+              mimetype:
+                typeof attachment.mimetype === 'string'
+                  ? attachment.mimetype
+                  : null,
+              variable:
+                typeof attachment.variable === 'string'
+                  ? attachment.variable
+                  : null,
+              capturedAt:
+                typeof attachment.capturedAt === 'string'
+                  ? attachment.capturedAt
+                  : null,
+              text:
+                typeof attachment.text === 'string' ? attachment.text : null,
+            };
+          })
+          .filter(
+            (entry): entry is OrderNodeAttachmentPayload => Boolean(entry)
+          )
+      : [];
+  const contextSnapshot = parseOrderSnapshot(payload.contextSnapshot);
+  const snapshotWithMeta = {
+    ...contextSnapshot,
+    __orderNode: {
+      source: 'ORDER_NODE',
+      nodeId: payload.nodeId ?? null,
+      createdAt: new Date().toISOString(),
+      concept,
+      requestDetails,
+      customerData,
+      paymentMethod,
+      confirmationMessage,
+      attachments: attachments.length ? attachments : undefined,
+    },
+  };
+
+  let itemsJson = '{}';
+  try {
+    itemsJson = JSON.stringify(snapshotWithMeta);
+  } catch (error) {
+    console.warn(
+      '[ORDER_NODE] Failed to stringify context snapshot for order node action:',
+      error
+    );
+  }
+
+  const newOrder = await (prisma as any).order.create({
+    data: {
+      conversationId: BigInt(conversationId),
+      clientPhone,
+      clientName,
+      tipoConversacion: concept,
+      concept,
+      requestDetails,
+      customerData,
+      paymentMethod,
+      confirmationMessage,
+      confirmationSentAt: confirmationMessage ? new Date() : null,
+      itemsJson,
+      status: 'PENDING',
+    },
+    include: {
+      conversation: {
+        select: {
+          userPhone: true,
+          contactName: true,
+          assignedToId: true,
+          assignedTo: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          contact: {
+            select: {
+              id: true,
+              name: true,
+              dni: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const io = (global as any).io;
+  if (io) {
+    io.emit('order:created', sanitizeBigInts(newOrder));
+  }
+
+  console.log(
+    `[ORDER_NODE] Nueva orden ${newOrder.id} creada desde nodo ${
+      payload.nodeId ?? 'desconocido'
+    } para conversación ${conversationId}`
+  );
+}
+
 /**
  * Crea una orden cuando se completa un flujo (llega al nodo END)
  */
@@ -2449,6 +2735,7 @@ async function createOrderFromCompletedFlow(
         clientPhone,
         clientName: clientName || 'Cliente',
         tipoConversacion,
+        concept: tipoConversacion,
         itemsJson: JSON.stringify(contextVariables),
         status: 'PENDING',
         createdAt: new Date(),

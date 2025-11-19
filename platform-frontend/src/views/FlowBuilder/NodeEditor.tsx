@@ -1,5 +1,5 @@
 import React from 'react';
-import type { FlowBuilderNode, FlowNodeData } from './types';
+import type { FlowBuilderNode, FlowNodeData, OrderNodeData } from './types';
 
 // Formularios visuales y tipados para cada tipo de nodo
 import { StartNodeForm } from '../../components/flow-nodes/StartNodeForm';
@@ -15,6 +15,7 @@ import { SetVariableNodeForm } from '../../components/flow-nodes/SetVariableNode
 import { NoteNodeForm } from '../../components/flow-nodes/NoteNodeForm';
 import { DataLogNodeForm } from '../../components/flow-nodes/DataLogNodeForm';
 import { EndNodeForm } from '../../components/flow-nodes/EndNodeForm';
+import { OrderNodeForm } from '../../components/flow-nodes/OrderNodeForm';
 //
 
 interface NodeEditorProps {
@@ -319,6 +320,38 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
             handleUpdate({
               dataType: dataType as any,
               description,
+            })
+          }
+        />
+      );
+      break;
+    }
+    case 'ORDER': {
+      const data = node.data as OrderNodeData;
+      nodeForm = (
+        <OrderNodeForm
+          concept={data.orderConcept ?? ''}
+          request={data.orderRequest ?? ''}
+          customerData={data.orderCustomerData ?? ''}
+          paymentMethod={data.orderPaymentMethod ?? ''}
+          sendConfirmation={Boolean(data.orderSendConfirmation)}
+          confirmationMessage={data.orderConfirmationMessage ?? ''}
+          availableVariables={data.availableVariables}
+          onChange={({
+            orderConcept,
+            orderRequest,
+            orderCustomerData,
+            orderPaymentMethod,
+            orderSendConfirmation,
+            orderConfirmationMessage,
+          }) =>
+            handleUpdate({
+              orderConcept,
+              orderRequest,
+              orderCustomerData,
+              orderPaymentMethod,
+              orderSendConfirmation,
+              orderConfirmationMessage,
             })
           }
         />

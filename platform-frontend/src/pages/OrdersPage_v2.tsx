@@ -36,6 +36,7 @@ const OrdersPage_v2: React.FC = () => {
     operatorName: '',
     operatorId: '',
   });
+  const [ordersRefreshToken, setOrdersRefreshToken] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
 
   const handleChatClick = useCallback(
@@ -120,6 +121,7 @@ const OrdersPage_v2: React.FC = () => {
   const handleStatusUpdated = useCallback(() => {
     setIsStatusModalOpen(false);
     setOrderForStatusChange(null);
+    setOrdersRefreshToken((prev) => prev + 1);
   }, []);
 
   const handleInspectOrder = useCallback((order: Order) => {
@@ -401,6 +403,7 @@ const OrdersPage_v2: React.FC = () => {
           searchQuery={searchQuery}
           pollIntervalMs={60000}
           filters={advancedFilters}
+          refreshToken={ordersRefreshToken}
         />
       </div>
 

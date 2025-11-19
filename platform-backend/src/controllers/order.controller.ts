@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import type { Prisma, OrderStatus } from '@prisma/client';
 import { prisma } from '../config/prisma';
+import { closeConversationRecord } from '../services/conversation.service';
+import { broadcastConversationUpdate } from '../services/wpp.service';
 
 /**
  * Convierte BigInt a Number en un objeto para evitar errores de serialización JSON
@@ -44,6 +46,51 @@ async function sendWhatsAppMessage(phone: string, message: string) {
   } catch (error) {
     console.error('Error sending WhatsApp message:', error);
     throw error;
+  }
+}
+
+async function closeConversationForOrder(
+  conversationIdRaw: unknown,
+  reason: string
+) {
+  if (conversationIdRaw === null || conversationIdRaw === undefined) {
+    return;
+  }
+
+  let conversationId: bigint | null = null;
+  if (typeof conversationIdRaw === 'bigint') {
+    conversationId = conversationIdRaw;
+  } else if (typeof conversationIdRaw === 'number') {
+    if (!Number.isNaN(conversationIdRaw)) {
+      conversationId = BigInt(conversationIdRaw);
+    }
+  } else if (typeof conversationIdRaw === 'string') {
+    const trimmed = conversationIdRaw.trim();
+    if (trimmed.length > 0) {
+      try {
+        conversationId = BigInt(trimmed);
+      } catch {
+        conversationId = null;
+      }
+    }
+  }
+
+  if (!conversationId) {
+    return;
+  }
+
+  try {
+    await closeConversationRecord(conversationId, {
+      closedById: null,
+      reason,
+    });
+    const io = (global as any).io;
+    await broadcastConversationUpdate(io, conversationId);
+  } catch (error) {
+    console.error(
+      '[ORDERS] Error closing conversation linked to order:',
+      error
+    );
   }
 }
 
@@ -121,6 +168,26 @@ export const getOrdersHandler = async (req: Request, res: Response) => {
         { clientPhone: { contains: trimmedSearch } },
         {
           tipoConversacion: {
+            contains: trimmedSearch,
+          },
+        },
+        {
+          concept: {
+            contains: trimmedSearch,
+          },
+        },
+        {
+          requestDetails: {
+            contains: trimmedSearch,
+          },
+        },
+        {
+          customerData: {
+            contains: trimmedSearch,
+          },
+        },
+        {
+          paymentMethod: {
             contains: trimmedSearch,
           },
         },
@@ -429,6 +496,13 @@ export const completeOrderHandler = async (req: Request, res: Response) => {
       }
     }
 
+    await closeConversationForOrder(
+      order.conversationId ?? updatedOrder.conversationId,
+      newStatus === 'COMPLETADO'
+        ? 'order_completed'
+        : `order_cancelled:${reason}`
+    );
+
     // Emitir socket event
     const io = (global as any).io;
     if (io) {
@@ -636,7 +710,13 @@ export const updateOrderStatusHandler = async (req: Request, res: Response) => {
       data: updateData,
     });
 
-    // Convertir BigInts para evitar errores de serialización
+    if (status === 'COMPLETADO' || status === 'CANCELADO') {
+      await closeConversationForOrder(
+        updatedOrder.conversationId,
+        status === 'COMPLETADO' ? 'order_completed' : 'order_cancelled:status'
+      );
+    }
+
     const sanitizedOrder = sanitizeBigInts(updatedOrder);
 
     // Emitir socket event para actualización en tiempo real
@@ -655,3 +735,6 @@ export const updateOrderStatusHandler = async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'Failed to update order status' });
   }
 };
+
+
+

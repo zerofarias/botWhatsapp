@@ -14,6 +14,7 @@ export const FLOW_NODE_TYPES = [
   'SET_VARIABLE',
   'NOTE',
   'DATA_LOG',
+  'ORDER',
   'END',
   'END_CLOSED',
 ] as const;
@@ -33,6 +34,7 @@ export const FLOW_NODE_TYPE_LABELS: Record<FlowNodeType, string> = {
   SET_VARIABLE: 'Setear Variable',
   NOTE: 'Nota Interna',
   DATA_LOG: 'Guardar Datos',
+  ORDER: 'Crear Pedido',
   END: 'Fin del Flujo',
   END_CLOSED: 'Fin y Cierre',
 };
@@ -52,6 +54,8 @@ export const FLOW_NODE_TYPE_DESCRIPTIONS: Record<FlowNodeType, string> = {
   NOTE: 'Nota interna que no se envía al usuario, solo se registra.',
   DATA_LOG:
     'Captura todas las variables actuales y las guarda en el panel de órdenes.',
+  ORDER:
+    'Genera y registra un pedido con los datos del flujo y una confirmación opcional.',
   END: 'Termina el flujo.',
   END_CLOSED:
     'Termina el flujo, cierra la conversación y finaliza el chat automáticamente.',
@@ -103,6 +107,7 @@ export type FlowNodeData =
   | SetVariableNodeData
   | NoteNodeData
   | DataLogNodeData
+  | OrderNodeData
   | EndNodeData
   | EndClosedNodeData;
 
@@ -278,6 +283,22 @@ export interface DataLogNodeData extends BaseNodeData {
   dataType: 'pedido' | 'consulta_precio' | 'consulta_general' | 'otro';
   description?: string;
   // Variables disponibles en este punto del flujo (para UI)
+  availableVariables?: Array<{
+    name: string;
+    createdByNodeId?: string;
+    createdByNodeType?: string;
+    createdByNodeLabel?: string;
+  }>;
+}
+
+export interface OrderNodeData extends BaseNodeData {
+  type: 'ORDER';
+  orderConcept?: string;
+  orderRequest?: string;
+  orderCustomerData?: string;
+  orderPaymentMethod?: string;
+  orderSendConfirmation?: boolean;
+  orderConfirmationMessage?: string;
   availableVariables?: Array<{
     name: string;
     createdByNodeId?: string;

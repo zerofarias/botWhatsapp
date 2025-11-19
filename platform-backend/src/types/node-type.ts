@@ -10,4 +10,5 @@ export type NodeType =
   | 'AI'
   | 'SET_VARIABLE'
   | 'END'
-  | 'END_CLOSED';
+  | 'END_CLOSED'
+  | 'ORDER';

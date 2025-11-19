@@ -21,6 +21,10 @@ export interface Order {
   clientName?: string;
   tipoConversacion: string;
   itemsJson: string; // JSON stringificado
+  concept?: string | null;
+  requestDetails?: string | null;
+  customerData?: string | null;
+  paymentMethod?: string | null;
   notas?: string;
   especificaciones?: string;
   status: 'PENDING' | 'CONFIRMADO' | 'COMPLETADO' | 'CANCELADO';
@@ -28,6 +32,8 @@ export interface Order {
   createdAt: string;
   closedAt?: string;
   updatedAt: string;
+  confirmationMessage?: string | null;
+  confirmationSentAt?: string;
   conversation?: {
     userPhone: string;
     contactName?: string;
@@ -81,13 +87,17 @@ const normalizeOrderRecord = (order: Order): Order => ({
   ).toISOString(),
   closedAt: order.closedAt ? new Date(order.closedAt).toISOString() : undefined,
   updatedAt: new Date(order.updatedAt ?? Date.now()).toISOString(),
+  confirmationSentAt: order.confirmationSentAt
+    ? new Date(order.confirmationSentAt).toISOString()
+    : undefined,
 });
 
 export function useOrders(
   status?: string,
   search?: string,
   pollIntervalMs = 30000,
-  filters?: OrderFilters
+  filters?: OrderFilters,
+  refreshToken = 0
 ): UseOrdersResult {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
@@ -131,7 +141,7 @@ export function useOrders(
     } finally {
       setLoading(false);
     }
-  }, [status, search, filters]);
+  }, [status, search, filters, refreshToken]);
 
   // Cargar pedidos al montar el componente
   useEffect(() => {

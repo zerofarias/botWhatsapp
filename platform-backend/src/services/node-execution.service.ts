@@ -76,7 +76,33 @@ type BuilderMetadata = {
   // SCHEDULE
   week?: ScheduleWeekConfig;
   timezone?: string | null;
+  // ORDER
+  orderConcept?: string | null;
+  orderRequest?: string | null;
+  orderCustomerData?: string | null;
+  orderPaymentMethod?: string | null;
+  orderSendConfirmation?: boolean;
+  orderConfirmationMessage?: string | null;
 };
+
+type OrderActionPayload = {
+  concept?: string | null;
+  requestDetails?: string | null;
+  customerData?: string | null;
+  paymentMethod?: string | null;
+  confirmationMessage?: string | null;
+  contextSnapshot?: Record<string, unknown>;
+  nodeId?: number;
+  attachments?: OrderAttachmentPayload[];
+};
+
+const ORDER_CONTEXT_OMIT_KEYS = new Set([
+  'lastMessage',
+  'previousNode',
+  'updatedAt',
+  'waitingForInput',
+  'waitingVariable',
+]);
 
 type ConditionOperator =
   | 'EQUALS'
@@ -230,6 +256,144 @@ export function interpolateVariables(
     }
     return normalizeToString(value);
   });
+}
+
+function extractVariablesFromTemplate(template?: string | null): string[] {
+  if (!template || typeof template !== 'string') return [];
+  const matches = template.match(/\$\$(\w+)/g);
+  if (!matches) {
+    return [];
+  }
+  const variables = new Set<string>();
+  matches.forEach((match) => {
+    const variable = match.slice(2);
+    if (variable.length > 0) {
+      variables.add(variable);
+    }
+  });
+  return Array.from(variables);
+}
+
+type OrderAttachmentPayload = {
+  url: string;
+  type?: string | null;
+  caption?: string | null;
+  fileName?: string | null;
+  mimetype?: string | null;
+  variable?: string | null;
+  capturedAt?: string | null;
+  text?: string | null;
+};
+
+function collectOrderAttachments(
+  builderMeta: BuilderMetadata,
+  context: ConversationContext
+): OrderAttachmentPayload[] {
+  const variables = new Set<string>();
+  extractVariablesFromTemplate(builderMeta.orderConcept).forEach((value) =>
+    variables.add(value)
+  );
+  extractVariablesFromTemplate(builderMeta.orderRequest).forEach((value) =>
+    variables.add(value)
+  );
+  extractVariablesFromTemplate(builderMeta.orderCustomerData).forEach(
+    (value) => variables.add(value)
+  );
+  extractVariablesFromTemplate(builderMeta.orderPaymentMethod).forEach(
+    (value) => variables.add(value)
+  );
+
+  if (!variables.size) {
+    return [];
+  }
+
+  const capturedMedia =
+    context &&
+    typeof context === 'object' &&
+    (context as Record<string, unknown>).__capturedMedia &&
+    typeof (context as Record<string, unknown>).__capturedMedia === 'object'
+      ? ((context as Record<string, unknown>).__capturedMedia as Record<
+          string,
+          unknown
+        >)
+      : null;
+
+  if (!capturedMedia) {
+    return [];
+  }
+
+  const attachments: OrderAttachmentPayload[] = [];
+  variables.forEach((variable) => {
+    const entry = capturedMedia[variable];
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      return;
+    }
+    const payload = entry as Record<string, unknown>;
+    const rawAttachments = payload['attachments'];
+    if (!Array.isArray(rawAttachments)) {
+      return;
+    }
+    rawAttachments.forEach((raw) => {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        return;
+      }
+      const rawRecord = raw as Record<string, unknown>;
+      const url = rawRecord.url;
+      if (typeof url !== 'string' || !url.trim().length) {
+        return;
+      }
+      attachments.push({
+        url,
+        type:
+          typeof rawRecord.type === 'string' ? (rawRecord.type as string) : null,
+        caption:
+          typeof rawRecord.caption === 'string'
+            ? (rawRecord.caption as string)
+            : null,
+        fileName:
+          typeof rawRecord.fileName === 'string'
+            ? (rawRecord.fileName as string)
+            : typeof rawRecord.filename === 'string'
+            ? (rawRecord.filename as string)
+            : null,
+        mimetype:
+          typeof rawRecord.mimetype === 'string'
+            ? (rawRecord.mimetype as string)
+            : null,
+        variable,
+        capturedAt:
+          typeof rawRecord.capturedAt === 'string'
+            ? (rawRecord.capturedAt as string)
+            : null,
+        text: typeof payload.text === 'string' ? (payload.text as string) : null,
+      });
+    });
+  });
+
+  return attachments;
+}
+
+function buildOrderContextSnapshot(
+  context: ConversationContext
+): Record<string, unknown> {
+  if (!context || typeof context !== 'object') {
+    return {};
+  }
+  const snapshot: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(context)) {
+    if (ORDER_CONTEXT_OMIT_KEYS.has(key)) {
+      continue;
+    }
+    if (typeof value === 'function') {
+      continue;
+    }
+    try {
+      snapshot[key] = JSON.parse(JSON.stringify(value));
+    } catch {
+      snapshot[key] = value ?? null;
+    }
+  }
+  return snapshot;
 }
 
 function evaluateConditional(
@@ -555,13 +719,96 @@ export async function executeNode({
 
       break;
     }
+    case 'ORDER': {
+      updatedContext.waitingForInput = false;
+      updatedContext.waitingVariable = null;
+
+      const conceptTemplate =
+        typeof builderMeta.orderConcept === 'string' &&
+        builderMeta.orderConcept.trim().length
+          ? builderMeta.orderConcept
+          : node.name ?? 'Pedido';
+      const requestTemplate =
+        typeof builderMeta.orderRequest === 'string'
+          ? builderMeta.orderRequest
+          : '';
+      const customerTemplate =
+        typeof builderMeta.orderCustomerData === 'string'
+          ? builderMeta.orderCustomerData
+          : '';
+      const paymentTemplate =
+        typeof builderMeta.orderPaymentMethod === 'string'
+          ? builderMeta.orderPaymentMethod
+          : '';
+
+      const orderConcept = interpolateVariables(
+        conceptTemplate,
+        updatedContext
+      ).trim();
+      const requestDetails = requestTemplate
+        ? interpolateVariables(requestTemplate, updatedContext).trim()
+        : '';
+      const customerData = customerTemplate
+        ? interpolateVariables(customerTemplate, updatedContext).trim()
+        : '';
+      const paymentMethod = paymentTemplate
+        ? interpolateVariables(paymentTemplate, updatedContext).trim()
+        : '';
+
+      const wantsConfirmation =
+        builderMeta.orderSendConfirmation === true &&
+        typeof builderMeta.orderConfirmationMessage === 'string' &&
+        builderMeta.orderConfirmationMessage.trim().length > 0;
+
+      let confirmationMessage: string | null = null;
+      if (wantsConfirmation) {
+        const confirmationTemplate =
+          builderMeta.orderConfirmationMessage ?? '';
+        const interpolatedConfirmation = interpolateVariables(
+          confirmationTemplate,
+          updatedContext
+        ).trim();
+        if (interpolatedConfirmation.length) {
+          confirmationMessage = interpolatedConfirmation;
+          actions.push({
+            type: 'send_message',
+            payload: {
+              message: interpolatedConfirmation,
+              nodeId: node.id,
+              type: 'ORDER_CONFIRMATION',
+            },
+          });
+        }
+      }
+
+      const attachments = collectOrderAttachments(builderMeta, updatedContext);
+
+      const orderPayload: OrderActionPayload = {
+        concept: orderConcept || 'Pedido',
+        requestDetails: requestDetails || null,
+        customerData: customerData || null,
+        paymentMethod: paymentMethod || null,
+        confirmationMessage,
+        contextSnapshot: buildOrderContextSnapshot(updatedContext),
+        nodeId: node.id,
+        attachments: attachments.length ? attachments : undefined,
+      };
+
+      actions.push({
+        type: 'create_order',
+        payload: orderPayload,
+      });
+
+      nextNodeId = resolveNextNodeId();
+      break;
+    }
     case 'END': {
       actions.push({
         type: 'end_flow',
         payload: {
           nodeId: node.id,
           shouldDeactivateBot: true,
-          shouldCreateOrder: true, // Nueva bandera para crear orden
+          shouldCreateOrder: false,
         },
       });
       updatedContext.waitingForInput = false;

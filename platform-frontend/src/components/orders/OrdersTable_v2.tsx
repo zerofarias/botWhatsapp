@@ -11,6 +11,12 @@ import {
   type Order,
   type OrderFilters,
 } from '../../hooks/v2/useOrders';
+import {
+  extractOrderField,
+  getOrderAttachments,
+  resolveAttachmentKind,
+  type OrderAttachmentMeta,
+} from '../../utils/orderMeta';
 import './OrdersTable_v2.css';
 
 interface Props {
@@ -23,14 +29,17 @@ interface Props {
   searchQuery?: string;
   pollIntervalMs?: number;
   filters?: OrderFilters;
+  refreshToken?: number;
 }
 
 const exportStructure = [
   { key: 'pedido', label: 'Pedido' },
+  { key: 'concepto', label: 'Concepto' },
+  { key: 'detalle', label: 'Detalle' },
   { key: 'cliente', label: 'Cliente' },
   { key: 'dni', label: 'DNI' },
-  { key: 'telefono', label: 'Teléfono' },
-  { key: 'operario', label: 'Operario' },
+  { key: 'telefono', label: 'Telefono' },
+  { key: 'metodoPago', label: 'Metodo de pago' },
   { key: 'estado', label: 'Estado' },
   { key: 'creado', label: 'Creado' },
   { key: 'completado', label: 'Completado' },
@@ -185,6 +194,45 @@ const getDisplayName = (order: Order) =>
 
 const getDni = (order: Order) => order.conversation?.contact?.dni || '—';
 
+const getOrderConcept = (order: Order): string => {
+  const concept = extractOrderField(order, 'concept');
+  if (concept.length) {
+    return concept;
+  }
+  return order.tipoConversacion || 'General';
+};
+
+const getOrderRequestDetail = (order: Order): string =>
+  extractOrderField(order, 'requestDetails');
+
+const getOrderCustomerData = (order: Order): string =>
+  extractOrderField(order, 'customerData');
+
+const getOrderPaymentMethod = (order: Order): string =>
+  extractOrderField(order, 'paymentMethod');
+
+const attachmentChipLabel = (attachment: OrderAttachmentMeta): string => {
+  const kind = resolveAttachmentKind(attachment);
+  switch (kind) {
+    case 'image':
+      return '🖼️ Imagen';
+    case 'audio':
+      return '🎧 Audio';
+    case 'video':
+      return '🎬 Video';
+    case 'location':
+      return '📍 Ubicación';
+    case 'document':
+      return '📄 Documento';
+    default:
+      return '📎 Archivo';
+  }
+};
+
+const attachmentChipClass = (attachment: OrderAttachmentMeta): string =>
+  `attachment-chip attachment-chip--${resolveAttachmentKind(attachment)}`;
+
+
 const OrdersTable_v2: React.FC<Props> = ({
   onSelectOrder,
   onCompleteClick,
@@ -195,12 +243,14 @@ const OrdersTable_v2: React.FC<Props> = ({
   searchQuery,
   pollIntervalMs = 20000,
   filters,
+  refreshToken = 0,
 }) => {
   const { orders, loading, error } = useOrders(
     statusFilter,
     searchQuery,
     pollIntervalMs,
-    filters
+    filters,
+    refreshToken
   );
   const knownIdsRef = useRef<Set<number>>(new Set());
   const initializedRef = useRef(false);
@@ -230,10 +280,12 @@ const OrdersTable_v2: React.FC<Props> = ({
   const exportRows = useMemo<ExportRow[]>(() => {
     return sortedOrders.map((order) => ({
       pedido: `#${order.id}`,
+      concepto: getOrderConcept(order),
+      detalle: getOrderRequestDetail(order) || 'Sin detalle',
       cliente: getDisplayName(order),
       dni: getDni(order),
       telefono: order.clientPhone,
-      operario: order.conversation?.assignedTo?.name || 'Sin asignar',
+      metodoPago: getOrderPaymentMethod(order) || 'Sin dato',
       estado: order.status,
       creado: formatDate(order.createdAt),
       completado: order.closedAt ? formatDate(order.closedAt) : 'Pendiente',
@@ -379,145 +431,222 @@ const OrdersTable_v2: React.FC<Props> = ({
   }, [exportRows]);
 
   const columns = useMemo<TableColumn<Order>[]>(() => {
-    return [
-      {
-        name: 'Pedido',
-        grow: 2,
-        cell: (order) => (
-          <div className="order-overview">
-            <div className="order-id">#{order.id}</div>
-            <div className="client-info">
-              <span className="client-name">{getDisplayName(order)}</span>
-              <span className="client-type">
-                {order.tipoConversacion || 'General'}
-              </span>
-            </div>
-            <div className="order-phone">{order.clientPhone}</div>
-            <div className="order-meta">
-              <span>
-                Chat:{' '}
-                {order.conversationId ? order.conversationId.toString() : '—'}
-              </span>
-              <span>
-                Operario:{' '}
-                {order.conversation?.assignedTo?.name || 'Sin asignar'}
-              </span>
-              {order.conversation?.contact?.dni && (
-                <span>DNI: {order.conversation.contact.dni}</span>
-              )}
-            </div>
+  return [
+    {
+      name: 'Pedido',
+      grow: 1.2,
+      cell: (order) => (
+        <div className="order-overview">
+          <div className="order-id-row">
+            <span className="order-tag">{getOrderConcept(order)}</span>
           </div>
-        ),
-      },
-      {
-        name: 'Tiempos',
-        grow: 2,
-        cell: (order) => (
-          <div className="order-timeline">
-            <div className="timeline-item">
-              <span className="timeline-label">Llegó</span>
-              <span className="timeline-value">
-                {formatDate(order.createdAt)}
-              </span>
-              <span className="timeline-relative">
-                {formatRelativeTime(order.createdAt)}
-              </span>
-            </div>
-            <div className="timeline-item">
-              <span className="timeline-label">Completado</span>
-              {order.closedAt ? (
-                <>
-                  <span className="timeline-value">
-                    {formatDate(order.closedAt)}
-                  </span>
-                  <span className="timeline-relative">
-                    {formatRelativeTime(order.closedAt)}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="timeline-value">Pendiente</span>
-                  <span className="timeline-relative">
-                    {formatRelativeTime(order.createdAt)}
-                  </span>
-                </>
-              )}
-            </div>
-            <div className="timeline-item duration">
-              <span className="timeline-label">Tiempo de atención</span>
-              <span className="timeline-value">
-                {calculateDuration(order.createdAt, order.closedAt)}
-              </span>
-            </div>
+          <div className="order-meta">
+            <span>Chat: {order.conversationId ? order.conversationId.toString() : '?'}</span>
+            <span>Operario: {order.conversation?.assignedTo?.name || 'Sin asignar'}</span>
           </div>
-        ),
-      },
-      {
-        name: 'Estado',
-        grow: 1,
-        cell: (order) => (
-          <div className="order-status">
-            <span className={`status-pill ${order.status.toLowerCase()}`}>
-              {STATUS_OPTIONS.find((opt) => opt.value === order.status)
-                ?.label ?? order.status}
-            </span>
-            {order.closeReason && (
-              <span className="reason-badge">{order.closeReason}</span>
+        </div>
+      ),
+    },
+    {
+      name: 'Cliente',
+      grow: 1.5,
+      cell: (order) => (
+        <div className="client-card">
+          <div className="client-name-line">
+            <span className="client-name">{getDisplayName(order)}</span>
+            {getDni(order) !== '?' && (
+              <span className="client-dni">DNI: {getDni(order)}</span>
             )}
           </div>
-        ),
-        ignoreRowClick: true,
-      },
-      {
-        name: 'Acciones',
-        grow: 1,
-        cell: (order) => (
-          <div className="order-actions">
-            <button
-              className="action-btn details-btn"
-              onClick={() => {
-                markOrderAsRead(order.id);
-                onInspectOrder?.(order);
-              }}
-              type="button"
-            >
-              Ver pedido
-            </button>
-            <button
-              className="action-btn notes-btn"
-              onClick={() => {
-                markOrderAsRead(order.id);
-                onSelectOrder?.(order);
-              }}
-              type="button"
-            >
-              Notas
-            </button>
-            <button
-              className="action-btn chat-btn"
-              onClick={() => {
-                markOrderAsRead(order.id);
-                onChatClick?.(order);
-              }}
-              type="button"
-            >
-              Ir al chat
-            </button>
-            <button
-              className="action-btn complete-btn"
-              onClick={() => {
-                markOrderAsRead(order.id);
-                onCompleteClick?.(order);
-              }}
-              type="button"
-            >
-              Cambiar estado
-            </button>
+          <div className="client-phone-line">{order.clientPhone}</div>
+        </div>
+      ),
+    },
+    {
+      name: 'Detalle',
+      grow: 2,
+      cell: (order) => {
+        const concept = getOrderConcept(order);
+        const requestText = getOrderRequestDetail(order);
+        const customerInfo = getOrderCustomerData(order);
+        const paymentText = getOrderPaymentMethod(order);
+        const attachments = getOrderAttachments(order);
+        const hasDetail =
+          requestText.trim().length ||
+          customerInfo.trim().length ||
+          paymentText.trim().length ||
+          attachments.length > 0;
+        return (
+          <div className="order-detail">
+            <div className="detail-block concept-block">
+              <span className="detail-label">Concepto del pedido</span>
+              <p className="concept-text">
+                {concept || 'Sin concepto definido'}
+              </p>
+            </div>
+            {requestText.trim().length > 0 && (
+              <div className="detail-block">
+                <span className="detail-label">Solicitud</span>
+                <p>{requestText}</p>
+              </div>
+            )}
+            {customerInfo.trim().length > 0 && (
+              <div className="detail-block">
+                <span className="detail-label">Datos cliente</span>
+                <p>{customerInfo}</p>
+              </div>
+            )}
+            {paymentText.trim().length > 0 && (
+              <div className="detail-block">
+                <span className="detail-label">Metodo de pago</span>
+                <p>{paymentText}</p>
+              </div>
+            )}
+            {attachments.length > 0 && (
+              <div className="detail-block attachments-block">
+                <span className="detail-label">
+                  Adjuntos ({attachments.length})
+                </span>
+                <div className="attachment-chip-row">
+                  {attachments.slice(0, 3).map((attachment, index) => (
+                    <span
+                      key={`${attachment.url}-${index}`}
+                      className={attachmentChipClass(attachment)}
+                    >
+                      {attachmentChipLabel(attachment)}
+                    </span>
+                  ))}
+                  {attachments.length > 3 && (
+                    <span className="attachment-chip attachment-chip--more">
+                      +{attachments.length - 3} más
+                    </span>
+                  )}
+                </div>
+                <small className="detail-hint">
+                  Abrí "Ver pedido" para ver los adjuntos completos.
+                </small>
+              </div>
+            )}
+            {!hasDetail && (
+              <p className="detail-empty">Sin detalle estructurado</p>
+            )}
           </div>
-        ),
-        ignoreRowClick: true,
+        );
       },
-    ];
+    },
+    {
+      name: 'Tiempos',
+      grow: 2,
+      cell: (order) => (
+        <div className="order-timeline">
+          <div className="timeline-item">
+            <span className="timeline-label">Llegó</span>
+            <span className="timeline-value">{formatDate(order.createdAt)}</span>
+            <span className="timeline-relative">
+              {formatRelativeTime(order.createdAt)}
+            </span>
+          </div>
+          <div className="timeline-item">
+            <span className="timeline-label">Completado</span>
+            {order.closedAt ? (
+              <>
+                <span className="timeline-value">{formatDate(order.closedAt)}</span>
+                <span className="timeline-relative">
+                  {formatRelativeTime(order.closedAt)}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="timeline-value">Pendiente</span>
+                <span className="timeline-relative">
+                  {formatRelativeTime(order.createdAt)}
+                </span>
+              </>
+            )}
+          </div>
+          <div className="timeline-item duration">
+            <span className="timeline-label">Tiempo de atención</span>
+            <span className="timeline-value">
+              {calculateDuration(order.createdAt, order.closedAt)}
+            </span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      name: 'Estado',
+      grow: 1,
+      cell: (order) => (
+        <div className="order-status">
+          <span className={`status-pill ${order.status.toLowerCase()}`}>
+            {STATUS_OPTIONS.find((opt) => opt.value === order.status)?.label ??
+              order.status}
+          </span>
+          {order.closeReason && (
+            <span className="reason-badge">{order.closeReason}</span>
+          )}
+        </div>
+      ),
+      ignoreRowClick: true,
+    },
+    {
+      name: 'Acciones',
+      grow: 1,
+      cell: (order) => (
+        <div className="order-actions">
+          <button
+            className="action-btn details-btn"
+            onClick={() => {
+              markOrderAsRead(order.id);
+              onInspectOrder?.(order);
+            }}
+            type="button"
+            title="Ver pedido"
+            aria-label="Ver pedido"
+          >
+            👁
+          </button>
+          <button
+            className="action-btn notes-btn"
+            onClick={() => {
+              markOrderAsRead(order.id);
+              onSelectOrder?.(order);
+            }}
+            type="button"
+            title="Notas"
+            aria-label="Notas"
+          >
+            📝
+          </button>
+          <button
+            className="action-btn chat-btn"
+            onClick={() => {
+              markOrderAsRead(order.id);
+              onChatClick?.(order);
+            }}
+            type="button"
+            title="Ir al chat"
+            aria-label="Ir al chat"
+          >
+            💬
+          </button>
+          <button
+            className="action-btn complete-btn"
+            onClick={() => {
+              markOrderAsRead(order.id);
+              onCompleteClick?.(order);
+            }}
+            type="button"
+            title="Cambiar estado"
+            aria-label="Cambiar estado"
+          >
+            ✅
+          </button>
+        </div>
+      ),
+      ignoreRowClick: true,
+    },
+  ];
   }, [onInspectOrder, onSelectOrder, onChatClick, onCompleteClick, markOrderAsRead]);
 
   if (error) {

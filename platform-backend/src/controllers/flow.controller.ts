@@ -461,6 +461,12 @@ type BuilderMetadata = {
   model?: string | null;
   variable?: string | null;
   value?: string | null;
+  orderConcept?: string | null;
+  orderRequest?: string | null;
+  orderCustomerData?: string | null;
+  orderPaymentMethod?: string | null;
+  orderSendConfirmation?: boolean;
+  orderConfirmationMessage?: string | null;
 };
 
 const DEFAULT_POSITION = { x: 160, y: 120 };
@@ -477,6 +483,7 @@ const NODE_TYPE_SET = new Set<NodeType>([
   'SET_VARIABLE',
   'END',
   'END_CLOSED',
+  'ORDER',
 ]);
 const VARIABLE_TYPE_SET = new Set(['STRING', 'NUMBER', 'BOOLEAN', 'JSON']);
 
@@ -710,6 +717,17 @@ function extractBuilderMetadata(value: unknown): BuilderMetadata | null {
     model,
     variable,
     value: nodeValue,
+    orderConcept: sanitizeStringValue(builder.orderConcept),
+    orderRequest: sanitizeStringValue(builder.orderRequest),
+    orderCustomerData: sanitizeStringValue(builder.orderCustomerData),
+    orderPaymentMethod: sanitizeStringValue(builder.orderPaymentMethod),
+    orderSendConfirmation:
+      typeof builder.orderSendConfirmation === 'boolean'
+        ? builder.orderSendConfirmation
+        : undefined,
+    orderConfirmationMessage: sanitizeStringValue(
+      builder.orderConfirmationMessage
+    ),
   };
 }
 
@@ -1257,6 +1275,25 @@ export async function saveFlowGraph(req: Request, res: Response) {
         // Campos para SET_VARIABLE
         const variableValue = sanitizeStringValue(dataRecord.variable);
         const valueValue = sanitizeStringValue(dataRecord.value);
+        const orderConceptValue = sanitizeStringValue(
+          dataRecord.orderConcept
+        );
+        const orderRequestValue = sanitizeStringValue(
+          dataRecord.orderRequest
+        );
+        const orderCustomerDataValue = sanitizeStringValue(
+          dataRecord.orderCustomerData
+        );
+        const orderPaymentMethodValue = sanitizeStringValue(
+          dataRecord.orderPaymentMethod
+        );
+        const orderSendConfirmationValue =
+          typeof dataRecord.orderSendConfirmation === 'boolean'
+            ? dataRecord.orderSendConfirmation
+            : false;
+        const orderConfirmationMessageValue = sanitizeStringValue(
+          dataRecord.orderConfirmationMessage
+        );
 
         const metadataPayload = {
           builder: {
@@ -1305,6 +1342,25 @@ export async function saveFlowGraph(req: Request, res: Response) {
             // Campos para SET_VARIABLE
             variable: flowType === 'SET_VARIABLE' ? variableValue : undefined,
             value: flowType === 'SET_VARIABLE' ? valueValue : undefined,
+            // Campos para ORDER
+            orderConcept:
+              flowType === 'ORDER' ? orderConceptValue ?? undefined : undefined,
+            orderRequest:
+              flowType === 'ORDER' ? orderRequestValue ?? undefined : undefined,
+            orderCustomerData:
+              flowType === 'ORDER'
+                ? orderCustomerDataValue ?? undefined
+                : undefined,
+            orderPaymentMethod:
+              flowType === 'ORDER'
+                ? orderPaymentMethodValue ?? undefined
+                : undefined,
+            orderSendConfirmation:
+              flowType === 'ORDER' ? orderSendConfirmationValue : undefined,
+            orderConfirmationMessage:
+              flowType === 'ORDER'
+                ? orderConfirmationMessageValue ?? undefined
+                : undefined,
           },
         };
 
@@ -1903,6 +1959,19 @@ export async function getFlowGraph(req: Request, res: Response) {
       if (nodeType === 'SET_VARIABLE') {
         nodeData.variable = builderMeta?.variable ?? '';
         nodeData.value = builderMeta?.value ?? '';
+      }
+
+      if (nodeType === 'ORDER') {
+        nodeData.orderConcept = builderMeta?.orderConcept ?? '';
+        nodeData.orderRequest = builderMeta?.orderRequest ?? '';
+        nodeData.orderCustomerData = builderMeta?.orderCustomerData ?? '';
+        nodeData.orderPaymentMethod = builderMeta?.orderPaymentMethod ?? '';
+        nodeData.orderSendConfirmation =
+          typeof builderMeta?.orderSendConfirmation === 'boolean'
+            ? builderMeta.orderSendConfirmation
+            : false;
+        nodeData.orderConfirmationMessage =
+          builderMeta?.orderConfirmationMessage ?? '';
       }
 
       const serializedNode = {
