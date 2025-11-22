@@ -441,6 +441,14 @@ interface Contact {
   name?: string;
   phone?: string;
   dni?: string | null;
+  address1?: string | null;
+  address2?: string | null;
+  obraSocial?: string | null;
+  obraSocial2?: string | null;
+  avatar?: string | null;
+  isVip?: boolean;
+  isProblematic?: boolean;
+  isChronic?: boolean;
 }
 
 interface Conversation {
@@ -750,12 +758,28 @@ export async function listConversationsHandler(req: Request, res: Response) {
             name: conversation.contact.name,
             phone: conversation.contact.phone,
             dni: conversation.contact.dni,
+            address1: conversation.contact.address1 ?? null,
+            address2: conversation.contact.address2 ?? null,
+            obraSocial: (conversation.contact as any).obraSocial ?? null,
+            obraSocial2: (conversation.contact as any).obraSocial2 ?? null,
+            avatar: (conversation.contact as any).avatar ?? null,
+            isVip: (conversation.contact as any).isVip ?? false,
+            isProblematic: (conversation.contact as any).isProblematic ?? false,
+            isChronic: (conversation.contact as any).isChronic ?? false,
           }
         : {
             id: conversation.contactId ?? null,
             name: conversation.contactName,
             phone: conversation.userPhone,
             dni: null,
+            address1: null,
+            address2: null,
+            obraSocial: null,
+            obraSocial2: null,
+            avatar: null,
+            isVip: false,
+            isProblematic: false,
+            isChronic: false,
           },
       area: conversation.area
         ? { id: conversation.area.id, name: conversation.area.name }

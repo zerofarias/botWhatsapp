@@ -653,6 +653,12 @@ const conversationSummarySelect = {
       address1: true,
       address2: true,
       dni: true,
+      obraSocial: true,
+      obraSocial2: true,
+      avatar: true,
+      isVip: true,
+      isProblematic: true,
+      isChronic: true,
     },
   },
   messages: {
