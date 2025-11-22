@@ -709,6 +709,8 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
       dni?: string;
       address1?: string;
       address2?: string;
+      obraSocial?: string;
+      obraSocial2?: string;
     }) => {
       if (!canAddContact) {
         throw new Error('No hay un numero valido para guardar.');
@@ -720,6 +722,8 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
           dni: payload.dni || null,
           address1: payload.address1 || null,
           address2: payload.address2 || null,
+          obraSocial: payload.obraSocial || null,
+          obraSocial2: payload.obraSocial2 || null,
         });
       } catch (error) {
         throw new Error(
@@ -738,6 +742,8 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
       dni?: string;
       address1?: string;
       address2?: string;
+      obraSocial?: string;
+      obraSocial2?: string;
     }) => {
       if (!activeConversation?.contact?.id) {
         throw new Error('No hay contacto para editar.');
@@ -748,6 +754,8 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
           dni: payload.dni || null,
           address1: payload.address1 || null,
           address2: payload.address2 || null,
+          obraSocial: payload.obraSocial || null,
+          obraSocial2: payload.obraSocial2 || null,
           phone: activeConversation.contact.phone,
         });
       } catch (error) {
@@ -1008,6 +1016,8 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
                 dni: activeConversation.contact.dni ?? '',
                 address1: activeConversation.contact.address1 ?? '',
                 address2: activeConversation.contact.address2 ?? '',
+                obraSocial: activeConversation.contact.obraSocial ?? '',
+                obraSocial2: activeConversation.contact.obraSocial2 ?? '',
               }
             : undefined
         }

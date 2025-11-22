@@ -6,6 +6,8 @@ type ContactFormData = {
   dni: string;
   address1: string;
   address2: string;
+  obraSocial: string;
+  obraSocial2: string;
 };
 
 type AddContactModalProps = {
@@ -17,6 +19,8 @@ type AddContactModalProps = {
     dni?: string;
     address1?: string;
     address2?: string;
+    obraSocial?: string;
+    obraSocial2?: string;
   }) => Promise<void>;
   mode?: 'create' | 'edit';
   initialData?: {
@@ -24,6 +28,8 @@ type AddContactModalProps = {
     dni?: string | null;
     address1?: string | null;
     address2?: string | null;
+    obraSocial?: string | null;
+    obraSocial2?: string | null;
   };
 };
 
@@ -41,6 +47,8 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
       dni: initialData?.dni ?? '',
       address1: initialData?.address1 ?? '',
       address2: initialData?.address2 ?? '',
+      obraSocial: initialData?.obraSocial ?? '',
+      obraSocial2: initialData?.obraSocial2 ?? '',
     }),
     [initialData]
   );
@@ -72,6 +80,8 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         dni: formData.dni.trim() || undefined,
         address1: formData.address1.trim() || undefined,
         address2: formData.address2.trim() || undefined,
+        obraSocial: formData.obraSocial.trim() || undefined,
+        obraSocial2: formData.obraSocial2.trim() || undefined,
       });
       setFormData(baseForm);
       onClose();
@@ -144,6 +154,42 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                 }
                 disabled={loading}
               />
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="obraSocial">Obra Social (opcional)</label>
+                <input
+                  id="obraSocial"
+                  type="text"
+                  placeholder="Ej: IOMA, PAMI, OSDE"
+                  value={formData.obraSocial}
+                  onChange={(event) =>
+                    setFormData({
+                      ...formData,
+                      obraSocial: event.target.value,
+                    })
+                  }
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="obraSocial2">Obra Social 2 (opcional)</label>
+                <input
+                  id="obraSocial2"
+                  type="text"
+                  placeholder="Ej: Cobertura secundaria"
+                  value={formData.obraSocial2}
+                  onChange={(event) =>
+                    setFormData({
+                      ...formData,
+                      obraSocial2: event.target.value,
+                    })
+                  }
+                  disabled={loading}
+                />
+              </div>
             </div>
 
             <div className="form-row">
