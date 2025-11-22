@@ -655,7 +655,7 @@ const conversationSummarySelect = {
       dni: true,
       obraSocial: true,
       obraSocial2: true,
-      avatar: true,
+      photoUrl: true,
       isVip: true,
       isProblematic: true,
       isChronic: true,

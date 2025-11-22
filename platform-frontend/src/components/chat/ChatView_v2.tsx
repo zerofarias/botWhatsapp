@@ -380,9 +380,7 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
           timestamp: computeNextOccurrence(reminder),
         }))
         .filter(
-          (
-            item
-          ): item is { reminder: ContactReminder; timestamp: Date } =>
+          (item): item is { reminder: ContactReminder; timestamp: Date } =>
             Boolean(item.timestamp)
         )
         .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
@@ -539,7 +537,11 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
   }, []);
 
   const sendProgressStatus = useCallback(
-    async (status: ConversationProgressStatus, customMessage?: string, shouldSendMessage?: boolean) => {
+    async (
+      status: ConversationProgressStatus,
+      customMessage?: string,
+      shouldSendMessage?: boolean
+    ) => {
       if (!activeConversation) return;
       setStatusUpdating(true);
       setStatusError(null);
@@ -769,7 +771,7 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
     [activeConversation]
   );
 
-  const contactAvatar = activeConversation?.contact?.avatar ?? null;
+  const contactAvatar = activeConversation?.contact?.photoUrl ?? null;
   const avatarLetter = (displayName || 'C').charAt(0).toUpperCase();
 
   return (
@@ -787,7 +789,10 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
                 <div className="avatar-placeholder">
                   {avatarLetter}
                   {isContactSaved && (
-                    <span className="contact-indicator" title="Contacto guardado">
+                    <span
+                      className="contact-indicator"
+                      title="Contacto guardado"
+                    >
                       <FiCheckCircle aria-hidden="true" />
                     </span>
                   )}
@@ -813,14 +818,18 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
                 style={isContactSaved ? { cursor: 'pointer' } : undefined}
               >
                 {displayName}
-                {isContactSaved && <span className="saved-badge">Agendado</span>}
+                {isContactSaved && (
+                  <span className="saved-badge">Agendado</span>
+                )}
               </div>
 
               {/* DNI Row */}
               {activeConversation?.contact?.dni && (
                 <div className="chat-contact-info-pill__row">
                   <span className="label">DNI:</span>
-                  <span className="value">{activeConversation.contact.dni}</span>
+                  <span className="value">
+                    {activeConversation.contact.dni}
+                  </span>
                 </div>
               )}
 
@@ -828,16 +837,22 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
               {activeConversation?.contact?.obraSocial && (
                 <div className="chat-contact-info-pill__row">
                   <span className="label">Obra Social:</span>
-                  <span className="value">{activeConversation.contact.obraSocial}</span>
+                  <span className="value">
+                    {activeConversation.contact.obraSocial}
+                  </span>
                 </div>
               )}
 
               {/* Address Row */}
-              {(activeConversation?.contact?.address1 || activeConversation?.contact?.address2) && (
+              {(activeConversation?.contact?.address1 ||
+                activeConversation?.contact?.address2) && (
                 <div className="chat-contact-info-pill__row">
                   <span className="label">Dirección:</span>
                   <span className="value">
-                    {[activeConversation?.contact?.address1, activeConversation?.contact?.address2]
+                    {[
+                      activeConversation?.contact?.address1,
+                      activeConversation?.contact?.address2,
+                    ]
                       .filter(Boolean)
                       .join(', ')}
                   </span>
@@ -914,7 +929,9 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
         <div className="chat-area-v2-header-bottom">
           {finishMenuOpen && !conversationIsClosed && activeConversation && (
             <div className="chat-area-v2-finish-menu" ref={finishMenuRef}>
-              <span className="finish-menu-title">Selecciona cómo finalizar</span>
+              <span className="finish-menu-title">
+                Selecciona cómo finalizar
+              </span>
               {(Object.keys(FINISH_PRESETS) as FinishPresetKey[]).map((key) => {
                 const preset = FINISH_PRESETS[key];
                 const isBusy = finishingReason === key;

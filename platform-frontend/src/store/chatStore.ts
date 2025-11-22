@@ -54,7 +54,7 @@ export interface Conversation {
     id: number;
     name: string;
     phone: string;
-    avatar?: string;
+    photoUrl?: string;
     dni?: string | null;
     address1?: string | null;
     address2?: string | null;

@@ -445,7 +445,7 @@ interface Contact {
   address2?: string | null;
   obraSocial?: string | null;
   obraSocial2?: string | null;
-  avatar?: string | null;
+  photoUrl?: string | null;
   isVip?: boolean;
   isProblematic?: boolean;
   isChronic?: boolean;
@@ -762,7 +762,7 @@ export async function listConversationsHandler(req: Request, res: Response) {
             address2: conversation.contact.address2 ?? null,
             obraSocial: (conversation.contact as any).obraSocial ?? null,
             obraSocial2: (conversation.contact as any).obraSocial2 ?? null,
-            avatar: (conversation.contact as any).avatar ?? null,
+            photoUrl: (conversation.contact as any).photoUrl ?? null,
             isVip: (conversation.contact as any).isVip ?? false,
             isProblematic: (conversation.contact as any).isProblematic ?? false,
             isChronic: (conversation.contact as any).isChronic ?? false,
@@ -776,7 +776,7 @@ export async function listConversationsHandler(req: Request, res: Response) {
             address2: null,
             obraSocial: null,
             obraSocial2: null,
-            avatar: null,
+            photoUrl: null,
             isVip: false,
             isProblematic: false,
             isChronic: false,
