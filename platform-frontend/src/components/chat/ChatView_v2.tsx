@@ -539,7 +539,7 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
   }, []);
 
   const sendProgressStatus = useCallback(
-    async (status: ConversationProgressStatus, customMessage?: string) => {
+    async (status: ConversationProgressStatus, customMessage?: string, shouldSendMessage?: boolean) => {
       if (!activeConversation) return;
       setStatusUpdating(true);
       setStatusError(null);
@@ -549,6 +549,7 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
           {
             status,
             message: customMessage,
+            sendMessage: shouldSendMessage !== false,
           }
         );
         setSelectedStatus(status);
@@ -679,7 +680,7 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
       const preset = FINISH_PRESETS[presetKey];
       try {
         setFinishingReason(presetKey);
-        await sendProgressStatus(preset.status, preset.message);
+        await sendProgressStatus(preset.status, preset.message, true);
         await finishConversationRequest(preset.finishReason);
         await showSuccessAlert('La conversación fue finalizada.');
       } catch (error) {
