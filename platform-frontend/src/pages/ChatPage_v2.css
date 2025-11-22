@@ -251,6 +251,125 @@
   object-fit: cover;
 }
 
+/* Contact Info Pill */
+.chat-contact-info-pill {
+  display: flex;
+  gap: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 14px;
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.chat-contact-info-pill__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: 15px;
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.chat-contact-info-pill__avatar .avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.chat-contact-info-pill__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.chat-contact-info-pill__avatar .contact-indicator {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  font-size: 10px;
+  background: white;
+  border-radius: 50%;
+  padding: 1px;
+  line-height: 1;
+  border: 1px solid #ccc;
+}
+
+.chat-contact-info-pill__content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  position: relative;
+}
+
+.chat-contact-info-pill__name {
+  font-weight: 700;
+  font-size: 1.1rem;
+  line-height: 1.2;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-contact-info-pill__name.saved {
+  color: #2e7d3a;
+}
+
+.chat-contact-info-pill__name.unsaved {
+  color: #d84315;
+}
+
+.chat-contact-info-pill__row {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-contact-info-pill__row .label {
+  font-weight: 600;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.chat-contact-info-pill__row .value {
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-contact-info-pill__client-type {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 18px;
+  line-height: 1;
+}
+
 .chat-area-v2-header-info {
   display: flex;
   flex-direction: column;

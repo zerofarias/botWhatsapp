@@ -767,56 +767,79 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
   return (
     <div className="chat-view-v2-wrapper">
       <div className="chat-area-v2-header">
-        {/* Top section: Avatar + Info + Actions */}
+        {/* Top section: Contact Pill + Actions */}
         <div className="chat-area-v2-header-top">
-          <div className="chat-area-v2-header-avatar">
-            {contactAvatar ? (
-              <img src={contactAvatar} alt={displayName} />
-            ) : (
-              <div className="avatar-placeholder">
-                {avatarLetter}
-                {isContactSaved && (
-                  <span className="contact-indicator" title="Contacto guardado">
-                    <FiCheckCircle aria-hidden="true" />
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="chat-area-v2-header-info">
-            <div
-              className={`chat-area-v2-header-name ${
-                isContactSaved ? 'contact-saved' : 'contact-unsaved'
-              }`}
-              role={isContactSaved ? 'button' : undefined}
-              tabIndex={isContactSaved ? 0 : undefined}
-              onClick={() => isContactSaved && setContactModalMode('edit')}
-              onKeyPress={(e) => {
-                if (isContactSaved && (e.key === 'Enter' || e.key === ' ')) {
-                  setContactModalMode('edit');
-                }
-              }}
-              style={isContactSaved ? { cursor: 'pointer' } : undefined}
-            >
-              {displayName}
-              {isContactSaved && <span className="saved-badge">Agendado</span>}
-              {effectiveContactGroup &&
-                effectiveContactGroup.conversations.length > 1 && (
-                  <span className="conversation-count-badge">
-                    {effectiveContactGroup.conversations.length} conversaciones
-                  </span>
-                )}
+          {/* Contact Info Pill */}
+          <div className="chat-contact-info-pill">
+            {/* Avatar */}
+            <div className="chat-contact-info-pill__avatar">
+              {contactAvatar ? (
+                <img src={contactAvatar} alt={displayName} />
+              ) : (
+                <div className="avatar-placeholder">
+                  {avatarLetter}
+                  {isContactSaved && (
+                    <span className="contact-indicator" title="Contacto guardado">
+                      <FiCheckCircle aria-hidden="true" />
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
-            <div className="chat-area-v2-header-phone">
-              <span
-                className={`contact-phone ${
-                  isContactSaved ? '' : 'unsaved-number'
+
+            {/* Contact Details */}
+            <div className="chat-contact-info-pill__content">
+              {/* Name Row */}
+              <div
+                className={`chat-contact-info-pill__name ${
+                  isContactSaved ? 'saved' : 'unsaved'
                 }`}
+                role={isContactSaved ? 'button' : undefined}
+                tabIndex={isContactSaved ? 0 : undefined}
+                onClick={() => isContactSaved && setContactModalMode('edit')}
+                onKeyPress={(e) => {
+                  if (isContactSaved && (e.key === 'Enter' || e.key === ' ')) {
+                    setContactModalMode('edit');
+                  }
+                }}
+                style={isContactSaved ? { cursor: 'pointer' } : undefined}
               >
-                <FiPhone aria-hidden="true" />
-                <span>{phoneNumber}</span>
-                {!isContactSaved && <em> (No agendado)</em>}
-              </span>
+                {displayName}
+                {isContactSaved && <span className="saved-badge">Agendado</span>}
+              </div>
+
+              {/* DNI Row */}
+              {activeConversation?.contact?.dni && (
+                <div className="chat-contact-info-pill__row">
+                  <span className="label">DNI:</span>
+                  <span className="value">{activeConversation.contact.dni}</span>
+                </div>
+              )}
+
+              {/* Obra Social Row */}
+              {activeConversation?.contact?.obraSocial && (
+                <div className="chat-contact-info-pill__row">
+                  <span className="label">Obra Social:</span>
+                  <span className="value">{activeConversation.contact.obraSocial}</span>
+                </div>
+              )}
+
+              {/* Address Row */}
+              {(activeConversation?.contact?.address1 || activeConversation?.contact?.address2) && (
+                <div className="chat-contact-info-pill__row">
+                  <span className="label">Dirección:</span>
+                  <span className="value">
+                    {[activeConversation?.contact?.address1, activeConversation?.contact?.address2]
+                      .filter(Boolean)
+                      .join(', ')}
+                  </span>
+                </div>
+              )}
+
+              {/* Client Type Badge */}
+              <div className="chat-contact-info-pill__client-type">
+                {isContactSaved ? '👤' : '📱'}
+              </div>
             </div>
           </div>
           <div className="chat-area-v2-header-actions">
