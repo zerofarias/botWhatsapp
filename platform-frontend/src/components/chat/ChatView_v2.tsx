@@ -879,41 +879,6 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
           </div>
         </div>
 
-        {/* Middle section: Contact details & Reminders */}
-        <div className="chat-area-v2-header-middle">
-          <div className="chat-area-v2-pills-row">
-            <div className="chat-area-v2-contact-pill">
-              {activeConversation?.contact?.dni && (
-                <span>
-                  DNI: <strong>{activeConversation.contact.dni}</strong>
-                </span>
-              )}
-              {activeConversation?.contact?.obraSocial && (
-                <span>
-                  Obra social:{' '}
-                  <strong>{activeConversation.contact.obraSocial}</strong>
-                </span>
-              )}
-              {activeConversation?.contact?.obraSocial2 && (
-                <span>
-                  Complementaria:{' '}
-                  <strong>{activeConversation.contact.obraSocial2}</strong>
-                </span>
-              )}
-              {activeConversation?.contact?.address1 && (
-                <span>
-                  Dirección: <strong>{activeConversation.contact.address1}</strong>
-                </span>
-              )}
-              {activeConversation?.contact?.address2 && (
-                <span>
-                  <strong>{activeConversation.contact.address2}</strong>
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
         {/* Bottom section: Finish menu */}
         <div className="chat-area-v2-header-bottom">
           {finishMenuOpen && !conversationIsClosed && activeConversation && (
