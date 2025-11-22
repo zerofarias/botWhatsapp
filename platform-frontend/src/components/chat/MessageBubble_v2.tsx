@@ -3,11 +3,10 @@
  * Basado en Chat v1 pero adaptado para Chat v2 con la nueva interfaz Message
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Message } from '../../store/chatStore';
 import ImageViewerModal from './ImageViewerModal';
 import { getFullMediaUrl } from '../../utils/urls';
-import { useAuth } from '../../context/AuthContext';
 import './MessageBubble_v2.css';
 
 interface MessageBubbleV2Props {
@@ -23,7 +22,6 @@ function formatTime(timestamp: number) {
 
 const MessageBubble_v2: React.FC<MessageBubbleV2Props> = ({ message }) => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const { user } = useAuth();
 
   // Debug: Log multimedia messages only
   if (message.mediaType || message.mediaUrl) {
@@ -37,17 +35,6 @@ const MessageBubble_v2: React.FC<MessageBubbleV2Props> = ({ message }) => {
 
   const isOutgoing = message.sender === 'user' || message.sender === 'bot';
 
-  const operatorLabel = useMemo(() => {
-    if (!user?.name) return 'OPERADOR';
-    return `OPERADOR ${user.name.toUpperCase()}`.trim();
-  }, [user?.name]);
-
-  const senderLabel =
-    message.sender === 'contact'
-      ? 'Contacto'
-      : message.senderName ||
-        (message.sender === 'bot' ? 'Bot' : operatorLabel);
-  const showSenderLabel = !isOutgoing || message.sender !== 'contact';
   const containerClass = isOutgoing
     ? 'message-bubble-v2-container--outgoing'
     : 'message-bubble-v2-container--incoming';
@@ -59,17 +46,6 @@ const MessageBubble_v2: React.FC<MessageBubbleV2Props> = ({ message }) => {
     <div className={`message-bubble-v2-container ${containerClass}`}>
       <div className={`message-bubble-v2 ${bubbleClass}`}>
         <div className="message-bubble-v2-content">
-          {/* Mostrar tipo de remitente para mensajes entrantes */}
-          {showSenderLabel && (
-            <div
-              className={`message-bubble-v2-meta sender${
-                isOutgoing ? ' outgoing' : ''
-              }`}
-            >
-              {senderLabel}
-            </div>
-          )}
-
           {/* Renderizar contenido multimedia si existe */}
           {message.mediaType && message.mediaUrl ? (
             message.mediaType.includes('image') ? (

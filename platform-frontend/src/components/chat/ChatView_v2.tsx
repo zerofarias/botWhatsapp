@@ -766,7 +766,8 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
   return (
     <div className="chat-view-v2-wrapper">
       <div className="chat-area-v2-header">
-        <div className="chat-area-v2-header-main">
+        {/* Top section: Avatar + Info + Actions */}
+        <div className="chat-area-v2-header-top">
           <div className="chat-area-v2-header-avatar">
             {contactAvatar ? (
               <img src={contactAvatar} alt={displayName} />
@@ -786,6 +787,15 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
               className={`chat-area-v2-header-name ${
                 isContactSaved ? 'contact-saved' : 'contact-unsaved'
               }`}
+              role={isContactSaved ? 'button' : undefined}
+              tabIndex={isContactSaved ? 0 : undefined}
+              onClick={() => isContactSaved && setContactModalMode('edit')}
+              onKeyPress={(e) => {
+                if (isContactSaved && (e.key === 'Enter' || e.key === ' ')) {
+                  setContactModalMode('edit');
+                }
+              }}
+              style={isContactSaved ? { cursor: 'pointer' } : undefined}
             >
               {displayName}
               {isContactSaved && <span className="saved-badge">Agendado</span>}
@@ -807,53 +817,20 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
                 {!isContactSaved && <em> (No agendado)</em>}
               </span>
             </div>
-            <div className="chat-area-v2-pills-row">
-              <div className="chat-area-v2-contact-pill">
-                {activeConversation?.contact?.dni && (
-                  <span>
-                    DNI: <strong>{activeConversation.contact.dni}</strong>
-                  </span>
-                )}
-                {activeConversation?.contact?.obraSocial && (
-                  <span>
-                    Obra social:{' '}
-                    <strong>{activeConversation.contact.obraSocial}</strong>
-                  </span>
-                )}
-                {activeConversation?.contact?.obraSocial2 && (
-                  <span>
-                    Complementaria:{' '}
-                    <strong>{activeConversation.contact.obraSocial2}</strong>
-                  </span>
-                )}
-              </div>
-              {upcomingReminder && (
-                <div className="chat-reminder-pill">
-                  <FiCalendar aria-hidden="true" />
-                  <div>
-                    <span className="chat-reminder-pill__label">
-                      Próximo recordatorio
-                    </span>
-                    <strong>{upcomingReminder.reminder.title}</strong>
-                    {nextReminderText && <small>{nextReminderText}</small>}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="chat-area-v2-header-meta">
-              {activeConversation?.contact?.address1 && (
-                <div>
-                  <span>Dirección 1:</span> {activeConversation.contact.address1}
-                </div>
-              )}
-              {activeConversation?.contact?.address2 && (
-                <div>
-                  <span>Dirección 2:</span> {activeConversation.contact.address2}
-                </div>
-              )}
-            </div>
           </div>
           <div className="chat-area-v2-header-actions">
+            {upcomingReminder && (
+              <div className="chat-reminder-pill">
+                <FiCalendar aria-hidden="true" />
+                <div>
+                  <span className="chat-reminder-pill__label">
+                    Próximo recordatorio
+                  </span>
+                  <strong>{upcomingReminder.reminder.title}</strong>
+                  {nextReminderText && <small>{nextReminderText}</small>}
+                </div>
+              </div>
+            )}
             {!isContactSaved && (
               <button
                 className="chat-area-v2-icon-btn"
@@ -868,15 +845,6 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
             {isContactSaved && (
               <button
                 type="button"
-                className="chat-area-v2-edit-contact-btn"
-                onClick={() => setContactModalMode('edit')}
-              >
-                Editar contacto
-              </button>
-            )}
-            {isContactSaved && (
-              <button
-                type="button"
                 className="chat-area-v2-icon-btn chat-area-v2-create-reminder"
                 onClick={() => {
                   setModalDefaultDate(new Date());
@@ -885,115 +853,98 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
                 }}
               >
                 <FiCalendar aria-hidden="true" />
-                <span>Nuevo recordatorio</span>
+                <span>Recordatorio</span>
               </button>
             )}
-            {activeConversation && (
-              <div className="chat-area-v2-finish-actions" ref={finishMenuRef}>
-                <button
-                  type="button"
-                  className="chat-area-v2-finish-chat-btn"
-                  onClick={() =>
-                    setFinishMenuOpen((open) =>
-                      conversationIsClosed ? false : !open
-                    )
-                  }
-                  disabled={conversationIsClosed}
-                >
-                  {conversationIsClosed ? 'Chat cerrado' : 'Finalizar chat'}
-                </button>
-                {finishMenuOpen && !conversationIsClosed && (
-                  <div className="chat-area-v2-finish-menu">
-                    <span className="finish-menu-title">
-                      Selecciona cómo finalizar
-                    </span>
-                    {(Object.keys(FINISH_PRESETS) as FinishPresetKey[]).map(
-                      (key) => {
-                        const preset = FINISH_PRESETS[key];
-                        const isBusy = finishingReason === key;
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            className="finish-menu-option"
-                            onClick={() => handleFinishOptionSelect(key)}
-                            disabled={isBusy}
-                          >
-                            {isBusy ? 'Finalizando...' : preset.label}
-                          </button>
-                        );
-                      }
-                    )}
-                    <button
-                      type="button"
-                      className="finish-menu-option manual"
-                      onClick={handleManualFinish}
-                      disabled={isQuickFinishing}
-                    >
-                      {isQuickFinishing ? 'Finalizando...' : 'Cierre manual'}
-                    </button>
-                  </div>
-                )}
-              </div>
+            {conversationIsClosed && (
+              <button
+                type="button"
+                className="chat-area-v2-reactivate-btn"
+                onClick={handleReopenConversation}
+                disabled={isReopening}
+              >
+                {isReopening ? 'Reactivando...' : 'Reactivar'}
+              </button>
+            )}
+            {!conversationIsClosed && activeConversation && (
+              <button
+                type="button"
+                className="chat-area-v2-finish-chat-btn"
+                onClick={() => setFinishMenuOpen((open) => !open)}
+              >
+                Finalizar chat
+              </button>
             )}
           </div>
         </div>
-        {activeConversation && (
-          <div className="chat-area-v2-header-status">
-            {conversationIsClosed && (
-              <div className="chat-area-v2-closure-notice">
-                {closureSummary ?? 'Chat finalizado'}
-                <div className="chat-area-v2-closure-actions">
-                  <button
-                    type="button"
-                    className="chat-area-v2-reactivate-btn"
-                    onClick={handleReopenConversation}
-                    disabled={isReopening}
-                  >
-                    {isReopening ? 'Reactivando...' : 'Reactivar chat'}
-                  </button>
-                </div>
-              </div>
-            )}
-            <div className="chat-area-v2-status-row">
-              <span className="chat-area-v2-progress-pill">
-                Estado actual: {currentStatusOption.label}
-              </span>
-              <div className="chat-area-v2-status-controls chat-area-v2-status-controls--header">
-                <select
-                  value={selectedStatus}
-                  disabled={statusUpdating || conversationIsClosed}
-                  onChange={(event) =>
-                    setSelectedStatus(
-                      event.target.value as ConversationProgressStatus
-                    )
-                  }
-                >
-                  {STATUS_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleStatusSubmit}
-                  disabled={
-                    statusUpdating ||
-                    conversationIsClosed ||
-                    !activeConversation ||
-                    selectedStatus.length === 0
-                  }
-                >
-                  {statusUpdating ? 'Guardando...' : 'Guardar estado'}
-                </button>
-              </div>
+
+        {/* Middle section: Contact details & Reminders */}
+        <div className="chat-area-v2-header-middle">
+          <div className="chat-area-v2-pills-row">
+            <div className="chat-area-v2-contact-pill">
+              {activeConversation?.contact?.dni && (
+                <span>
+                  DNI: <strong>{activeConversation.contact.dni}</strong>
+                </span>
+              )}
+              {activeConversation?.contact?.obraSocial && (
+                <span>
+                  Obra social:{' '}
+                  <strong>{activeConversation.contact.obraSocial}</strong>
+                </span>
+              )}
+              {activeConversation?.contact?.obraSocial2 && (
+                <span>
+                  Complementaria:{' '}
+                  <strong>{activeConversation.contact.obraSocial2}</strong>
+                </span>
+              )}
             </div>
-            {statusError && (
-              <div className="chat-area-v2-status-error">{statusError}</div>
+          </div>
+          <div className="chat-area-v2-header-meta">
+            {activeConversation?.contact?.address1 && (
+              <span>{activeConversation.contact.address1}</span>
+            )}
+            {activeConversation?.contact?.address2 && (
+              <span className="separator">•</span>
+            )}
+            {activeConversation?.contact?.address2 && (
+              <span>{activeConversation.contact.address2}</span>
             )}
           </div>
-        )}
+        </div>
+
+        {/* Bottom section: Finish menu */}
+        <div className="chat-area-v2-header-bottom">
+          {finishMenuOpen && !conversationIsClosed && activeConversation && (
+            <div className="chat-area-v2-finish-menu" ref={finishMenuRef}>
+              <span className="finish-menu-title">Selecciona cómo finalizar</span>
+              {(Object.keys(FINISH_PRESETS) as FinishPresetKey[]).map((key) => {
+                const preset = FINISH_PRESETS[key];
+                const isBusy = finishingReason === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className="finish-menu-option"
+                    onClick={() => handleFinishOptionSelect(key)}
+                    disabled={isBusy}
+                  >
+                    {isBusy ? 'Finalizando...' : preset.label}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                className="finish-menu-option manual"
+                onClick={handleManualFinish}
+                disabled={isQuickFinishing}
+              >
+                {isQuickFinishing ? 'Finalizando...' : 'Cierre manual'}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="chat-view-v2-messages">
