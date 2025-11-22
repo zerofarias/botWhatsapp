@@ -899,18 +899,17 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
                   <strong>{activeConversation.contact.obraSocial2}</strong>
                 </span>
               )}
+              {activeConversation?.contact?.address1 && (
+                <span>
+                  Dirección: <strong>{activeConversation.contact.address1}</strong>
+                </span>
+              )}
+              {activeConversation?.contact?.address2 && (
+                <span>
+                  <strong>{activeConversation.contact.address2}</strong>
+                </span>
+              )}
             </div>
-          </div>
-          <div className="chat-area-v2-header-meta">
-            {activeConversation?.contact?.address1 && (
-              <span>{activeConversation.contact.address1}</span>
-            )}
-            {activeConversation?.contact?.address2 && (
-              <span className="separator">•</span>
-            )}
-            {activeConversation?.contact?.address2 && (
-              <span>{activeConversation.contact.address2}</span>
-            )}
           </div>
         </div>
 
