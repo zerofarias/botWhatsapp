@@ -13,6 +13,7 @@ import ContactsPage from './pages/ContactsPage';
 import FlowBuilder from './views/FlowBuilder/FlowBuilder';
 import BotsPage from './pages/BotsPage';
 import StatsPage from './pages/StatsPage';
+import RemindersCalendar from './pages/RemindersCalendar';
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="users" element={<UsersPage_v2 />} />
           <Route path="areas" element={<AreasPage_v2 />} />
           <Route path="contacts" element={<ContactsPage />} />
+          <Route path="reminders" element={<RemindersCalendar />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Route>

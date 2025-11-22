@@ -76,6 +76,17 @@ export function useConversations() {
   }, [loadConversations]);
 
   useEffect(() => {
+    const handleManualRefresh = () => {
+      console.log('🔁 Manual chat refresh requested from sidebar nav');
+      loadConversations();
+    };
+
+    window.addEventListener('chat:refreshRequested', handleManualRefresh);
+    return () =>
+      window.removeEventListener('chat:refreshRequested', handleManualRefresh);
+  }, [loadConversations]);
+
+  useEffect(() => {
     const interval = setInterval(() => {
       loadConversations();
     }, 15000); // refresh every 15s to capture new incoming chats

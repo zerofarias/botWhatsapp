@@ -58,6 +58,11 @@ export interface Conversation {
     dni?: string | null;
     address1?: string | null;
     address2?: string | null;
+    obraSocial?: string | null;
+    obraSocial2?: string | null;
+    isVip?: boolean;
+    isProblematic?: boolean;
+    isChronic?: boolean;
   };
 }
 

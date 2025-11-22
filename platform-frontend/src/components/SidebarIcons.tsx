@@ -25,6 +25,7 @@ export const sidebarIcons: Record<string, JSX.Element> = {
   Usuarios: <FaUsers />,
   Areas: <FaSitemap />,
   Contactos: <FaAddressBook />,
+  Recordatorios: <FaClock />,
   Horarios: <FaClock />,
   Configuracion: <FaCogs />,
 };

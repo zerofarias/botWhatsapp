@@ -5,7 +5,7 @@ import '../styles/sidebar.css';
 import { sidebarIcons } from '../components/SidebarIcons';
 import { initializeSocket } from '../services/socket/SocketManager';
 import PageShell from '../components/layout/PageShell';
-import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { FiChevronLeft, FiChevronRight, FiLogOut } from 'react-icons/fi';
 
 type NavigationLink = {
   to: string;
@@ -34,6 +34,11 @@ const NAVIGATION_LINKS: NavigationLink[] = [
     label: 'Contactos',
     roles: ['ADMIN', 'SUPERVISOR'],
   },
+  {
+    to: '/dashboard/reminders',
+    label: 'Recordatorios',
+    roles: ['ADMIN', 'SUPERVISOR', 'OPERATOR'],
+  },
   { to: '/dashboard/settings', label: 'Configuracion' },
 ];
 
@@ -56,7 +61,11 @@ function formatRole(role?: Role) {
 
 export default function DashboardLayout() {
   const { user, logout } = useAuth();
-  const [collapsed, setCollapsed] = useState(false);
+  const [sidebarPinned, setSidebarPinned] = useState(false);
+  const [autoCollapsed, setAutoCollapsed] = useState(true);
+  const location = useLocation();
+
+  const isCollapsed = sidebarPinned ? false : autoCollapsed;
 
   const availableLinks = NAVIGATION_LINKS.filter((link) => {
     if (!link.roles) return true;
@@ -87,21 +96,59 @@ export default function DashboardLayout() {
     }
   }, []);
 
+  const handleSidebarMouseEnter = () => {
+    if (!sidebarPinned) {
+      setAutoCollapsed(false);
+    }
+  };
+
+  const handleSidebarMouseLeave = () => {
+    if (!sidebarPinned) {
+      setAutoCollapsed(true);
+    }
+  };
+
+  const toggleSidebarPin = () => {
+    setSidebarPinned((prev) => {
+      const next = !prev;
+      if (next) {
+        setAutoCollapsed(false);
+      } else {
+        setAutoCollapsed(true);
+      }
+      return next;
+    });
+  };
+
+  const handleNavClick = (link: NavigationLink) => {
+    const isChatLink = link.to === '/dashboard/chat';
+    const isActiveChat =
+      isChatLink && location.pathname.startsWith('/dashboard/chat');
+
+    if (isActiveChat) {
+      window.dispatchEvent(new CustomEvent('chat:refreshRequested'));
+    }
+  };
+
   return (
-    <div className={`dashboard-layout${collapsed ? ' collapsed' : ''}`}>
-      <aside className="sidebar">
+    <div className={`dashboard-layout${isCollapsed ? ' collapsed' : ''}`}>
+      <aside
+        className="sidebar"
+        onMouseEnter={handleSidebarMouseEnter}
+        onMouseLeave={handleSidebarMouseLeave}
+      >
         <div className="sidebar__brand">
           <span className="sidebar__logo">Bot</span>
           <button
             className="sidebar__collapse"
-            onClick={() => setCollapsed((c) => !c)}
-            title={collapsed ? 'Expandir men�' : 'Colapsar men�'}
+            onClick={toggleSidebarPin}
+            title={sidebarPinned ? 'Desanclar panel' : 'Anclar panel'}
             aria-label={
-              collapsed ? 'Expandir men� lateral' : 'Colapsar men� lateral'
+              sidebarPinned ? 'Desanclar panel lateral' : 'Anclar panel lateral'
             }
             type="button"
           >
-            {collapsed ? (
+            {sidebarPinned ? (
               <FiChevronRight aria-hidden="true" />
             ) : (
               <FiChevronLeft aria-hidden="true" />
@@ -120,19 +167,25 @@ export default function DashboardLayout() {
               className={({ isActive }) =>
                 'sidebar__nav-link' + (isActive ? ' active' : '')
               }
+              onClick={() => handleNavClick(link)}
               end={link.to === '/dashboard'}
             >
               <span className="sidebar__icon">
                 {sidebarIcons[link.label] ?? '•'}
               </span>
-              {!collapsed && (
+              {!isCollapsed && (
                 <span className="sidebar__text">{link.label}</span>
               )}
             </NavLink>
           ))}
         </nav>
-        <button className="sidebar__logout" onClick={logout}>
-          Cerrar sesión
+        <button className="sidebar__logout" onClick={logout} type="button">
+          <span className="sidebar__logout-icon" aria-hidden="true">
+            <FiLogOut />
+          </span>
+          {!isCollapsed && (
+            <span className="sidebar__logout-text">Cerrar sesión</span>
+          )}
         </button>
       </aside>
       <main className="dashboard-main">
@@ -222,3 +275,4 @@ function ShellOutlet() {
     </PageShell>
   );
 }
+

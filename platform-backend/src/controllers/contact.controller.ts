@@ -75,7 +75,19 @@ export async function listContactsHandler(_req: Request, res: Response) {
 }
 
 export async function createContactHandler(req: Request, res: Response) {
-  const { name, phone, dni, areaId, address1, address2 } = req.body ?? {};
+  const {
+    name,
+    phone,
+    dni,
+    areaId,
+    address1,
+    address2,
+    obraSocial,
+    obraSocial2,
+    isVip,
+    isProblematic,
+    isChronic,
+  } = req.body ?? {};
 
   if (!name || !phone) {
     return res.status(400).json({
@@ -91,6 +103,11 @@ export async function createContactHandler(req: Request, res: Response) {
       areaId: typeof areaId === 'number' ? areaId : null,
       address1: typeof address1 === 'string' ? address1 : null,
       address2: typeof address2 === 'string' ? address2 : null,
+      obraSocial: typeof obraSocial === 'string' ? obraSocial : null,
+      obraSocial2: typeof obraSocial2 === 'string' ? obraSocial2 : null,
+      isVip: isVip === true,
+      isProblematic: isProblematic === true,
+      isChronic: isChronic === true,
     });
     return res.status(201).json(contact);
   } catch (error) {
@@ -131,6 +148,28 @@ export async function updateContactHandler(req: Request, res: Response) {
           : typeof req.body.address2 === 'string'
           ? req.body.address2
           : null,
+      obraSocial:
+        req.body?.obraSocial === undefined
+          ? undefined
+          : typeof req.body.obraSocial === 'string'
+          ? req.body.obraSocial
+          : null,
+      obraSocial2:
+        req.body?.obraSocial2 === undefined
+          ? undefined
+          : typeof req.body.obraSocial2 === 'string'
+          ? req.body.obraSocial2
+          : null,
+      isVip:
+        req.body?.isVip === undefined ? undefined : Boolean(req.body.isVip),
+      isProblematic:
+        req.body?.isProblematic === undefined
+          ? undefined
+          : Boolean(req.body.isProblematic),
+      isChronic:
+        req.body?.isChronic === undefined
+          ? undefined
+          : Boolean(req.body.isChronic),
     });
     return res.json(updated);
   } catch (error) {

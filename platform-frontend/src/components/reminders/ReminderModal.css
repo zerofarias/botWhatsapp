@@ -1,0 +1,91 @@
+.reminder-modal__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+  z-index: 1400;
+}
+
+.reminder-modal__panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, calc(100% - 24px));
+  background: #fff;
+  border-radius: 24px;
+  box-shadow: 0 30px 60px rgba(15, 23, 42, 0.25);
+  padding: 20px;
+  z-index: 1410;
+}
+
+.reminder-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.reminder-modal__close {
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #475569;
+}
+
+.reminder-modal__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reminder-modal__form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+  color: #0f172a;
+  gap: 4px;
+}
+
+.reminder-modal__form input,
+.reminder-modal__form textarea,
+.reminder-modal__form select {
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.95rem;
+}
+
+.reminder-modal__form textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.reminder-modal__row {
+  display: flex;
+  gap: 12px;
+}
+
+.reminder-modal__row label {
+  flex: 1;
+}
+
+.reminder-modal__contact-info {
+  background: rgba(199, 210, 254, 0.25);
+  border: 1px solid rgba(129, 140, 248, 0.4);
+  border-radius: 10px;
+  padding: 10px;
+  color: #312e81;
+}
+
+.reminder-modal__error {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.reminder-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

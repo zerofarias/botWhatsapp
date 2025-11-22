@@ -1,0 +1,211 @@
+.contact-details-modal__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  z-index: 1300;
+}
+
+.contact-details-modal__panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(640px, calc(100% - 32px));
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 24px;
+  box-shadow: 0 25px 70px rgba(15, 23, 42, 0.35);
+  padding: 24px;
+  z-index: 1310;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.contact-details-modal__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.contact-details-modal__header h2 {
+  margin: 4px 0;
+  font-size: 1.6rem;
+  color: #0f172a;
+}
+
+.contact-details-modal__phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.contact-details-modal__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.contact-details-modal__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.contact-details-flag {
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: #f8fafc;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.15);
+}
+
+.contact-details-flag strong {
+  display: block;
+  font-size: 0.9rem;
+  color: #1e293b;
+}
+
+.contact-details-flag small {
+  font-size: 0.75rem;
+  color: #475569;
+}
+
+.contact-details-modal__section {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 16px;
+  padding: 16px;
+  background: #fdfdfd;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.contact-details-modal__section > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.contact-details-modal__section h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #0f172a;
+}
+
+.contact-details-modal__hint {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.contact-details-modal__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.contact-details-modal__grid div {
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.contact-details-modal__grid dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.contact-details-modal__grid dd {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.contact-details-modal__empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.contact-details-modal__reminders {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.contact-details-modal__reminders li {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.contact-details-modal__reminder-info strong {
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.contact-details-modal__reminder-info p {
+  margin: 0;
+  color: #475569;
+  font-size: 0.85rem;
+}
+
+.contact-details-modal__reminder-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.contact-details-modal__reminder-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.contact-details-modal__reminders li + li {
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.btn {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.btn-ghost {
+  background: rgba(99, 102, 241, 0.12);
+  color: #4f46e5;
+}
+
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #e2e8f0;
+  color: #0f172a;
+}

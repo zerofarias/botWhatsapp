@@ -9,7 +9,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { FiUserPlus, FiCheckCircle, FiPhone } from 'react-icons/fi';
+import { FiUserPlus, FiCheckCircle, FiPhone, FiCalendar } from 'react-icons/fi';
 import {
   useChatStore,
   selectMessages,
@@ -21,6 +21,9 @@ import { ContactGroup } from '../../hooks/v2/useContactGroups';
 import type { ConversationProgressStatus } from '../../types/chat';
 import MessageBubble_v2 from './MessageBubble_v2';
 import AddContactModal from './AddContactModal';
+import ReminderModal, {
+  type ContactSummary as ReminderContactSummary,
+} from '../reminders/ReminderModal';
 import './ChatView_v2.css';
 import { api, listConversationNotes } from '../../services/api';
 import { getApiErrorMessage } from '../../utils/apiError';
@@ -34,6 +37,39 @@ interface ChatViewProps {
 type ChatEntry =
   | { kind: 'message'; message: Message; timestamp: number }
   | { kind: 'note'; note: ConversationNote; timestamp: number };
+
+type ContactReminder = {
+  id: number;
+  title: string;
+  description?: string | null;
+  remindAt: string;
+  repeatIntervalDays?: number | string | null;
+  repeatUntil?: string | null;
+  completedAt?: string | null;
+};
+
+function parseRepeatIntervalDays(value?: number | string | null) {
+  if (typeof value === 'number' && value > 0) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return null;
+}
+
+function computeNextOccurrence(reminder: ContactReminder) {
+  const base = reminder.remindAt ? new Date(reminder.remindAt) : null;
+  if (!base || Number.isNaN(base.getTime())) return null;
+  const repeatDays = parseRepeatIntervalDays(reminder.repeatIntervalDays);
+  const limit = reminder.repeatUntil ? new Date(reminder.repeatUntil) : null;
+  const now = Date.now();
+  if (!repeatDays) return base.getTime() >= now ? base : null;
+  const repeatMs = repeatDays * 24 * 60 * 60 * 1000;
+  let candidate = base.getTime();
+  while (candidate < now) candidate += repeatMs;
+  if (limit && candidate > limit.getTime()) return null;
+  return new Date(candidate);
+}
 
 const STATUS_OPTIONS: Array<{
   value: ConversationProgressStatus;
@@ -252,6 +288,10 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
   const [contactModalMode, setContactModalMode] = useState<
     'create' | 'edit' | null
   >(null);
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [modalDefaultDate, setModalDefaultDate] = useState<Date | null>(null);
+  const [modalDefaultContact, setModalDefaultContact] =
+    useState<ReminderContactSummary | null>(null);
   const [selectedStatus, setSelectedStatus] =
     useState<ConversationProgressStatus>('PENDING');
   const [statusUpdating, setStatusUpdating] = useState(false);
@@ -293,6 +333,11 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
     effectiveContactGroup,
   ]);
 
+  const [upcomingReminder, setUpcomingReminder] = useState<{
+    reminder: ContactReminder;
+    nextOccurrence: Date;
+  } | null>(null);
+
   const handleLoadMoreMessages = useCallback(() => {
     if (effectiveContactGroup) {
       console.log(
@@ -303,6 +348,79 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
       console.log('Load more messages for conversation:', conversationId);
     }
   }, [effectiveContactGroup, conversationId]);
+
+  const reminderModalContact = useMemo<ReminderContactSummary | null>(() => {
+    const contact = activeConversation?.contact;
+    if (!contact?.id) return null;
+    return {
+      id: contact.id,
+      name: contact.name ?? 'Sin nombre',
+      phone: contact.phone ?? '',
+      obraSocial: contact.obraSocial ?? undefined,
+      obraSocial2: contact.obraSocial2 ?? undefined,
+    };
+  }, [activeConversation]);
+
+  const fetchUpcomingReminder = useCallback(async () => {
+    const contactId = activeConversation?.contact?.id;
+    if (!contactId) {
+      setUpcomingReminder(null);
+      return;
+    }
+    try {
+      const response = await api.get<ContactReminder[]>(
+        `/contact-reminders/${contactId}`
+      );
+      const reminders = Array.isArray(response.data)
+        ? response.data.filter((reminder) => !reminder.completedAt)
+        : [];
+      const nextReminder = reminders
+        .map((reminder) => ({
+          reminder,
+          timestamp: computeNextOccurrence(reminder),
+        }))
+        .filter(
+          (
+            item
+          ): item is { reminder: ContactReminder; timestamp: Date } =>
+            Boolean(item.timestamp)
+        )
+        .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+        .at(0);
+      if (nextReminder) {
+        setUpcomingReminder({
+          reminder: nextReminder.reminder,
+          nextOccurrence: nextReminder.timestamp,
+        });
+      } else {
+        setUpcomingReminder(null);
+      }
+    } catch (error) {
+      console.warn(
+        '[ChatView] Failed to load reminders for contact',
+        contactId,
+        error
+      );
+      setUpcomingReminder(null);
+    }
+  }, [activeConversation]);
+
+  useEffect(() => {
+    void fetchUpcomingReminder();
+  }, [fetchUpcomingReminder]);
+
+  const nextReminderText = useMemo(() => {
+    if (!upcomingReminder) return null;
+    return upcomingReminder.nextOccurrence.toLocaleString('es-AR', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
+  }, [upcomingReminder]);
+
+  const handleReminderCreated = useCallback(() => {
+    void fetchUpcomingReminder();
+    setShowReminderModal(false);
+  }, [fetchUpcomingReminder]);
 
   const isContactSaved = Boolean(
     effectiveContactGroup
@@ -648,192 +766,235 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
   return (
     <div className="chat-view-v2-wrapper">
       <div className="chat-area-v2-header">
-        <div className="chat-area-v2-header-avatar">
-          {contactAvatar ? (
-            <img src={contactAvatar} alt={displayName} />
-          ) : (
-            <div className="avatar-placeholder">
-              {avatarLetter}
-              {isContactSaved && (
-                <span className="contact-indicator" title="Contacto guardado">
-                  <FiCheckCircle aria-hidden="true" />
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="chat-area-v2-header-info">
-          <div
-            className={`chat-area-v2-header-name ${
-              isContactSaved ? 'contact-saved' : 'contact-unsaved'
-            }`}
-          >
-            {displayName}
-            {isContactSaved && <span className="saved-badge">Agendado</span>}
-            {effectiveContactGroup &&
-              effectiveContactGroup.conversations.length > 1 && (
-                <span className="conversation-count-badge">
-                  {effectiveContactGroup.conversations.length} conversaciones
-                </span>
-              )}
+        <div className="chat-area-v2-header-main">
+          <div className="chat-area-v2-header-avatar">
+            {contactAvatar ? (
+              <img src={contactAvatar} alt={displayName} />
+            ) : (
+              <div className="avatar-placeholder">
+                {avatarLetter}
+                {isContactSaved && (
+                  <span className="contact-indicator" title="Contacto guardado">
+                    <FiCheckCircle aria-hidden="true" />
+                  </span>
+                )}
+              </div>
+            )}
           </div>
-          <div className="chat-area-v2-header-phone">
-            <span
-              className={`contact-phone ${
-                isContactSaved ? '' : 'unsaved-number'
+          <div className="chat-area-v2-header-info">
+            <div
+              className={`chat-area-v2-header-name ${
+                isContactSaved ? 'contact-saved' : 'contact-unsaved'
               }`}
             >
-              <FiPhone aria-hidden="true" />
-              <span>{phoneNumber}</span>
-              {!isContactSaved && <em> (No agendado)</em>}
-            </span>
-          </div>
-          <div className="chat-area-v2-header-meta">
-            {activeConversation?.contact?.dni && (
-              <div>
-                <span>DNI:</span> {activeConversation.contact.dni}
-              </div>
-            )}
-            {activeConversation?.contact?.address1 && (
-              <div>
-                <span>Dirección 1:</span> {activeConversation.contact.address1}
-              </div>
-            )}
-            {activeConversation?.contact?.address2 && (
-              <div>
-                <span>Dirección 2:</span> {activeConversation.contact.address2}
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="chat-area-v2-header-actions">
-          {!isContactSaved && (
-            <button
-              className="chat-area-v2-icon-btn"
-              title="Agregar a contactos"
-              aria-label="Agregar a contactos"
-              disabled={!canAddContact}
-              onClick={() => setContactModalMode('create')}
-            >
-              <FiUserPlus size={18} />
-            </button>
-          )}
-          {isContactSaved && (
-            <button
-              type="button"
-              className="chat-area-v2-edit-contact-btn"
-              onClick={() => setContactModalMode('edit')}
-            >
-              Editar contacto
-            </button>
-          )}
-          {activeConversation && (
-            <div className="chat-area-v2-finish-actions" ref={finishMenuRef}>
-              <button
-                type="button"
-                className="chat-area-v2-finish-chat-btn"
-                onClick={() =>
-                  setFinishMenuOpen((open) =>
-                    conversationIsClosed ? false : !open
-                  )
-                }
-                disabled={conversationIsClosed}
-              >
-                {conversationIsClosed ? 'Chat cerrado' : 'Finalizar chat'}
-              </button>
-              {finishMenuOpen && !conversationIsClosed && (
-                <div className="chat-area-v2-finish-menu">
-                  <span className="finish-menu-title">
-                    Selecciona cómo finalizar
+              {displayName}
+              {isContactSaved && <span className="saved-badge">Agendado</span>}
+              {effectiveContactGroup &&
+                effectiveContactGroup.conversations.length > 1 && (
+                  <span className="conversation-count-badge">
+                    {effectiveContactGroup.conversations.length} conversaciones
                   </span>
-                  {(Object.keys(FINISH_PRESETS) as FinishPresetKey[]).map(
-                    (key) => {
-                      const preset = FINISH_PRESETS[key];
-                      const isBusy = finishingReason === key;
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          className="finish-menu-option"
-                          onClick={() => handleFinishOptionSelect(key)}
-                          disabled={isBusy}
-                        >
-                          {isBusy ? 'Finalizando...' : preset.label}
-                        </button>
-                      );
-                    }
-                  )}
-                  <button
-                    type="button"
-                    className="finish-menu-option manual"
-                    onClick={handleManualFinish}
-                    disabled={isQuickFinishing}
-                  >
-                    {isQuickFinishing ? 'Finalizando...' : 'Cierre manual'}
-                  </button>
+                )}
+            </div>
+            <div className="chat-area-v2-header-phone">
+              <span
+                className={`contact-phone ${
+                  isContactSaved ? '' : 'unsaved-number'
+                }`}
+              >
+                <FiPhone aria-hidden="true" />
+                <span>{phoneNumber}</span>
+                {!isContactSaved && <em> (No agendado)</em>}
+              </span>
+            </div>
+            <div className="chat-area-v2-pills-row">
+              <div className="chat-area-v2-contact-pill">
+                {activeConversation?.contact?.dni && (
+                  <span>
+                    DNI: <strong>{activeConversation.contact.dni}</strong>
+                  </span>
+                )}
+                {activeConversation?.contact?.obraSocial && (
+                  <span>
+                    Obra social:{' '}
+                    <strong>{activeConversation.contact.obraSocial}</strong>
+                  </span>
+                )}
+                {activeConversation?.contact?.obraSocial2 && (
+                  <span>
+                    Complementaria:{' '}
+                    <strong>{activeConversation.contact.obraSocial2}</strong>
+                  </span>
+                )}
+              </div>
+              {upcomingReminder && (
+                <div className="chat-reminder-pill">
+                  <FiCalendar aria-hidden="true" />
+                  <div>
+                    <span className="chat-reminder-pill__label">
+                      Próximo recordatorio
+                    </span>
+                    <strong>{upcomingReminder.reminder.title}</strong>
+                    {nextReminderText && <small>{nextReminderText}</small>}
+                  </div>
                 </div>
               )}
             </div>
-          )}
-        </div>
-      </div>
-
-      {activeConversation && (
-        <div className="chat-area-v2-status-panel">
-          {conversationIsClosed && (
-            <div className="chat-area-v2-closure-notice">
-              {closureSummary ?? 'Chat finalizado'}
-              <div className="chat-area-v2-closure-actions">
+            <div className="chat-area-v2-header-meta">
+              {activeConversation?.contact?.address1 && (
+                <div>
+                  <span>Dirección 1:</span> {activeConversation.contact.address1}
+                </div>
+              )}
+              {activeConversation?.contact?.address2 && (
+                <div>
+                  <span>Dirección 2:</span> {activeConversation.contact.address2}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="chat-area-v2-header-actions">
+            {!isContactSaved && (
+              <button
+                className="chat-area-v2-icon-btn"
+                title="Agregar a contactos"
+                aria-label="Agregar a contactos"
+                disabled={!canAddContact}
+                onClick={() => setContactModalMode('create')}
+              >
+                <FiUserPlus size={18} />
+              </button>
+            )}
+            {isContactSaved && (
+              <button
+                type="button"
+                className="chat-area-v2-edit-contact-btn"
+                onClick={() => setContactModalMode('edit')}
+              >
+                Editar contacto
+              </button>
+            )}
+            {isContactSaved && (
+              <button
+                type="button"
+                className="chat-area-v2-icon-btn chat-area-v2-create-reminder"
+                onClick={() => {
+                  setModalDefaultDate(new Date());
+                  setModalDefaultContact(reminderModalContact);
+                  setShowReminderModal(true);
+                }}
+              >
+                <FiCalendar aria-hidden="true" />
+                <span>Nuevo recordatorio</span>
+              </button>
+            )}
+            {activeConversation && (
+              <div className="chat-area-v2-finish-actions" ref={finishMenuRef}>
                 <button
                   type="button"
-                  className="chat-area-v2-reactivate-btn"
-                  onClick={handleReopenConversation}
-                  disabled={isReopening}
+                  className="chat-area-v2-finish-chat-btn"
+                  onClick={() =>
+                    setFinishMenuOpen((open) =>
+                      conversationIsClosed ? false : !open
+                    )
+                  }
+                  disabled={conversationIsClosed}
                 >
-                  {isReopening ? 'Reactivando...' : 'Reactivar chat'}
+                  {conversationIsClosed ? 'Chat cerrado' : 'Finalizar chat'}
+                </button>
+                {finishMenuOpen && !conversationIsClosed && (
+                  <div className="chat-area-v2-finish-menu">
+                    <span className="finish-menu-title">
+                      Selecciona cómo finalizar
+                    </span>
+                    {(Object.keys(FINISH_PRESETS) as FinishPresetKey[]).map(
+                      (key) => {
+                        const preset = FINISH_PRESETS[key];
+                        const isBusy = finishingReason === key;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            className="finish-menu-option"
+                            onClick={() => handleFinishOptionSelect(key)}
+                            disabled={isBusy}
+                          >
+                            {isBusy ? 'Finalizando...' : preset.label}
+                          </button>
+                        );
+                      }
+                    )}
+                    <button
+                      type="button"
+                      className="finish-menu-option manual"
+                      onClick={handleManualFinish}
+                      disabled={isQuickFinishing}
+                    >
+                      {isQuickFinishing ? 'Finalizando...' : 'Cierre manual'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        {activeConversation && (
+          <div className="chat-area-v2-header-status">
+            {conversationIsClosed && (
+              <div className="chat-area-v2-closure-notice">
+                {closureSummary ?? 'Chat finalizado'}
+                <div className="chat-area-v2-closure-actions">
+                  <button
+                    type="button"
+                    className="chat-area-v2-reactivate-btn"
+                    onClick={handleReopenConversation}
+                    disabled={isReopening}
+                  >
+                    {isReopening ? 'Reactivando...' : 'Reactivar chat'}
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="chat-area-v2-status-row">
+              <span className="chat-area-v2-progress-pill">
+                Estado actual: {currentStatusOption.label}
+              </span>
+              <div className="chat-area-v2-status-controls chat-area-v2-status-controls--header">
+                <select
+                  value={selectedStatus}
+                  disabled={statusUpdating || conversationIsClosed}
+                  onChange={(event) =>
+                    setSelectedStatus(
+                      event.target.value as ConversationProgressStatus
+                    )
+                  }
+                >
+                  {STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleStatusSubmit}
+                  disabled={
+                    statusUpdating ||
+                    conversationIsClosed ||
+                    !activeConversation ||
+                    selectedStatus.length === 0
+                  }
+                >
+                  {statusUpdating ? 'Guardando...' : 'Guardar estado'}
                 </button>
               </div>
             </div>
-          )}
-          <div className="chat-area-v2-progress-row">
-            <span className="chat-area-v2-progress-pill">
-              Estado actual: {currentStatusOption.label}
-            </span>
+            {statusError && (
+              <div className="chat-area-v2-status-error">{statusError}</div>
+            )}
           </div>
-          <div className="chat-area-v2-status-controls">
-            <select
-              value={selectedStatus}
-              disabled={statusUpdating || conversationIsClosed}
-              onChange={(event) =>
-                setSelectedStatus(
-                  event.target.value as ConversationProgressStatus
-                )
-              }
-            >
-              {STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={handleStatusSubmit}
-              disabled={
-                statusUpdating ||
-                conversationIsClosed ||
-                !activeConversation ||
-                selectedStatus.length === 0
-              }
-            >
-              {statusUpdating ? 'Guardando...' : 'Guardar estado'}
-            </button>
-          </div>
-          {statusError && (
-            <div className="chat-area-v2-status-error">{statusError}</div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="chat-view-v2-messages">
         {false && (
@@ -889,6 +1050,13 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
+      <ReminderModal
+        isOpen={showReminderModal}
+        onClose={() => setShowReminderModal(false)}
+        defaultDate={modalDefaultDate ?? undefined}
+        defaultContact={modalDefaultContact ?? undefined}
+        onCreated={handleReminderCreated}
+      />
       <AddContactModal
         isOpen={showContactModal}
         mode={contactModalMode === 'edit' ? 'edit' : 'create'}

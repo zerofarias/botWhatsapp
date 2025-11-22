@@ -346,6 +346,12 @@ const OrdersTable_v2: React.FC<Props> = ({
       next.delete(orderId);
       return next;
     });
+    setRecentOrderIds((prev) => {
+      if (!prev.has(orderId)) return prev;
+      const next = new Set(prev);
+      next.delete(orderId);
+      return next;
+    });
   }, []);
 
   const handleExportCSV = useCallback(() => {

@@ -258,17 +258,42 @@ model Contact {
   name          String
   phone         String         @unique
   dni           String?        @db.VarChar(20)
+  obraSocial    String?        @map("obra_social") @db.VarChar(255)
+  obraSocial2   String?        @map("obra_social2") @db.VarChar(255)
   address1      String?        @map("address1") @db.VarChar(255)
   address2      String?        @map("address2") @db.VarChar(255)
   areaId        Int?           @map("area_id")
+  isVip         Boolean        @default(false) @map("is_vip")
+  isProblematic Boolean        @default(false) @map("is_problematic")
+  isChronic     Boolean        @default(false) @map("is_chronic")
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
   photoUrl      String?        @map("photo_url") @db.LongText
   area          Area?          @relation(fields: [areaId], references: [id])
   conversations Conversation[]
+  reminders     ContactReminder[]
 
   @@index([areaId], map: "contacts_area_id_fkey")
   @@map("contacts")
+}
+
+model ContactReminder {
+  id                 Int       @id @default(autoincrement())
+  contactId          Int       @map("contact_id")
+  title              String
+  description        String?   @db.Text
+  remindAt           DateTime  @map("remind_at")
+  repeatIntervalDays Int?      @map("repeat_interval_days")
+  repeatUntil        DateTime? @map("repeat_until")
+  lastTriggeredAt    DateTime? @map("last_triggered_at")
+  completedAt        DateTime? @map("completed_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  contact            Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId], map: "contact_reminders_contact_id_idx")
+  @@index([remindAt], map: "contact_reminders_remind_at_idx")
+  @@map("contact_reminders")
 }
 
 model WorkingHour {

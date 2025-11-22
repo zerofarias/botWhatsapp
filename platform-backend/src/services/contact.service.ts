@@ -7,8 +7,13 @@ const contactSelect = Prisma.validator<Prisma.ContactSelect>()({
   name: true,
   phone: true,
   dni: true,
+  obraSocial: true,
+  obraSocial2: true,
   address1: true,
   address2: true,
+  isVip: true,
+  isProblematic: true,
+  isChronic: true,
   photoUrl: true,
   areaId: true,
   createdAt: true,
@@ -35,6 +40,11 @@ type ContactInput = {
   areaId?: number | null;
   address1?: string | null;
   address2?: string | null;
+  obraSocial?: string | null;
+  obraSocial2?: string | null;
+  isVip?: boolean;
+  isProblematic?: boolean;
+  isChronic?: boolean;
 };
 
 type ContactUpdateInput = {
@@ -44,6 +54,11 @@ type ContactUpdateInput = {
   areaId?: number | null;
   address1?: string | null;
   address2?: string | null;
+  obraSocial?: string | null;
+  obraSocial2?: string | null;
+  isVip?: boolean;
+  isProblematic?: boolean;
+  isChronic?: boolean;
 };
 
 type ContactImportEntry = {
@@ -53,6 +68,11 @@ type ContactImportEntry = {
   area?: string | number | null;
   address1?: string | null;
   address2?: string | null;
+  obraSocial?: string | null;
+  obraSocial2?: string | null;
+  isVip?: boolean | string | null;
+  isProblematic?: boolean | string | null;
+  isChronic?: boolean | string | null;
 };
 
 function normalizePhone(value: string) {
@@ -75,6 +95,21 @@ function sanitizeDni(value: string | null | undefined) {
 function sanitizeAddress(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed && trimmed.length ? trimmed : null;
+}
+
+function sanitizeNote(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length ? trimmed : null;
+}
+
+function normalizeBoolean(value: unknown, fallback = false) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'si', 'sí'].includes(normalized)) return true;
+    if (['false', '0', 'no'].includes(normalized)) return false;
+  }
+  return fallback;
 }
 
 async function resolveAreaId(area: string | number | null | undefined) {
@@ -131,6 +166,8 @@ export async function createContact(input: ContactInput) {
   }
 
   const dni = sanitizeDni(input.dni ?? null);
+  const obraSocial = sanitizeNote(input.obraSocial);
+  const obraSocial2 = sanitizeNote(input.obraSocial2);
 
   return prisma.contact.create({
     data: {
@@ -140,6 +177,11 @@ export async function createContact(input: ContactInput) {
       areaId: input.areaId ?? null,
       address1: sanitizeAddress(input.address1),
       address2: sanitizeAddress(input.address2),
+      obraSocial,
+      obraSocial2,
+      isVip: Boolean(input.isVip),
+      isProblematic: Boolean(input.isProblematic),
+      isChronic: Boolean(input.isChronic),
     },
     select: contactSelect,
   });
@@ -185,6 +227,26 @@ export async function updateContact(id: number, input: ContactUpdateInput) {
     data.address2 = sanitizeAddress(input.address2);
   }
 
+  if (input.obraSocial !== undefined) {
+    data.obraSocial = sanitizeNote(input.obraSocial);
+  }
+
+  if (input.obraSocial2 !== undefined) {
+    data.obraSocial2 = sanitizeNote(input.obraSocial2);
+  }
+
+  if (input.isVip !== undefined) {
+    data.isVip = Boolean(input.isVip);
+  }
+
+  if (input.isProblematic !== undefined) {
+    data.isProblematic = Boolean(input.isProblematic);
+  }
+
+  if (input.isChronic !== undefined) {
+    data.isChronic = Boolean(input.isChronic);
+  }
+
   return prisma.contact.update({
     where: { id },
     data,
@@ -215,6 +277,11 @@ export async function importContactsFromArray(entries: ContactImportEntry[]) {
     const dniValue = entry.dni ? sanitizeDni(entry.dni) : null;
     const addr1 = sanitizeAddress(entry.address1);
     const addr2 = sanitizeAddress(entry.address2);
+    const obraSocial = sanitizeNote(entry.obraSocial ?? null);
+    const obraSocial2 = sanitizeNote(entry.obraSocial2 ?? null);
+    const isVip = normalizeBoolean(entry.isVip);
+    const isProblematic = normalizeBoolean(entry.isProblematic);
+    const isChronic = normalizeBoolean(entry.isChronic);
 
     const record = await prisma.contact.upsert({
       where: { phone },
@@ -224,6 +291,11 @@ export async function importContactsFromArray(entries: ContactImportEntry[]) {
         areaId,
         address1: addr1,
         address2: addr2,
+        obraSocial,
+        obraSocial2,
+        isVip,
+        isProblematic,
+        isChronic,
       },
       create: {
         name,
@@ -232,6 +304,11 @@ export async function importContactsFromArray(entries: ContactImportEntry[]) {
         areaId,
         address1: addr1,
         address2: addr2,
+        obraSocial,
+        obraSocial2,
+        isVip,
+        isProblematic,
+        isChronic,
       },
       select: contactSelect,
     });
@@ -254,12 +331,27 @@ export async function importContactsFromCsv(csvContent: string) {
     const cells = line.split(',').map((cell) => cell.trim());
     if (!cells.length) continue;
 
-    const [name, phone, dni, area] = cells;
+    const [
+      name,
+      phone,
+      dni,
+      area,
+      obraSocial,
+      obraSocial2,
+      vip,
+      problematic,
+      chronic,
+    ] = cells;
     entries.push({
       name,
       phone,
       dni,
       area: area ?? null,
+      obraSocial: obraSocial ?? null,
+      obraSocial2: obraSocial2 ?? null,
+      isVip: vip,
+      isProblematic: problematic,
+      isChronic: chronic,
     });
   }
 
@@ -293,6 +385,11 @@ export async function findOrCreateContactByPhone(
     photoUrl?: string | null;
     address1?: string | null;
     address2?: string | null;
+    obraSocial?: string | null;
+    obraSocial2?: string | null;
+    isVip?: boolean;
+    isProblematic?: boolean;
+    isChronic?: boolean;
   }
 ) {
   const phone = normalizePhone(phoneValue);
@@ -312,6 +409,11 @@ export async function findOrCreateContactByPhone(
       areaId: defaults?.areaId ?? null,
       address1: sanitizeAddress(defaults?.address1),
       address2: sanitizeAddress(defaults?.address2),
+      obraSocial: sanitizeNote(defaults?.obraSocial ?? null),
+      obraSocial2: sanitizeNote(defaults?.obraSocial2 ?? null),
+      isVip: Boolean(defaults?.isVip),
+      isProblematic: Boolean(defaults?.isProblematic),
+      isChronic: Boolean(defaults?.isChronic),
     },
     select: contactSelect,
   });

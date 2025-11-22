@@ -236,6 +236,11 @@ export const conversationSelect = {
       createdAt: true,
       updatedAt: true,
       dni: true,
+      obraSocial: true,
+      obraSocial2: true,
+      isVip: true,
+      isProblematic: true,
+      isChronic: true,
     },
   },
   area: {
