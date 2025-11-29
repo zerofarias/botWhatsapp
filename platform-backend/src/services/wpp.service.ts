@@ -1341,6 +1341,15 @@ async function handleIncomingMessage(
   let conversation = ensureResult.conversation;
   const contact = ensureResult.contact;
   const conversationId = BigInt(conversation.id);
+  console.log(
+    `[WPP DEBUG] Incoming message ${message.id ?? '<no-id>'} from ${
+      message.from
+    }: conversation=${conversationId}, status=${
+      conversation.status
+    }, botActive=${conversation.botActive}, ensureCreated=${
+      ensureResult.created
+    }`
+  );
 
   if (externalId) {
     // Verificar cache de procesamiento antes de consultar la base de datos
@@ -1545,6 +1554,9 @@ async function handleIncomingMessage(
   }
 
   if (!conversation.botActive) {
+    console.warn(
+      `[WPP DEBUG] Bot inactive for conversation ${conversationId} (status ${conversation.status}). Reply skipped.`
+    );
     return;
   }
 
@@ -1942,10 +1954,7 @@ async function handleIncomingMessage(
             attachmentRecord.attachments = [
               {
                 url: mediaEntryUrl,
-                type:
-                  (record?.mediaType as string | null) ??
-                  mediaType ??
-                  null,
+                type: (record?.mediaType as string | null) ?? mediaType ?? null,
                 caption,
                 fileName: messageFilename ?? null,
                 mimetype: messageMimetype ?? null,
@@ -2313,6 +2322,11 @@ function attachMessageHandlers(
     const externalId = extractMessageExternalId(message);
     const finishTrackedTask = beginTrackedTask('incoming-message');
     try {
+      console.log(
+        `[WPP DEBUG] received raw message event ${
+          message.id ?? '<no-id>'
+        } from ${message.from}`
+      );
       const cache = sessions.get(ownerUserId);
       if (!cache || cache.paused) {
         finishTrackedTask();
@@ -2595,8 +2609,8 @@ async function createOrderFromNodeAction(
                 typeof attachment.text === 'string' ? attachment.text : null,
             };
           })
-          .filter(
-            (entry): entry is OrderNodeAttachmentPayload => Boolean(entry)
+          .filter((entry): entry is OrderNodeAttachmentPayload =>
+            Boolean(entry)
           )
       : [];
   const contextSnapshot = parseOrderSnapshot(payload.contextSnapshot);

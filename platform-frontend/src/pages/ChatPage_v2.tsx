@@ -4,7 +4,7 @@
  * Simplified from original 100+ lines
  */
 
-import React, { useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useCallback, useRef, useState } from 'react';
 import { useChatStore, type Message } from '../store/chatStore';
 import { getSocketManager } from '../services/socket/SocketManager';
 import { useConversations } from '../hooks/v2/useConversations';
@@ -14,8 +14,9 @@ import ChatView_v2 from '../components/chat/ChatView_v2';
 import ChatComposer_v2 from '../components/chat/ChatComposer_v2';
 import GroupedConversationList_v2 from '../components/chat/GroupedConversationList_v2';
 import { FiX } from 'react-icons/fi';
-import { api } from '../services/api';
+import { api, closeAllConversations } from '../services/api';
 import { normalizeSender } from '../services/socket/socketSchemas';
+import Swal from 'sweetalert2';
 import './ChatPage_v2.css';
 
 const ChatPage: React.FC = () => {
@@ -31,7 +32,15 @@ const ChatPage: React.FC = () => {
   );
 
   // Load conversations
-  const { conversations, loading: loadingConversations } = useConversations();
+  const {
+    conversations,
+    loading: loadingConversations,
+    refetch: refreshConversations,
+  } = useConversations();
+  const setActiveConversation = useChatStore(
+    (state) => state.setActiveConversation
+  );
+  const [closingAllChats, setClosingAllChats] = useState(false);
 
   // Register socket listeners (socket is already initialized in DashboardLayout)
   useSocketListeners();
@@ -164,6 +173,50 @@ const ChatPage: React.FC = () => {
     []
   );
 
+  const handleCloseAllChats = useCallback(async () => {
+    const confirmed = await Swal.fire({
+      title: 'Cerrar todos los chats',
+      text: 'Esta acción marcará todas las conversaciones abiertas como cerradas.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Cerrar todos',
+      cancelButtonText: 'Cancelar',
+      reverseButtons: true,
+    });
+    if (!confirmed.isConfirmed) {
+      return;
+    }
+
+    setClosingAllChats(true);
+    try {
+      const result = await closeAllConversations();
+      await refreshConversations();
+      setActiveConversation(null);
+      if (result?.closed && result.closed > 0) {
+        await Swal.fire(
+          'Chats cerrados',
+          `Se cerraron ${result.closed} chat${result.closed === 1 ? '' : 's'}.`,
+          'success'
+        );
+      } else {
+        await Swal.fire(
+          'No hay chats abiertos',
+          'No se encontraron conversaciones pendientes para cerrar.',
+          'info'
+        );
+      }
+    } catch (error) {
+      console.error('Error cerrando todos los chats', error);
+      await Swal.fire(
+        'Error',
+        'No se pudieron cerrar todos los chats. Intenta de nuevo.',
+        'error'
+      );
+    } finally {
+      setClosingAllChats(false);
+    }
+  }, [refreshConversations, closeAllConversations]);
+
   const handleDismissError = useCallback(() => {
     useChatStore.getState().setError(null);
   }, []);
@@ -175,6 +228,18 @@ const ChatPage: React.FC = () => {
         <div className="conversation-list-panel-v2">
           <div className="conversation-list-header-v2">
             <h2>Conversaciones</h2>
+            <button
+              type="button"
+              className="conversation-close-all-btn"
+              onClick={handleCloseAllChats}
+              disabled={
+                closingAllChats ||
+                loadingConversations ||
+                conversations.length === 0
+              }
+            >
+              {closingAllChats ? 'Cerrando chats...' : 'Cerrar todos los chats'}
+            </button>
           </div>
 
           <GroupedConversationList_v2

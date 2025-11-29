@@ -17,6 +17,11 @@ export async function getAllChats() {
   const res = await api.get('/conversations/all');
   return res.data;
 }
+
+export async function closeAllConversations(reason?: string) {
+  const res = await api.post('/conversations/close-all', { reason });
+  return res.data;
+}
 import axios from 'axios';
 
 const baseURL =

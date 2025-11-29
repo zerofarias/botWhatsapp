@@ -17,7 +17,7 @@ export function useSocketListeners() {
     }
 
     let cancelled = false;
-    console.warn('⚠️ Socket manager not available yet, retrying…');
+    console.warn('?? Socket manager not available yet, retrying…');
 
     const interval = setInterval(() => {
       if (cancelled) return;
@@ -228,6 +228,41 @@ export function useSocketListeners() {
         }
       );
 
+      const unsubConversationNew = socket.on('conversation:new', (payload) => {
+        console.log('✨ Conversation new:', payload.id);
+
+        const normalizedConversation = {
+          ...payload,
+          id:
+            typeof payload.id === 'string'
+              ? parseInt(payload.id, 10)
+              : payload.id,
+          botId:
+            typeof payload.botId === 'string'
+              ? parseInt(payload.botId, 10)
+              : payload.botId,
+          contactId:
+            typeof payload.contactId === 'string'
+              ? parseInt(payload.contactId, 10)
+              : payload.contactId,
+          progressStatus:
+            typeof payload.progressStatus === 'string'
+              ? payload.progressStatus.ToUpper()
+              : payload.progressStatus,
+        };
+
+        const store = useChatStore.getState();
+        const exists = store.conversations.some(
+          (c) => c.id === normalizedConversation.id
+        );
+        if (!exists) {
+          store.addConversation(normalizedConversation);
+        }
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('chat:refresh-conversations'));
+        }
+      });
       const unsubConversationDeleted = socket.on(
         'conversation:deleted',
         (payload) => {

@@ -87,9 +87,17 @@ export async function resetBotSession(req: Request, res: Response) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
+  const io = getSocketServer();
   try {
-    const io = getSocketServer();
-    await stopSession(req.user.id);
+    try {
+      await stopSession(req.user.id);
+    } catch (stopError) {
+      console.warn(
+        '[BotController] stopSession failed during reset, continuing to clear data:',
+        stopError
+      );
+    }
+
     await clearSessionData(req.user.id);
     io?.to(`user:${req.user.id}`).emit('session:status', 'DISCONNECTED');
     res.status(200).json({
