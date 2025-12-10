@@ -11,6 +11,7 @@ export const FLOW_NODE_TYPES = [
   'REDIRECT_BOT',
   'REDIRECT_AGENT',
   'AI',
+  'HTTP',
   'SET_VARIABLE',
   'NOTE',
   'DATA_LOG',
@@ -31,6 +32,7 @@ export const FLOW_NODE_TYPE_LABELS: Record<FlowNodeType, string> = {
   REDIRECT_BOT: 'Redirigir a Bot',
   REDIRECT_AGENT: 'Redirigir a Agente',
   AI: 'Consulta IA',
+  HTTP: 'Petición HTTP',
   SET_VARIABLE: 'Setear Variable',
   NOTE: 'Nota Interna',
   DATA_LOG: 'Guardar Datos',
@@ -50,6 +52,7 @@ export const FLOW_NODE_TYPE_DESCRIPTIONS: Record<FlowNodeType, string> = {
   REDIRECT_BOT: 'Transfiere la conversación a otro bot.',
   REDIRECT_AGENT: 'Asigna la conversación a un agente humano.',
   AI: 'Consulta un modelo de IA y procesa la respuesta.',
+  HTTP: 'Realiza una petición HTTP a una API externa y guarda la respuesta.',
   SET_VARIABLE: 'Guarda o modifica una variable en el contexto.',
   NOTE: 'Nota interna que no se envía al usuario, solo se registra.',
   DATA_LOG:
@@ -73,6 +76,26 @@ export interface FlowOption {
 export type FlowConditionMatchMode = 'EXACT' | 'CONTAINS' | 'REGEX';
 
 export type FlowVariableType = 'STRING' | 'NUMBER' | 'BOOLEAN' | 'JSON';
+
+// Tipos para mapeo de respuesta HTTP
+export type HTTPResponseValueType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'auto';
+
+export interface HTTPResponseMapping {
+  id: string;
+  path: string;           // Path en notación dot (ej: "data.items[0].name")
+  variableName: string;   // Nombre de la variable donde guardar
+  valueType: HTTPResponseValueType; // Tipo de valor esperado
+  defaultValue?: string;  // Valor por defecto si el path no existe
+  enabled: boolean;       // Si está habilitado el mapeo
+}
+
+export interface HTTPResponseFieldInfo {
+  path: string;
+  type: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'null';
+  value: unknown;
+  depth: number;
+  arrayIndex?: number;    // Si es elemento de array, su índice
+}
 
 export interface FlowCondition {
   id: string;
@@ -104,6 +127,7 @@ export type FlowNodeData =
   | RedirectBotNodeData
   | RedirectAgentNodeData
   | AINodeData
+  | HTTPNodeData
   | SetVariableNodeData
   | NoteNodeData
   | DataLogNodeData
@@ -244,6 +268,46 @@ export interface AINodeData extends BaseNodeData {
   prompt: string;
   model: string;
   responseVariableName?: string | null;
+  availableVariables?: Array<{
+    name: string;
+    createdByNodeId?: string;
+    createdByNodeType?: string;
+    createdByNodeLabel?: string;
+  }>;
+}
+
+// Tipos para peticiones HTTP
+export type HTTPMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+
+export interface HTTPQueryParam {
+  id: string;
+  key: string;
+  value: string; // Puede contener variables como ${flow_dni}
+  enabled: boolean;
+}
+
+export interface HTTPHeader {
+  id: string;
+  key: string;
+  value: string;
+  enabled: boolean;
+  secret?: boolean; // Para ocultar valores sensibles como tokens
+}
+
+export interface HTTPNodeData extends BaseNodeData {
+  type: 'HTTP';
+  method: HTTPMethod;
+  url: string;
+  queryParams: HTTPQueryParam[];
+  headers: HTTPHeader[];
+  body?: string; // JSON body para POST/PUT/PATCH
+  bodyType?: 'none' | 'json' | 'form-urlencoded';
+  responseVariableName: string; // Variable donde guardar la respuesta
+  responseVariablePrefix?: string; // Prefijo para variables (ej: "http_" o "itbl_")
+  emptyResponseMessage?: string; // Mensaje si la respuesta está vacía
+  fallbackNodeId?: string | null; // Nodo al que redirigir si hay error/vacío
+  timeout?: number; // Timeout en segundos (default 30)
+  responseMappings?: HTTPResponseMapping[]; // Mapeos de campos de respuesta a variables
   availableVariables?: Array<{
     name: string;
     createdByNodeId?: string;

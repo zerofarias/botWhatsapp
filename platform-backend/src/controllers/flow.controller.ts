@@ -269,15 +269,7 @@ export async function updateFlowNode(req: Request, res: Response) {
   } = req.body ?? {};
 
   // DEBUG: Log para ver qué se recibe
-  if (type === 'NOTE') {
-    console.log(`[UPDATE NODE] Actualizando nodo NOTE ${id}:`, {
-      id,
-      name,
-      message,
-      type,
-      metadata: rawMetadata,
-    });
-  }
+  // (Comentado para producción)
 
   // Sincronizar builder.type con el tipo real del nodo
   let metadata = rawMetadata;
@@ -467,6 +459,25 @@ type BuilderMetadata = {
   orderPaymentMethod?: string | null;
   orderSendConfirmation?: boolean;
   orderConfirmationMessage?: string | null;
+  // HTTP node properties
+  method?: string | null;
+  url?: string | null;
+  queryParams?: Array<{ id: string; key: string; value: string; enabled: boolean }> | null;
+  headers?: Array<{ id: string; key: string; value: string; enabled: boolean; secret?: boolean }> | null;
+  body?: string | null;
+  bodyType?: string | null;
+  responseVariablePrefix?: string | null;
+  emptyResponseMessage?: string | null;
+  fallbackNodeId?: string | null;
+  timeout?: number | null;
+  responseMappings?: Array<{
+    id: string;
+    path: string;
+    variableName: string;
+    valueType: string;
+    defaultValue?: string;
+    enabled: boolean;
+  }> | null;
 };
 
 const DEFAULT_POSITION = { x: 160, y: 120 };
@@ -481,6 +492,7 @@ const NODE_TYPE_SET = new Set<NodeType>([
   'REDIRECT_AGENT',
   'AI',
   'SET_VARIABLE',
+  'HTTP',
   'END',
   'END_CLOSED',
   'ORDER',
@@ -728,6 +740,18 @@ function extractBuilderMetadata(value: unknown): BuilderMetadata | null {
     orderConfirmationMessage: sanitizeStringValue(
       builder.orderConfirmationMessage
     ),
+    // HTTP node fields
+    method: sanitizeStringValue(builder.method),
+    url: sanitizeStringValue(builder.url),
+    queryParams: Array.isArray(builder.queryParams) ? builder.queryParams as BuilderMetadata['queryParams'] : undefined,
+    headers: Array.isArray(builder.headers) ? builder.headers as BuilderMetadata['headers'] : undefined,
+    body: sanitizeStringValue(builder.body),
+    bodyType: sanitizeStringValue(builder.bodyType),
+    responseVariablePrefix: sanitizeStringValue(builder.responseVariablePrefix),
+    emptyResponseMessage: sanitizeStringValue(builder.emptyResponseMessage),
+    fallbackNodeId: sanitizeStringValue(builder.fallbackNodeId),
+    timeout: typeof builder.timeout === 'number' ? builder.timeout : undefined,
+    responseMappings: Array.isArray(builder.responseMappings) ? builder.responseMappings as BuilderMetadata['responseMappings'] : undefined,
   };
 }
 
@@ -980,16 +1004,6 @@ export async function saveFlowGraph(req: Request, res: Response) {
     deleteMissing,
   });
 
-  // Log detallado de nodos recibidos
-  console.log('[saveFlowGraph] NODOS RECIBIDOS DEL FRONTEND:');
-  nodesPayload.forEach((node: any, idx: number) => {
-    console.log(
-      `  [${idx}] id="${node.id}" type="${node.type}" flowId=${
-        node.data?.flowId ?? 'undefined'
-      }`
-    );
-  });
-
   try {
     const persistGraph = async (
       client: Prisma.TransactionClient | typeof prisma
@@ -1012,60 +1026,6 @@ export async function saveFlowGraph(req: Request, res: Response) {
         const nodeId = normalized.id;
         const data = normalized.data ?? {};
         const dataRecord = data as Record<string, unknown>;
-
-        // DEBUG: Log de todos los datos recibidos para CAPTURE
-        if (dataRecord.type === 'CAPTURE') {
-          console.log(
-            `[DEBUG] CAPTURE node "${nodeId}": data keys = ${Object.keys(
-              dataRecord
-            ).join(', ')}`
-          );
-          console.log(
-            `[DEBUG]   responseVariableName = "${dataRecord.responseVariableName}"`
-          );
-          console.log(`[DEBUG]   message = "${dataRecord.message}"`);
-        }
-
-        // DEBUG: Log para NOTE
-        if (dataRecord.type === 'NOTE') {
-          console.log(
-            `[DEBUG] NOTE node "${nodeId}": data keys = ${Object.keys(
-              dataRecord
-            ).join(', ')}`
-          );
-          console.log(`[DEBUG]   message = "${dataRecord.message}"`);
-          console.log(`[DEBUG]   value = "${dataRecord.value}"`);
-          console.log(`[DEBUG]   label = "${dataRecord.label}"`);
-        }
-
-        // DEBUG: Log para CONDITIONAL
-        if (dataRecord.type === 'CONDITIONAL') {
-          console.log(
-            `[DEBUG] CONDITIONAL node "${nodeId}": data keys = ${Object.keys(
-              dataRecord
-            ).join(', ')}`
-          );
-          console.log(
-            `[DEBUG]   sourceVariable = "${dataRecord.sourceVariable}"`
-          );
-          console.log(
-            `[DEBUG]   evaluations count = ${
-              Array.isArray(dataRecord.evaluations)
-                ? dataRecord.evaluations.length
-                : 0
-            }`
-          );
-          if (
-            Array.isArray(dataRecord.evaluations) &&
-            dataRecord.evaluations.length > 0
-          ) {
-            console.log(
-              `[DEBUG]   first evaluation = ${JSON.stringify(
-                dataRecord.evaluations[0]
-              )}`
-            );
-          }
-        }
 
         const options = Array.isArray(data.options)
           ? (data.options as unknown[])
@@ -1104,7 +1064,7 @@ export async function saveFlowGraph(req: Request, res: Response) {
                   label:
                     typeof evaluation.label === 'string'
                       ? evaluation.label
-                      : 'Condici��n',
+                      : 'Condicion',
                   match:
                     typeof evaluation.value === 'string'
                       ? evaluation.value
@@ -1163,15 +1123,8 @@ export async function saveFlowGraph(req: Request, res: Response) {
           if (base64Match) {
             // Tomar solo el texto antes de la imagen
             message = message.substring(0, base64Match.index || 0).trim();
-            console.log(
-              `[saveFlowGraph] Node "${nodeId}" (type: ${flowType}): Imagen removida del contenido. Mensaje limpio: "${message}"`
-            );
           }
         }
-
-        console.log(
-          `[saveFlowGraph] Node "${nodeId}" (type: ${flowType}): data.message="${message}"`
-        );
 
         const isActive =
           typeof data.isActive === 'boolean' ? data.isActive : true;
@@ -1234,13 +1187,6 @@ export async function saveFlowGraph(req: Request, res: Response) {
         const effectiveWaitForResponse =
           flowType === 'AI' ? false : waitForResponse;
 
-        // DEBUG: Log responseVariableName
-        if (flowType === 'CAPTURE') {
-          console.log(
-            `[saveFlowGraph] CAPTURE Node "${nodeId}": responseVariableName="${dataRecord.responseVariableName}" → sanitized="${responseVariableName}"`
-          );
-        }
-
         const rawVariableType =
           typeof dataRecord.responseVariableType === 'string'
             ? dataRecord.responseVariableType.toUpperCase()
@@ -1275,6 +1221,33 @@ export async function saveFlowGraph(req: Request, res: Response) {
         // Campos para SET_VARIABLE
         const variableValue = sanitizeStringValue(dataRecord.variable);
         const valueValue = sanitizeStringValue(dataRecord.value);
+
+        // Campos para HTTP
+        const httpMethodValue = sanitizeStringValue(dataRecord.method) || 'GET';
+        const httpUrlValue = sanitizeStringValue(dataRecord.url);
+        const httpQueryParams = Array.isArray(dataRecord.queryParams)
+          ? dataRecord.queryParams
+          : [];
+        const httpHeaders = Array.isArray(dataRecord.headers)
+          ? dataRecord.headers
+          : [];
+        const httpBody = sanitizeStringValue(dataRecord.body);
+        const httpBodyType = sanitizeStringValue(dataRecord.bodyType) || 'none';
+        const httpResponseVariableName = sanitizeStringValue(
+          dataRecord.responseVariableName
+        );
+        const httpResponseVariablePrefix =
+          sanitizeStringValue(dataRecord.responseVariablePrefix) || 'http_';
+        const httpEmptyResponseMessage = sanitizeStringValue(
+          dataRecord.emptyResponseMessage
+        );
+        const httpFallbackNodeId = sanitizeStringValue(dataRecord.fallbackNodeId);
+        const httpTimeout =
+          typeof dataRecord.timeout === 'number' ? dataRecord.timeout : 30;
+        const httpResponseMappings = Array.isArray(dataRecord.responseMappings)
+          ? dataRecord.responseMappings
+          : [];
+
         const orderConceptValue = sanitizeStringValue(
           dataRecord.orderConcept
         );
@@ -1317,7 +1290,9 @@ export async function saveFlowGraph(req: Request, res: Response) {
             listDescription: listDescription ?? null,
             waitForResponse: effectiveWaitForResponse || undefined,
             responseVariableName:
-              flowType === 'AI'
+              flowType === 'HTTP'
+                ? httpResponseVariableName
+                : flowType === 'AI'
                 ? aiResponseVariable ?? undefined
                 : responseVariableName ?? undefined,
             responseVariableType,
@@ -1361,6 +1336,22 @@ export async function saveFlowGraph(req: Request, res: Response) {
               flowType === 'ORDER'
                 ? orderConfirmationMessageValue ?? undefined
                 : undefined,
+            // Campos para HTTP
+            method: flowType === 'HTTP' ? httpMethodValue : undefined,
+            url: flowType === 'HTTP' ? httpUrlValue : undefined,
+            queryParams: flowType === 'HTTP' ? httpQueryParams : undefined,
+            headers: flowType === 'HTTP' ? httpHeaders : undefined,
+            body: flowType === 'HTTP' ? httpBody : undefined,
+            bodyType: flowType === 'HTTP' ? httpBodyType : undefined,
+            responseVariablePrefix:
+              flowType === 'HTTP' ? httpResponseVariablePrefix : undefined,
+            emptyResponseMessage:
+              flowType === 'HTTP' ? httpEmptyResponseMessage : undefined,
+            fallbackNodeId:
+              flowType === 'HTTP' ? httpFallbackNodeId : undefined,
+            timeout: flowType === 'HTTP' ? httpTimeout : undefined,
+            responseMappings:
+              flowType === 'HTTP' ? httpResponseMappings : undefined,
           },
         };
 
@@ -1402,10 +1393,6 @@ export async function saveFlowGraph(req: Request, res: Response) {
             })
           : null;
 
-        console.log(
-          `[saveFlowGraph] Node "${nodeId}": flowId=${flowId}, found by flowId=${!!existing}`
-        );
-
         // Si no encuentra por flowId, buscar por reactId en metadata
         if (!existing && nodeId) {
           const candidates: Array<{
@@ -1420,39 +1407,20 @@ export async function saveFlowGraph(req: Request, res: Response) {
             select: { id: true, botId: true, metadata: true },
           });
 
-          console.log(
-            `[saveFlowGraph] Searching for reactId="${nodeId}" among ${candidates.length} existing flows`
-          );
-
           for (const candidate of candidates) {
             const builderMeta = extractBuilderMetadata(
               candidate.metadata ?? null
             );
-            console.log(
-              `  Candidate id=${candidate.id}: reactId="${builderMeta?.reactId}"`
-            );
 
             if (builderMeta?.reactId === nodeId) {
-              console.log(
-                `  ✓ FOUND MATCH! Using existing flow id=${candidate.id}`
-              );
               existing = { id: candidate.id, botId: candidate.botId };
               break;
             }
-          }
-
-          if (!existing) {
-            console.log(
-              `  ✗ NO MATCH FOUND for reactId="${nodeId}" - will CREATE new`
-            );
           }
         }
 
         if (existing) {
           // ACTUALIZAR flow existente
-          console.log(
-            `[saveFlowGraph] UPDATING existing flow id=${existing.id} for node="${nodeId}"`
-          );
 
           if (existing.botId !== payloadBotId) {
             const error = new Error(GRAPH_UNAUTHORIZED_ERROR);
@@ -1477,11 +1445,8 @@ export async function saveFlowGraph(req: Request, res: Response) {
           });
 
           recordId = updated.id;
-          console.log(`[saveFlowGraph] ✓ UPDATED flow id=${recordId}`);
         } else {
           // CREAR nuevo flow
-          console.log(`[saveFlowGraph] CREATING new flow for node="${nodeId}"`);
-
           const created = await client.flow.create({
             data: {
               name: label,
@@ -1499,7 +1464,6 @@ export async function saveFlowGraph(req: Request, res: Response) {
             select: { id: true },
           });
           recordId = created.id;
-          console.log(`[saveFlowGraph] ✓ CREATED new flow id=${recordId}`);
         }
 
         nodeIdToFlowId.set(nodeId, recordId);
@@ -1590,15 +1554,6 @@ export async function saveFlowGraph(req: Request, res: Response) {
         const triggerWithSourceHandle = sourceHandle
           ? `${sourceHandle}||${trigger}`
           : trigger;
-
-        // DEBUG: Log para verificar el formato
-        if (sourceHandle) {
-          console.log('[saveFlowGraph] Edge trigger format:', {
-            sourceHandle,
-            trigger,
-            triggerWithSourceHandle,
-          });
-        }
 
         if (triggerWithSourceHandle.length > 0 && normalized.target) {
           const set =
@@ -1756,15 +1711,6 @@ export async function getFlowGraph(req: Request, res: Response) {
     const uniqueFlows = Array.from(reactIdToFlow.values());
     const flowIds = uniqueFlows.map((flow) => flow.id);
 
-    // DEBUG
-    console.log('[getFlowGraph] Total flows in DB:', flows.length);
-    console.log('[getFlowGraph] Unique flows after dedup:', uniqueFlows.length);
-    console.log('[getFlowGraph] Flow IDs included:', flowIds);
-    console.log(
-      '[getFlowGraph] All flow IDs in DB:',
-      flows.map((f) => f.id)
-    );
-
     // Buscar conexiones donde AMBOS nodos (fromId y toId) están en el conjunto completo de flows
     const connections = await prisma.flowConnection.findMany({
       where: {
@@ -1776,19 +1722,6 @@ export async function getFlowGraph(req: Request, res: Response) {
     const allFlowIds = new Set(flows.map((f) => f.id));
     const validConnections = connections.filter((conn) => {
       return allFlowIds.has(conn.fromId) && allFlowIds.has(conn.toId);
-    });
-
-    // DEBUG
-    console.log(
-      '[getFlowGraph] Connections found (total):',
-      connections.length
-    );
-    console.log(
-      '[getFlowGraph] Valid connections (both nodes exist):',
-      validConnections.length
-    );
-    validConnections.forEach((conn) => {
-      console.log(`  - Connection ${conn.id}: ${conn.fromId} → ${conn.toId}`);
     });
 
     type SerializedEdgeResponse = {
@@ -1816,13 +1749,6 @@ export async function getFlowGraph(req: Request, res: Response) {
       flowIdToReactId.set(flow.id, reactId);
 
       const nodeType = normalizeFlowNodeType(flow.type);
-
-      // DEBUG: Log para CONDITIONAL
-      if (nodeType === 'CONDITIONAL') {
-        console.log(
-          `[getFlowGraph] Reading flow id=${flow.id} (${reactId}): type="${nodeType}", builderMeta.sourceVariable="${builderMeta?.sourceVariable}"`
-        );
-      }
 
       const buttonSettings = buildButtonSettingsFromMetadata(builderMeta);
       const listSettings = buildListSettingsFromMetadata(builderMeta);
@@ -1915,9 +1841,6 @@ export async function getFlowGraph(req: Request, res: Response) {
         ) {
           nodeData.sourceVariable = builderMeta.sourceVariable;
         }
-        console.log(
-          `[getFlowGraph] CONDITIONAL node "${reactId}": sourceVariable in nodeData="${nodeData.sourceVariable}", from builderMeta="${builderMeta?.sourceVariable}"`
-        );
       }
 
       // Campos para DELAY
@@ -1974,6 +1897,29 @@ export async function getFlowGraph(req: Request, res: Response) {
           builderMeta?.orderConfirmationMessage ?? '';
       }
 
+      if (nodeType === 'HTTP') {
+        nodeData.method = builderMeta?.method ?? 'GET';
+        nodeData.url = builderMeta?.url ?? '';
+        nodeData.queryParams = Array.isArray(builderMeta?.queryParams)
+          ? builderMeta.queryParams
+          : [];
+        nodeData.headers = Array.isArray(builderMeta?.headers)
+          ? builderMeta.headers
+          : [];
+        nodeData.body = builderMeta?.body ?? undefined;
+        nodeData.bodyType = builderMeta?.bodyType ?? 'none';
+        nodeData.responseVariableName = builderMeta?.responseVariableName ?? '';
+        nodeData.responseVariablePrefix =
+          builderMeta?.responseVariablePrefix ?? 'http_';
+        nodeData.emptyResponseMessage =
+          builderMeta?.emptyResponseMessage ?? undefined;
+        nodeData.fallbackNodeId = builderMeta?.fallbackNodeId ?? null;
+        nodeData.timeout = builderMeta?.timeout ?? 30;
+        nodeData.responseMappings = Array.isArray(builderMeta?.responseMappings)
+          ? builderMeta.responseMappings
+          : [];
+      }
+
       const serializedNode = {
         id: reactId,
         type: builderMeta?.type ?? DEFAULT_NODE_TYPE,
@@ -1993,14 +1939,6 @@ export async function getFlowGraph(req: Request, res: Response) {
           return null;
         }
 
-        // DEBUG: Log el trigger tal como está en BD
-        console.log('[getFlowGraph] Connection trigger from DB:', {
-          id: conn.id,
-          fromId: conn.fromId,
-          toId: conn.toId,
-          trigger: conn.trigger,
-        });
-
         // Extraer sourceHandle del trigger: "sourceHandleId||displayLabel"
         let sourceHandle: string | undefined;
         let displayLabel: string | undefined;
@@ -2013,15 +1951,6 @@ export async function getFlowGraph(req: Request, res: Response) {
           } else {
             displayLabel = conn.trigger;
           }
-        }
-
-        // DEBUG: Log resultado de la extracción
-        if (sourceHandle) {
-          console.log('[getFlowGraph] Extracted sourceHandle:', {
-            original: conn.trigger,
-            sourceHandle,
-            displayLabel,
-          });
         }
 
         // Determinar si es conditionId u optionId basándose en el trigger

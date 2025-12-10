@@ -32,6 +32,7 @@ type ConversationListItemProps = {
   groupCount?: number;
   displayLabel?: string;
   fallbackPhone?: string;
+  hasUnreadIndicator?: boolean;
 };
 
 const ConversationListItem: React.FC<ConversationListItemProps> = ({
@@ -41,6 +42,7 @@ const ConversationListItem: React.FC<ConversationListItemProps> = ({
   groupCount = 1,
   displayLabel,
   fallbackPhone,
+  hasUnreadIndicator = false,
 }) => {
   const cleanPhone = formatPhone(
     conversation.contact?.phone || conversation.userPhone || fallbackPhone
@@ -79,8 +81,17 @@ const ConversationListItem: React.FC<ConversationListItemProps> = ({
         ) : (
           <div className="avatar-placeholder">
             {displayName.charAt(0).toUpperCase()}
-            {hasCustomName && <span className="contact-badge">★</span>}
           </div>
+        )}
+        {/* Status Icons on avatar corner */}
+        {(conversation.contact?.isVip ||
+          conversation.contact?.isProblematic ||
+          conversation.contact?.isChronic) && (
+          <span className="avatar-status-icons">
+            {conversation.contact?.isVip && <span title="VIP">⭐</span>}
+            {conversation.contact?.isProblematic && <span title="Problemático">⚠️</span>}
+            {conversation.contact?.isChronic && <span title="Crónico">💊</span>}
+          </span>
         )}
       </div>
       <div className="conversation-content">
@@ -110,6 +121,9 @@ const ConversationListItem: React.FC<ConversationListItemProps> = ({
       {conversation.unreadCount > 0 && (
         <div className="unread-badge">{conversation.unreadCount}</div>
       )}
+      {hasUnreadIndicator && !conversation.unreadCount && (
+        <div className="unread-dot" title="Nuevo mensaje"></div>
+      )}
     </div>
   );
 };
@@ -122,13 +136,19 @@ export const GroupedConversationList_v2: React.FC<Props> = ({
   const activeConversationId = useChatStore(
     (state) => state.activeConversationId
   );
+  
+  // Get unread conversations set for red dot indicator
+  const unreadConversations = useChatStore(
+    (state) => state.unreadConversations
+  );
 
   const handleSelectConversation = (conversationId: number | string) => {
     const id =
       typeof conversationId === 'string'
         ? parseInt(conversationId, 10)
         : conversationId;
-    useChatStore.setState({ activeConversationId: id });
+    // Use setActiveConversation which also clears unread status
+    useChatStore.getState().setActiveConversation(id);
     onSelectConversation?.(id);
   };
 
@@ -162,6 +182,14 @@ export const GroupedConversationList_v2: React.FC<Props> = ({
               ? parseInt(conversation.id, 10)
               : conversation.id)
         );
+        
+        // Check if any conversation in this group has unread messages
+        const groupHasUnread = group.conversations.some((conversation) => {
+          const convId = typeof conversation.id === 'string'
+            ? parseInt(conversation.id, 10)
+            : conversation.id;
+          return unreadConversations.has(convId);
+        });
 
         return (
           <div key={group.phoneNumber} className="phone-group single-entry">
@@ -172,6 +200,7 @@ export const GroupedConversationList_v2: React.FC<Props> = ({
               groupCount={group.conversations.length}
               displayLabel={group.displayNumber}
               fallbackPhone={group.phoneNumber}
+              hasUnreadIndicator={groupHasUnread}
             />
           </div>
         );

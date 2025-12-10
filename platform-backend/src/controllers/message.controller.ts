@@ -1,4 +1,5 @@
 import type { Response } from 'express';
+import { MessageSender } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { executeNodeChain } from '../services/node-execution.service';
 import {
@@ -188,4 +189,51 @@ export async function getMessages(req: AuthenticatedRequest, res: Response) {
   }
   const messages = await listConversationMessages(conversationId);
   return res.json(messages.reverse());
+}
+
+// Devuelve mensajes del día (hoy) con un límite opcional (por defecto 1000)
+export async function getTodayMessagesHandler(
+  req: AuthenticatedRequest,
+  res: Response
+) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const limitParam = Number(req.query?.limit);
+  const safeLimit =
+    !Number.isNaN(limitParam) && limitParam > 0
+      ? Math.min(limitParam, 5000)
+      : 1000;
+
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const messages = await prisma.message.findMany({
+    where: {
+      createdAt: {
+        gte: startOfDay,
+      },
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+    take: safeLimit,
+    select: {
+      id: true,
+      conversationId: true,
+      content: true,
+      createdAt: true,
+      senderType: true,
+    },
+  });
+
+  const mapped = messages.map((m) => ({
+    direction: m.senderType === MessageSender.CONTACT ? 'in' : 'out',
+    conversationId: m.conversationId.toString(),
+    content: m.content,
+    timestamp: m.createdAt.toISOString(),
+  }));
+
+  return res.json(mapped);
 }

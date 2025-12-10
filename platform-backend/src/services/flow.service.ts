@@ -37,18 +37,20 @@ export async function getNextNodeAndContext(
   // Buscar el nodo actual y sus hijos
   let currentNode: FlowNode | null = null;
   if (input.currentNodeId) {
-    // Obtener el árbol completo de nodos para el área/bot
-    // (puedes ajustar el filtro según tu modelo de negocio)
-    const flowTree = await listFlowTree({
-      createdBy: typeof input.botId === 'number' ? input.botId : 1,
-      areaId: undefined,
-      includeInactive: false,
+    // Obtener los flujos del bot específico
+    // Usamos botId para filtrar, si no hay botId buscamos todos los flujos activos
+    const flowTree = await prisma.flow.findMany({
+      where: {
+        ...(input.botId ? { botId: input.botId } : {}),
+        isActive: true,
+      },
+      select: flowSelect,
     });
-    // Buscar el nodo actual en el árbol
-    currentNode =
-      flowTree
-        .flatMap(flattenFlowTree)
-        .find((node) => node.id === Number(input.currentNodeId)) ?? null;
+    // Buscar el nodo actual
+    currentNode = flowTree.find((node) => node.id === Number(input.currentNodeId)) as FlowNode | null;
+    if (currentNode) {
+      currentNode.children = [];
+    }
   }
 
   // Buscar hijos del nodo actual (posibles siguientes nodos)
@@ -156,6 +158,7 @@ export type FlowNode = Prisma.FlowGetPayload<{
 type ListFlowsOptions = {
   createdBy: number;
   areaId?: number | null;
+  botId?: number | null;
   includeInactive?: boolean;
 };
 
@@ -175,10 +178,11 @@ type FlowInput = {
 export async function listFlowTree({
   createdBy,
   areaId,
+  botId,
   includeInactive = false,
 }: ListFlowsOptions): Promise<FlowNode[]> {
-  // Verificar cache primero
-  const cacheKey = getCacheKey(createdBy, areaId, includeInactive);
+  // Verificar cache primero - incluir botId en la clave
+  const cacheKey = `flow_tree_${createdBy}_${areaId ?? 'null'}_${botId ?? 'null'}_${includeInactive}`;
   const cached = flowTreeCache.get(cacheKey);
 
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -194,12 +198,11 @@ export async function listFlowTree({
     where: {
       createdBy,
       areaId: areaId ?? undefined,
+      ...(botId ? { botId } : {}),
       isActive: includeInactive ? undefined : true,
     },
     select: flowSelect,
   });
-
-  console.log('[DEBUG] Raw flows from DB:', JSON.stringify(flows, null, 2));
 
   const flowsById: { [key: number]: FlowNode } = {};
 

@@ -83,6 +83,9 @@ type BuilderMetadata = {
   orderPaymentMethod?: string | null;
   orderSendConfirmation?: boolean;
   orderConfirmationMessage?: string | null;
+  // DATA_LOG
+  dataType?: string;
+  description?: string;
 };
 
 type OrderActionPayload = {
@@ -103,6 +106,56 @@ const ORDER_CONTEXT_OMIT_KEYS = new Set([
   'waitingForInput',
   'waitingVariable',
 ]);
+
+/**
+ * Obtiene un valor de un objeto usando notación dot path
+ * Soporta arrays con notación [index], ej: "items[0].name" o "[0].name"
+ */
+function getValueByPath(obj: unknown, path: string): unknown {
+  if (!path || obj === null || obj === undefined) return undefined;
+  
+  // Convertir notación de array a notación dot: items[0] -> items.0, [0] -> 0
+  const normalizedPath = path.replace(/\[(\d+)\]/g, '.$1');
+  // Dividir y filtrar partes vacías (para manejar paths que empiezan con [0])
+  const parts = normalizedPath.split('.').filter(part => part !== '');
+  let current: unknown = obj;
+  
+  for (const part of parts) {
+    if (current === null || current === undefined) return undefined;
+    if (typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  
+  return current;
+}
+
+/**
+ * Convierte un valor al tipo especificado
+ */
+function convertValueToType(value: unknown, targetType: string): unknown {
+  if (value === null || value === undefined) return value;
+  
+  switch (targetType) {
+    case 'string':
+      return typeof value === 'object' ? JSON.stringify(value) : String(value);
+    case 'number': {
+      const num = Number(value);
+      return isNaN(num) ? value : num;
+    }
+    case 'boolean':
+      if (typeof value === 'boolean') return value;
+      if (typeof value === 'string') {
+        return value.toLowerCase() === 'true' || value === '1';
+      }
+      return Boolean(value);
+    case 'object':
+    case 'array':
+      return value; // Mantener como está
+    case 'auto':
+    default:
+      return value;
+  }
+}
 
 type ConditionOperator =
   | 'EQUALS'
@@ -514,6 +567,15 @@ export async function executeNode({
 
   switch (node.type) {
     case 'START': {
+      // Agregar delay aleatorio entre 1.5 y 3 segundos para parecer más natural
+      const randomDelay = Math.random() * (3000 - 1500) + 1500; // 1500ms a 3000ms
+      actions.push({
+        type: 'delay',
+        payload: {
+          duration: randomDelay,
+          reason: 'START node response delay (anti-spam)',
+        },
+      });
       sendMessage();
       nextNodeId = resolveNextNodeId();
       break;
@@ -967,8 +1029,281 @@ export async function executeNode({
       nextNodeId = resolveNextNodeId();
       break;
     }
+    case 'HTTP': {
+      // HTTP: Realizar peticiones HTTP a APIs externas
+      updatedContext.waitingForInput = false;
+      updatedContext.waitingVariable = null;
+
+      const httpMeta = builderMeta as unknown as {
+        method?: string;
+        url?: string;
+        headers?: Array<{ key: string; value: string; enabled?: boolean }>;
+        queryParams?: Array<{ key: string; value: string; enabled?: boolean }>;
+        body?: string;
+        responseVariableName?: string;
+        responseVariablePrefix?: string;
+        emptyResponseMessage?: string;
+        responseMappings?: Array<{
+          id: string;
+          path: string;
+          variableName: string;
+          valueType: string;
+          defaultValue?: string;
+          enabled: boolean;
+        }>;
+      };
+
+      const method = (httpMeta.method || 'GET').toUpperCase();
+      let url = typeof httpMeta.url === 'string' ? httpMeta.url.trim() : '';
+      const responseVariableName = httpMeta.responseVariableName || 'http_response';
+      const responseVariablePrefix = httpMeta.responseVariablePrefix || 'http_';
+      const emptyResponseMessage = httpMeta.emptyResponseMessage || '';
+      const responseMappings = Array.isArray(httpMeta.responseMappings) 
+        ? httpMeta.responseMappings.filter(m => m.enabled) 
+        : [];
+
+      // Mapear conexiones por handle (http-success, http-error)
+      const handleConnections = mapConnectionsByHandle(connections);
+      const successNodeId = handleConnections.get('http-success') ?? resolveNextNodeId();
+      const errorNodeId = handleConnections.get('http-error') ?? null;
+
+      if (!url) {
+        console.warn(`[HTTP] Node ${node.id}: URL no configurada`);
+        // Guardar error en la variable de respuesta
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (updatedContext as any)[responseVariableName] = { error: 'URL no configurada' };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (updatedContext as any)[`${responseVariableName}_status`] = 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (updatedContext as any)[`${responseVariableName}_ok`] = false;
+        
+        // Si hay nodo de error configurado, redirigir ahí
+        if (errorNodeId) {
+          nextNodeId = errorNodeId;
+        } else {
+          nextNodeId = successNodeId;
+        }
+        break;
+      }
+
+      // Interpolar variables en la URL
+      url = interpolateVariables(url, updatedContext);
+
+      // Construir query params
+      const queryParams = new URLSearchParams();
+      if (Array.isArray(httpMeta.queryParams)) {
+        for (const param of httpMeta.queryParams) {
+          if (param.enabled !== false && param.key && param.key.trim()) {
+            const interpolatedValue = interpolateVariables(param.value || '', updatedContext);
+            queryParams.append(param.key.trim(), interpolatedValue);
+          }
+        }
+      }
+      const queryString = queryParams.toString();
+      if (queryString) {
+        url += (url.includes('?') ? '&' : '?') + queryString;
+      }
+
+      // Construir headers
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (Array.isArray(httpMeta.headers)) {
+        for (const header of httpMeta.headers) {
+          if (header.enabled !== false && header.key && header.key.trim()) {
+            const interpolatedValue = interpolateVariables(header.value || '', updatedContext);
+            headers[header.key.trim()] = interpolatedValue;
+          }
+        }
+      }
+
+      // Construir body para métodos que lo permiten
+      let body: string | undefined;
+      if (['POST', 'PUT', 'PATCH'].includes(method) && httpMeta.body) {
+        body = interpolateVariables(httpMeta.body, updatedContext);
+      }
+
+      console.log(`[HTTP] Node ${node.id}: ${method} ${url}`);
+
+      try {
+        const fetchOptions: RequestInit = {
+          method,
+          headers,
+        };
+        if (body) {
+          fetchOptions.body = body;
+        }
+
+        const response = await fetch(url, fetchOptions);
+        const responseText = await response.text();
+
+        let responseData: unknown;
+        try {
+          responseData = JSON.parse(responseText);
+        } catch {
+          responseData = responseText;
+        }
+
+        console.log(`[HTTP] Node ${node.id}: Status ${response.status}`);
+
+        // Verificar si la respuesta está vacía
+        const isEmpty = 
+          responseData === null || 
+          responseData === undefined || 
+          responseData === '' ||
+          (typeof responseData === 'object' && Object.keys(responseData as object).length === 0) ||
+          (Array.isArray(responseData) && responseData.length === 0);
+
+        // Guardar respuesta completa en la variable principal
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (updatedContext as any)[responseVariableName] = responseData;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (updatedContext as any)[`${responseVariableName}_status`] = response.status;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (updatedContext as any)[`${responseVariableName}_ok`] = response.ok;
+
+        // Procesar Response Mappings: extraer campos específicos a variables
+        if (responseMappings.length > 0 && responseData && response.ok) {
+          for (const mapping of responseMappings) {
+            try {
+              const extractedValue = getValueByPath(responseData, mapping.path);
+              const convertedValue = convertValueToType(extractedValue, mapping.valueType);
+              
+              // Usar el nombre de variable configurado, o generar uno con prefijo
+              const varName = mapping.variableName || `${responseVariablePrefix}${mapping.path.replace(/[.\[\]]/g, '_')}`;
+              
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (updatedContext as any)[varName] = convertedValue ?? mapping.defaultValue;
+            } catch (mappingError) {
+              console.warn(`[HTTP] Node ${node.id}: Error mapeando ${mapping.path}:`, mappingError);
+              // Si hay defaultValue, usarlo en caso de error
+              if (mapping.defaultValue !== undefined) {
+                const varName = mapping.variableName || `${responseVariablePrefix}${mapping.path.replace(/[.\[\]]/g, '_')}`;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (updatedContext as any)[varName] = mapping.defaultValue;
+              }
+            }
+          }
+        }
+
+        // Si hay error HTTP (status >= 400), redirigir al nodo de error si está conectado
+        if (!response.ok && errorNodeId) {
+          console.log(`[HTTP] Node ${node.id}: Error HTTP ${response.status}, redirigiendo a nodo error ${errorNodeId}`);
+          nextNodeId = errorNodeId;
+          break;
+        }
+
+        // Si la respuesta está vacía y hay mensaje configurado, enviarlo
+        if (isEmpty && emptyResponseMessage && emptyResponseMessage.trim()) {
+          const interpolatedMessage = interpolateVariables(emptyResponseMessage, updatedContext);
+          actions.push({
+            type: 'send_message',
+            payload: {
+              message: interpolatedMessage,
+              nodeId: node.id,
+              type: 'HTTP_EMPTY_RESPONSE',
+            },
+          });
+        }
+
+        // Registrar la acción HTTP
+        actions.push({
+          type: 'http_request',
+          payload: {
+            method,
+            url,
+            status: response.status,
+            responseVariableName,
+            nodeId: node.id,
+          },
+        });
+
+        // Ir al nodo de éxito
+        nextNodeId = successNodeId;
+      } catch (error) {
+        console.error(`[HTTP] Node ${node.id}: Error en petición:`, error);
+        
+        const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+        
+        // Guardar error en la variable de respuesta
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (updatedContext as any)[responseVariableName] = { error: errorMessage };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (updatedContext as any)[`${responseVariableName}_status`] = 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (updatedContext as any)[`${responseVariableName}_ok`] = false;
+
+        // Redirigir al nodo de error si está conectado
+        if (errorNodeId) {
+          console.log(`[HTTP] Node ${node.id}: Excepción, redirigiendo a nodo error ${errorNodeId}`);
+          nextNodeId = errorNodeId;
+        } else {
+          // Si no hay nodo de error, continuar al de éxito
+          nextNodeId = successNodeId;
+        }
+      }
+      break;
+    }
+    case 'DATA_LOG': {
+      // DATA_LOG: Captura todas las variables actuales y las guarda en la base de datos
+      updatedContext.waitingForInput = false;
+      updatedContext.waitingVariable = null;
+
+      const dataType =
+        typeof builderMeta.dataType === 'string' && builderMeta.dataType.length
+          ? builderMeta.dataType
+          : 'otro';
+      
+      const description =
+        typeof builderMeta.description === 'string'
+          ? builderMeta.description
+          : undefined;
+
+      // Recopilar todas las variables del contexto actual
+      // Excluir variables globales y internas
+      const SKIP_KEYS = new Set([
+        'waitingForInput',
+        'waitingVariable',
+        'lastMessage',
+        'GLOBAL_numTelefono',
+        'GLOBAL_nombre',
+        'GLOBAL_nombreContacto',
+        'GLOBAL_dni',
+        'GLOBAL_email',
+        'GLOBAL_areaId',
+        'GLOBAL_conversationStatus',
+      ]);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const capturedVariables: Record<string, any> = {};
+      Object.entries(updatedContext).forEach(([key, value]) => {
+        if (!SKIP_KEYS.has(key) && !key.startsWith('_')) {
+          capturedVariables[key] = value;
+        }
+      });
+
+      console.log(
+        `[DATA_LOG] Node ${node.id}: Capturando datos de tipo "${dataType}":`,
+        JSON.stringify(capturedVariables, null, 2)
+      );
+
+      // Crear acción para guardar los datos
+      actions.push({
+        type: 'save_flow_data',
+        payload: {
+          dataType,
+          description,
+          variables: capturedVariables,
+          nodeId: node.id,
+        },
+      });
+
+      // Continuar al siguiente nodo
+      nextNodeId = resolveNextNodeId();
+      break;
+    }
     default: {
-      // En esta etapa solo manejamos START/TEXT/CAPTURE/CONDITIONAL/NOTE/END/DELAY/SET_VARIABLE.
+      // En esta etapa solo manejamos START/TEXT/CAPTURE/CONDITIONAL/NOTE/END/DELAY/SET_VARIABLE/HTTP/DATA_LOG/ORDER.
       // El resto avanza al siguiente nodo.
       nextNodeId = resolveNextNodeId();
       break;

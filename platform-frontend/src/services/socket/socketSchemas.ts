@@ -123,11 +123,28 @@ export type Message = z.infer<typeof MessageSchema>;
 
 // Conversation schema
 export const ConversationSchema = z.object({
-  id: z.number(),
-  contactId: z.number(),
-  botId: z.number(),
-  context: z.record(z.string(), z.unknown()).default({}),
-  lastMessage: z.string().optional(),
+  id: z.union([z.number(), z.string()]).transform((val) => {
+    if (typeof val === 'string') return parseInt(val, 10);
+    return val;
+  }),
+  contactId: z.union([z.number(), z.string()]).transform((val) => {
+    if (typeof val === 'string') return parseInt(val, 10);
+    return val;
+  }),
+  botId: z
+    .union([z.number(), z.string(), z.null()])
+    .transform((val) => {
+      if (val === null) return null;
+      if (typeof val === 'string') return parseInt(val, 10);
+      return val;
+    })
+    .optional(),
+  context: z
+    .union([z.record(z.string(), z.unknown()), z.null()])
+    .default({}),
+  lastMessage: z
+    .union([z.string(), z.null()])
+    .optional(),
   lastMessageTime: z.number().optional(),
   unreadCount: z.number().default(0),
   progressStatus: z.string().optional(),
@@ -135,7 +152,10 @@ export const ConversationSchema = z.object({
   closedReason: z.string().nullable().optional(),
   contact: z
     .object({
-      id: z.number(),
+      id: z.union([z.number(), z.string()]).transform((val) => {
+        if (typeof val === 'string') return parseInt(val, 10);
+        return val;
+      }),
       name: z.string(),
       phone: z.string(),
       avatar: z.string().optional(),
@@ -165,6 +185,10 @@ export const SocketEventPayloads = {
 
   'conversation:updated': ConversationSchema,
   'conversation:created': ConversationSchema,
+  'conversation:new': z.object({
+    conversation: ConversationSchema,
+    source: z.string().optional(),
+  }),
   'conversation:finish': ConversationFinishSchema,
   'conversation:deleted': z.object({
     conversationId: z.number(),

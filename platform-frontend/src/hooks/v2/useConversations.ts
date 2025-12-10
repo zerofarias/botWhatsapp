@@ -20,9 +20,8 @@ export function useConversations() {
     try {
       useChatStore.setState({ loading: true });
       const response = await api.get('/conversations', {
-        timeout: 5000,
+        timeout: 10000, // Increased from 5000ms to handle slower connections
       });
-      console.log('📥 Conversations loaded:', response.data);
 
       // Ensure data is an array and normalize each conversation
       const conversations = Array.isArray(response.data)
@@ -63,8 +62,15 @@ export function useConversations() {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to load conversations';
+      
+      // Log error details but don't spam the console
+      if (error instanceof Error && error.message.includes('timeout')) {
+        console.warn('Conversations request timeout - server may be slow');
+      } else {
+        console.error('Error loading conversations:', error);
+      }
+      
       useChatStore.setState({ error: message, conversations: [] });
-      console.error('Error loading conversations:', error);
     } finally {
       useChatStore.setState({ loading: false });
     }
@@ -77,7 +83,6 @@ export function useConversations() {
 
   useEffect(() => {
     const handleManualRefresh = () => {
-      console.log('🔁 Manual chat refresh requested from sidebar nav');
       loadConversations();
     };
 
@@ -86,10 +91,35 @@ export function useConversations() {
       window.removeEventListener('chat:refreshRequested', handleManualRefresh);
   }, [loadConversations]);
 
+  // Add event listeners for real-time updates
+  useEffect(() => {
+    const handleMessageReceived = () => {
+      loadConversations();
+    };
+
+    const handleConversationUpdated = () => {
+      loadConversations();
+    };
+
+    const handleConversationListRefresh = () => {
+      loadConversations();
+    };
+
+    window.addEventListener('chat:messageReceived', handleMessageReceived);
+    window.addEventListener('chat:conversationUpdated', handleConversationUpdated);
+    window.addEventListener('chat:conversationListRefresh', handleConversationListRefresh);
+
+    return () => {
+      window.removeEventListener('chat:messageReceived', handleMessageReceived);
+      window.removeEventListener('chat:conversationUpdated', handleConversationUpdated);
+      window.removeEventListener('chat:conversationListRefresh', handleConversationListRefresh);
+    };
+  }, [loadConversations]);
+
   useEffect(() => {
     const interval = setInterval(() => {
       loadConversations();
-    }, 15000); // refresh every 15s to capture new incoming chats
+    }, 15000); // Changed from 5s to 15s to reduce server load and timeout issues
 
     return () => clearInterval(interval);
   }, [loadConversations]);

@@ -41,28 +41,43 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   mode = 'create',
   initialData,
 }) => {
-  const baseForm = useMemo<ContactFormData>(
-    () => ({
-      name: initialData?.name ?? '',
-      dni: initialData?.dni ?? '',
-      address1: initialData?.address1 ?? '',
-      address2: initialData?.address2 ?? '',
-      obraSocial: initialData?.obraSocial ?? '',
-      obraSocial2: initialData?.obraSocial2 ?? '',
-    }),
-    [initialData]
-  );
+  // Memoizar los valores individuales para evitar re-renders innecesarios
+  const initialName = initialData?.name ?? '';
+  const initialDni = initialData?.dni ?? '';
+  const initialAddress1 = initialData?.address1 ?? '';
+  const initialAddress2 = initialData?.address2 ?? '';
+  const initialObraSocial = initialData?.obraSocial ?? '';
+  const initialObraSocial2 = initialData?.obraSocial2 ?? '';
 
-  const [formData, setFormData] = useState<ContactFormData>(baseForm);
+  const [formData, setFormData] = useState<ContactFormData>({
+    name: initialName,
+    dni: initialDni,
+    address1: initialAddress1,
+    address2: initialAddress2,
+    obraSocial: initialObraSocial,
+    obraSocial2: initialObraSocial2,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Track si el modal se acaba de abrir para resetear el form
+  const [wasOpen, setWasOpen] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
-      setFormData(baseForm);
+    // Solo resetear cuando el modal se ABRE (transición de cerrado a abierto)
+    if (isOpen && !wasOpen) {
+      setFormData({
+        name: initialName,
+        dni: initialDni,
+        address1: initialAddress1,
+        address2: initialAddress2,
+        obraSocial: initialObraSocial,
+        obraSocial2: initialObraSocial2,
+      });
       setError(null);
     }
-  }, [isOpen, baseForm]);
+    setWasOpen(isOpen);
+  }, [isOpen, wasOpen, initialName, initialDni, initialAddress1, initialAddress2, initialObraSocial, initialObraSocial2]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,7 +98,6 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         obraSocial: formData.obraSocial.trim() || undefined,
         obraSocial2: formData.obraSocial2.trim() || undefined,
       });
-      setFormData(baseForm);
       onClose();
     } catch (err) {
       setError(
@@ -95,7 +109,6 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   };
 
   const handleClose = () => {
-    setFormData(baseForm);
     setError(null);
     onClose();
   };

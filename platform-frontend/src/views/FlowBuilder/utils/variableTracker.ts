@@ -4,7 +4,13 @@ import type {
   FlowNodeData,
   TextNodeData,
   ConditionalNodeData,
+  HTTPNodeData,
 } from '../types';
+
+/**
+ * Alias de tipo para información de variable
+ */
+export type VariableInfo = AvailableVariable;
 
 /**
  * Información sobre una variable disponible en el flujo
@@ -86,9 +92,6 @@ function extractVariableFromNode(node: FlowBuilderNode): string | null {
 
   if (data.type === 'SET_VARIABLE') {
     const varName = data.variable;
-    console.log(
-      `[variableTracker] SET_VARIABLE node "${node.data.label}": variable="${varName}"`
-    );
     return varName || null;
   }
 
@@ -96,7 +99,62 @@ function extractVariableFromNode(node: FlowBuilderNode): string | null {
     return data.responseVariableName || null;
   }
 
+  if (data.type === 'HTTP') {
+    // Para HTTP, retornamos la variable principal
+    // Las variables de mappings se manejan por separado
+    return data.responseVariableName || null;
+  }
+
   return null;
+}
+
+/**
+ * Obtiene todas las variables que crea un nodo HTTP (principal + mappings)
+ */
+export function getHTTPNodeVariables(node: FlowBuilderNode): VariableInfo[] {
+  if (node.data.type !== 'HTTP') return [];
+  
+  const data = node.data as HTTPNodeData;
+  const variables: VariableInfo[] = [];
+  
+  // Variable principal de respuesta
+  if (data.responseVariableName) {
+    variables.push({
+      name: data.responseVariableName,
+      createdByNodeId: node.id,
+      createdByNodeType: 'HTTP',
+      createdByNodeLabel: data.label || 'HTTP',
+    });
+    // También las variables auxiliares de status y ok
+    variables.push({
+      name: `${data.responseVariableName}_status`,
+      createdByNodeId: node.id,
+      createdByNodeType: 'HTTP',
+      createdByNodeLabel: data.label || 'HTTP',
+    });
+    variables.push({
+      name: `${data.responseVariableName}_ok`,
+      createdByNodeId: node.id,
+      createdByNodeType: 'HTTP',
+      createdByNodeLabel: data.label || 'HTTP',
+    });
+  }
+  
+  // Variables de Response Mappings
+  if (Array.isArray(data.responseMappings)) {
+    for (const mapping of data.responseMappings) {
+      if (mapping.enabled && mapping.variableName) {
+        variables.push({
+          name: mapping.variableName,
+          createdByNodeId: node.id,
+          createdByNodeType: 'HTTP',
+          createdByNodeLabel: data.label || 'HTTP',
+        });
+      }
+    }
+  }
+  
+  return variables;
 }
 
 /**
@@ -203,14 +261,22 @@ export function buildVariableAvailabilityMap(
       // El predecesor también puede crear una variable
       const predNode = nodeMap.get(predId);
       if (predNode) {
-        const varName = extractVariableFromNode(predNode);
-        if (varName) {
-          vars.set(varName, {
-            name: varName,
-            createdByNodeId: predId,
-            createdByNodeType: predNode.data.type,
-            createdByNodeLabel: predNode.data.label,
+        // Para nodos HTTP, usar la función especial que obtiene todas las variables
+        if (predNode.data.type === 'HTTP') {
+          const httpVars = getHTTPNodeVariables(predNode);
+          httpVars.forEach((v) => {
+            vars.set(v.name, v);
           });
+        } else {
+          const varName = extractVariableFromNode(predNode);
+          if (varName) {
+            vars.set(varName, {
+              name: varName,
+              createdByNodeId: predId,
+              createdByNodeType: predNode.data.type,
+              createdByNodeLabel: predNode.data.label,
+            });
+          }
         }
       }
     });

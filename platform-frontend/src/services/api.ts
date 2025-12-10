@@ -17,6 +17,11 @@ export async function getAllChats() {
   const res = await api.get('/conversations/all');
   return res.data;
 }
+
+export async function closeAllConversations(reason?: string) {
+  const res = await api.post('/conversations/close-all', { reason });
+  return res.data;
+}
 import axios from 'axios';
 
 const baseURL =
@@ -36,7 +41,7 @@ export const api = axios.create({
 
 // Si el backend solo usa sesión, no agregues Authorization
 
-// Notas internas de conversaci��n
+// Notas internas de conversacion
 export interface ConversationNoteDTO {
   id: string;
   content: string;
@@ -133,6 +138,11 @@ export interface AdminAnalyticsResponse {
   orders: {
     hotHours: HotHourStat[];
     avgClosureMinutes: number | null;
+    totalInRange: number;
+    completed: number;
+    pending: number;
+    confirmed: number;
+    cancelled: number;
   };
 }
 

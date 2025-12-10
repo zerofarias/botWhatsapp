@@ -339,14 +339,7 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
   } | null>(null);
 
   const handleLoadMoreMessages = useCallback(() => {
-    if (effectiveContactGroup) {
-      console.log(
-        'Load more messages for contact group:',
-        effectiveContactGroup.contactKey
-      );
-    } else if (conversationId) {
-      console.log('Load more messages for conversation:', conversationId);
-    }
+    // Placeholder for loading more messages
   }, [effectiveContactGroup, conversationId]);
 
   const reminderModalContact = useMemo<ReminderContactSummary | null>(() => {
@@ -738,6 +731,8 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
     [canAddContact, phoneNumber]
   );
 
+  const updateConversation = useChatStore((state) => state.updateConversation);
+
   const handleContactUpdate = useCallback(
     async (payload: {
       name: string;
@@ -747,9 +742,20 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
       obraSocial?: string;
       obraSocial2?: string;
     }) => {
-      if (!activeConversation?.contact?.id) {
+      if (!activeConversation?.contact?.id || !activeConversation?.id) {
         throw new Error('No hay contacto para editar.');
       }
+      
+      const updatedContact = {
+        ...activeConversation.contact,
+        name: payload.name,
+        dni: payload.dni || null,
+        address1: payload.address1 || null,
+        address2: payload.address2 || null,
+        obraSocial: payload.obraSocial || null,
+        obraSocial2: payload.obraSocial2 || null,
+      };
+      
       try {
         await api.put(`/contacts/${activeConversation.contact.id}`, {
           name: payload.name,
@@ -760,15 +766,23 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
           obraSocial2: payload.obraSocial2 || null,
           phone: activeConversation.contact.phone,
         });
+        
+        // Actualizar el store con el contacto actualizado
+        const conversationId = typeof activeConversation.id === 'string' 
+          ? parseInt(activeConversation.id, 10) 
+          : activeConversation.id;
+        
+        updateConversation(conversationId, {
+          contact: updatedContact as any,
+        });
+        
       } catch (error) {
         throw new Error(
           getApiErrorMessage(error, 'No se pudo actualizar el contacto.')
         );
       }
-
-      window.location.reload();
     },
-    [activeConversation]
+    [activeConversation, updateConversation]
   );
 
   const contactAvatar = activeConversation?.contact?.photoUrl ?? null;
@@ -823,43 +837,69 @@ const ChatView_v2: React.FC<ChatViewProps> = ({
                 )}
               </div>
 
-              {/* DNI Row */}
-              {activeConversation?.contact?.dni && (
-                <div className="chat-contact-info-pill__row">
-                  <span className="label">DNI:</span>
-                  <span className="value">
-                    {activeConversation.contact.dni}
-                  </span>
-                </div>
-              )}
+              {/* Data Row - Horizontal layout */}
+              <div className="chat-contact-info-pill__data-rows">
+                {/* DNI */}
+                {activeConversation?.contact?.dni && (
+                  <div className="chat-contact-info-pill__row">
+                    <span className="label">DNI:</span>
+                    <span className="value">
+                      {activeConversation.contact.dni}
+                    </span>
+                  </div>
+                )}
 
-              {/* Obra Social Row */}
-              {activeConversation?.contact?.obraSocial && (
-                <div className="chat-contact-info-pill__row">
-                  <span className="label">Obra Social:</span>
-                  <span className="value">
-                    {activeConversation.contact.obraSocial}
-                  </span>
-                </div>
-              )}
+                {/* Obra Social */}
+                {activeConversation?.contact?.obraSocial && (
+                  <div className="chat-contact-info-pill__row">
+                    <span className="label">O.S:</span>
+                    <span className="value">
+                      {activeConversation.contact.obraSocial}
+                    </span>
+                  </div>
+                )}
 
-              {/* Address Row */}
-              {(activeConversation?.contact?.address1 ||
-                activeConversation?.contact?.address2) && (
-                <div className="chat-contact-info-pill__row">
-                  <span className="label">Dirección:</span>
-                  <span className="value">
-                    {[
-                      activeConversation?.contact?.address1,
-                      activeConversation?.contact?.address2,
-                    ]
-                      .filter(Boolean)
-                      .join(', ')}
-                  </span>
-                </div>
-              )}
+                {/* Address */}
+                {(activeConversation?.contact?.address1 ||
+                  activeConversation?.contact?.address2) && (
+                  <div className="chat-contact-info-pill__row">
+                    <span className="label">Dir:</span>
+                    <span className="value">
+                      {[
+                        activeConversation?.contact?.address1,
+                        activeConversation?.contact?.address2,
+                      ]
+                        .filter(Boolean)
+                        .join(', ')}
+                    </span>
+                  </div>
+                )}
 
-              {/* Client Type Badge */}
+                {/* Contact Status Icons (VIP, Problematic, Chronic) */}
+                {(activeConversation?.contact?.isVip ||
+                  activeConversation?.contact?.isProblematic ||
+                  activeConversation?.contact?.isChronic) && (
+                  <div className="chat-contact-info-pill__status-icons">
+                    {activeConversation?.contact?.isVip && (
+                      <span className="status-icon vip" title="Cliente Importante">
+                        ⭐
+                      </span>
+                    )}
+                    {activeConversation?.contact?.isProblematic && (
+                      <span className="status-icon problematic" title="Cliente Problemático">
+                        ⚠️
+                      </span>
+                    )}
+                    {activeConversation?.contact?.isChronic && (
+                      <span className="status-icon chronic" title="Cliente Crónico">
+                        💊
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Client Type Badge - Hidden by CSS */}
               <div className="chat-contact-info-pill__client-type">
                 {isContactSaved ? '👤' : '📱'}
               </div>

@@ -17,13 +17,18 @@ export function useSocketListeners() {
     }
 
     let cancelled = false;
-    console.warn('⚠️ Socket manager not available yet, retrying…');
+    let retryCount = 0;
+    const maxRetries = 20; // 10 seconds max
 
     const interval = setInterval(() => {
       if (cancelled) return;
+      retryCount++;
       const manager = getSocketManager();
       if (manager) {
         setSocketManager(manager);
+        clearInterval(interval);
+      } else if (retryCount >= maxRetries) {
+        console.error('❌ Socket manager failed to initialize after 10 seconds');
         clearInterval(interval);
       }
     }, 500);
@@ -47,7 +52,27 @@ export function useSocketListeners() {
 
       // Message listeners
       const unsubMessage = socket.on('message:new', (payload) => {
-        console.log('­ƒô¿ New message received:', payload);
+        // Get current active conversation to check if this message is for it
+        const currentState = useChatStore.getState();
+        const messageConvId = typeof payload.conversationId === 'string'
+          ? parseInt(payload.conversationId, 10)
+          : payload.conversationId;
+        
+        // Only dispatch refresh if message is for the currently active conversation
+        if (typeof window !== 'undefined') {
+          // Always dispatch generic event for conversation list refresh
+          window.dispatchEvent(new Event('chat:messageReceived'));
+          
+          // If this message is for the active conversation, dispatch specific event
+          if (currentState.activeConversationId === messageConvId) {
+            window.dispatchEvent(new CustomEvent('chat:activeConversationMessage', {
+              detail: { conversationId: messageConvId }
+            }));
+          } else {
+            // Mark conversation as unread (red dot indicator)
+            currentState.markConversationUnread(messageConvId);
+          }
+        }
 
         // Normalize message to v2 format
         const parsedSenderId =
@@ -100,13 +125,10 @@ export function useSocketListeners() {
           },
         };
 
-        console.log('Ô£à Normalized message:', normalizedMessage);
         useChatStore.getState().addMessage(normalizedMessage);
       });
 
       const unsubMessageUpdated = socket.on('message:updated', (payload) => {
-        console.log('Ô£Å´©Å Message updated:', payload);
-
         const messageId =
           typeof payload.id === 'string'
             ? parseInt(payload.id, 10)
@@ -155,8 +177,6 @@ export function useSocketListeners() {
       });
 
       const unsubMessageDeleted = socket.on('message:deleted', (payload) => {
-        console.log('­ƒùæ´©Å Message deleted:', payload.messageId);
-
         const messageId =
           typeof payload.messageId === 'string'
             ? parseInt(payload.messageId, 10)
@@ -168,8 +188,6 @@ export function useSocketListeners() {
       const unsubConversationUpdated = socket.on(
         'conversation:updated',
         (payload) => {
-          console.log('­ƒôØ Conversation updated:', payload.id);
-
           const normalizedConversation = {
             ...payload,
             id:
@@ -202,7 +220,10 @@ export function useSocketListeners() {
       const unsubConversationCreated = socket.on(
         'conversation:created',
         (payload) => {
-          console.log('Ô£¿ Conversation created:', payload.id);
+          // Trigger conversation list refresh
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('chat:conversationUpdated'));
+          }
 
           const normalizedConversation = {
             ...payload,
@@ -228,11 +249,15 @@ export function useSocketListeners() {
         }
       );
 
+      const unsubConversationNew = socket.on('conversation:new', (payload) => {
+        // Trigger conversation list refresh immediately
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('chat:conversationListRefresh'));
+        }
+      });
       const unsubConversationDeleted = socket.on(
         'conversation:deleted',
         (payload) => {
-          console.log('ÔØî Conversation deleted:', payload.conversationId);
-
           const conversationId =
             typeof payload.conversationId === 'string'
               ? parseInt(payload.conversationId, 10)
@@ -252,23 +277,21 @@ export function useSocketListeners() {
       );
 
       // Flow listeners
-      const unsubFlowStarted = socket.on('flow:started', (payload) => {
-        console.log('­ƒÜÇ Flow started:', payload.flowId);
+      const unsubFlowStarted = socket.on('flow:started', (_payload) => {
         useChatStore.setState({ error: null });
       });
 
-      const unsubFlowEnded = socket.on('flow:ended', (payload) => {
-        console.log('­ƒøæ Flow ended:', payload.flowId);
+      const unsubFlowEnded = socket.on('flow:ended', (_payload) => {
+        // Flow ended, could update UI if needed
       });
 
       // Typing indicators
-      const unsubTypingStarted = socket.on('typing:started', (payload) => {
+      const unsubTypingStarted = socket.on('typing:started', (_payload) => {
         // Could add to store if needed for "typing..." UI
-        console.log('Ôî¿´©Å Typing started:', payload.sender);
       });
 
-      const unsubTypingEnded = socket.on('typing:ended', (payload) => {
-        console.log('Ôî¿´©Å Typing ended:', payload.sender);
+      const unsubTypingEnded = socket.on('typing:ended', (_payload) => {
+        // Typing ended
       });
 
       // Cleanup on unmount
@@ -278,6 +301,7 @@ export function useSocketListeners() {
         unsubMessageDeleted();
         unsubConversationUpdated();
         unsubConversationCreated();
+        unsubConversationNew();
         unsubConversationDeleted();
         unsubFlowStarted();
         unsubFlowEnded();

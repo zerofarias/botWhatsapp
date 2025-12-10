@@ -83,14 +83,8 @@ export default function DashboardLayout() {
         ''
       );
 
-    console.log(
-      '🔌 Initializing socket globally from DashboardLayout:',
-      socketUrl
-    );
-
     try {
       initializeSocket(socketUrl);
-      console.log('✅ Socket initialized successfully');
     } catch (error) {
       console.error('❌ Failed to initialize socket:', error);
     }

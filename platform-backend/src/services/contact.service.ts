@@ -397,7 +397,17 @@ export async function findOrCreateContactByPhone(
     where: { phone },
     select: contactSelect,
   });
+  
   if (existing) {
+    // Si el contacto existe pero no tiene foto y tenemos una nueva, actualizarla
+    if (!existing.photoUrl && defaults?.photoUrl) {
+      const updated = await prisma.contact.update({
+        where: { id: existing.id },
+        data: { photoUrl: defaults.photoUrl },
+        select: contactSelect,
+      });
+      return { contact: updated, created: false };
+    }
     return { contact: existing, created: false };
   }
 
@@ -411,6 +421,7 @@ export async function findOrCreateContactByPhone(
       address2: sanitizeAddress(defaults?.address2),
       obraSocial: sanitizeNote(defaults?.obraSocial ?? null),
       obraSocial2: sanitizeNote(defaults?.obraSocial2 ?? null),
+      photoUrl: defaults?.photoUrl ?? null,
       isVip: Boolean(defaults?.isVip),
       isProblematic: Boolean(defaults?.isProblematic),
       isChronic: Boolean(defaults?.isChronic),

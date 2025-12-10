@@ -80,6 +80,9 @@ export interface ChatStoreState {
   messages: Message[];
   messageHistory: Map<number, Message[]>;
   conversationNotes: Map<number, ConversationNote[]>;
+  
+  // Unread indicators (local state - resets on page refresh)
+  unreadConversations: Set<number>;
 
   // Metadata
   hasMoreHistory: boolean;
@@ -120,6 +123,11 @@ export interface ChatStoreState {
   setHistoryPage: (page: number) => void;
   setTotalMessages: (total: number) => void;
 
+  // Unread actions
+  markConversationUnread: (conversationId: number) => void;
+  markConversationRead: (conversationId: number) => void;
+  isConversationUnread: (conversationId: number) => boolean;
+
   // Utility
   getActiveConversation: () => Conversation | undefined;
   clearChat: () => void;
@@ -141,6 +149,7 @@ export const useChatStore = create<ChatStoreState>()(
     messages: [],
     messageHistory: new Map(),
     conversationNotes: new Map(),
+    unreadConversations: new Set(),
 
     // Initial metadata
     hasMoreHistory: true,
@@ -159,7 +168,19 @@ export const useChatStore = create<ChatStoreState>()(
       // Load messages for this conversation from cache or fetch
       const state = get();
       const cachedMessages = state.messageHistory.get(id || 0) || [];
-      set({ activeConversationId: id, messages: cachedMessages });
+      
+      // Mark conversation as read when selected
+      let newUnreadSet = state.unreadConversations;
+      if (id != null && state.unreadConversations.has(id)) {
+        newUnreadSet = new Set(state.unreadConversations);
+        newUnreadSet.delete(id);
+      }
+      
+      set({ 
+        activeConversationId: id, 
+        messages: cachedMessages,
+        unreadConversations: newUnreadSet
+      });
     },
     addConversation: (conversation) =>
       set((state) => ({
@@ -210,9 +231,15 @@ export const useChatStore = create<ChatStoreState>()(
           ]);
         }
 
-        const shouldAppend =
-          state.activeConversationId === message.conversationId &&
-          !state.messages.some((m) => String(m.id) === normalizedId);
+        // Check if message is for the active conversation
+        // Compare as numbers to avoid type mismatch issues
+        const activeId = state.activeConversationId;
+        const msgConvId = message.conversationId;
+        const isForActiveConversation = activeId != null && 
+          Number(activeId) === Number(msgConvId);
+        
+        const notDuplicate = !state.messages.some((m) => String(m.id) === normalizedId);
+        const shouldAppend = isForActiveConversation && notDuplicate;
 
         return {
           messageHistory: newHistory,
@@ -335,6 +362,29 @@ export const useChatStore = create<ChatStoreState>()(
         (c) => c.id === state.activeConversationId
       );
     },
+    
+    // Unread conversations management
+    markConversationUnread: (conversationId) => {
+      const state = get();
+      // Don't mark as unread if it's the active conversation
+      if (state.activeConversationId === conversationId) return;
+      
+      const newSet = new Set(state.unreadConversations);
+      newSet.add(conversationId);
+      set({ unreadConversations: newSet });
+    },
+    markConversationRead: (conversationId) => {
+      const state = get();
+      if (!state.unreadConversations.has(conversationId)) return;
+      
+      const newSet = new Set(state.unreadConversations);
+      newSet.delete(conversationId);
+      set({ unreadConversations: newSet });
+    },
+    isConversationUnread: (conversationId) => {
+      return get().unreadConversations.has(conversationId);
+    },
+    
     clearChat: () =>
       set({
         messages: [],
@@ -342,6 +392,7 @@ export const useChatStore = create<ChatStoreState>()(
         activeConversationId: null,
         messageHistory: new Map(),
         conversationNotes: new Map(),
+        unreadConversations: new Set(),
         loading: false,
         sending: false,
         error: null,

@@ -792,3 +792,18 @@ button {
 .link-button--danger {
   color: #dc2626;
 }
+
+/* ============ FIX: react-data-table-component styled-components compatibility ============ */
+/* Suppress styled-components warnings about unknown props like 'grow' */
+[data-rdt_TableHeadRow],
+[data-rdt_TableRow],
+[data-rdt_TableCell] {
+  all: revert;
+}
+
+/* Ensure DataTable doesn't cause styled-components warnings */
+.rdt_TableHeadRow,
+.rdt_TableRow,
+.rdt_TableCell {
+  display: inherit;
+}

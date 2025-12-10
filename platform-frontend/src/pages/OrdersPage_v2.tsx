@@ -276,120 +276,126 @@ const OrdersPage_v2: React.FC = () => {
         </div>
       </div>
 
-      <div className="orders-controls">
-        <div className="control-group">
-          <label htmlFor="orders-status-filter">Estado:</label>
-          <select
-            id="orders-status-filter"
-            value={filterStatus || ''}
-            onChange={(event) =>
-              setFilterStatus(event.target.value || undefined)
-            }
-            className="filter-select"
-          >
-            <option value="">Todos</option>
-            <option value="PENDING">Pendientes</option>
-            <option value="CONFIRMADO">En proceso</option>
-            <option value="COMPLETADO">Completados</option>
-            <option value="CANCELADO">Cancelados</option>
-          </select>
-        </div>
+      <div className="orders-filters-combined">
+        <div className="filters-row-main">
+          <div className="control-group">
+            <label htmlFor="orders-status-filter">Estado:</label>
+            <select
+              id="orders-status-filter"
+              value={filterStatus || ''}
+              onChange={(event) =>
+                setFilterStatus(event.target.value || undefined)
+              }
+              className="filter-select"
+            >
+              <option value="">Todos</option>
+              <option value="PENDING">Pendientes</option>
+              <option value="CONFIRMADO">En proceso</option>
+              <option value="COMPLETADO">Completados</option>
+              <option value="CANCELADO">Cancelados</option>
+            </select>
+          </div>
 
-        <div className="control-group search">
-          <label className="visually-hidden" htmlFor="orders-search-input">
-            Buscar pedidos
-          </label>
-          <input
-            id="orders-search-input"
-            type="text"
-            placeholder="Buscar por cliente o teléfono..."
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            className="search-input"
-          />
-        </div>
-      </div>
+          <div className="control-group">
+            <label htmlFor="orders-from-date">Desde:</label>
+            <input
+              id="orders-from-date"
+              type="datetime-local"
+              value={advancedFilters.startDate || ''}
+              onChange={(event) =>
+                handleFilterChange('startDate', event.target.value)
+              }
+              className="filter-input-compact"
+            />
+          </div>
 
-      <div className="orders-advanced-filters">
-        <div className="filter-field">
-          <label htmlFor="orders-from-date">Desde</label>
-          <input
-            id="orders-from-date"
-            type="datetime-local"
-            value={advancedFilters.startDate || ''}
-            onChange={(event) =>
-              handleFilterChange('startDate', event.target.value)
-            }
-          />
-        </div>
-        <div className="filter-field">
-          <label htmlFor="orders-to-date">Hasta</label>
-          <input
-            id="orders-to-date"
-            type="datetime-local"
-            value={advancedFilters.endDate || ''}
-            onChange={(event) =>
-              handleFilterChange('endDate', event.target.value)
-            }
-          />
-        </div>
-        <div className="filter-field">
-          <label htmlFor="orders-client-phone">Teléfono</label>
-          <input
-            id="orders-client-phone"
-            type="text"
-            placeholder="Ej: 549351..."
-            value={advancedFilters.clientPhone || ''}
-            onChange={(event) =>
-              handleFilterChange('clientPhone', event.target.value)
-            }
-          />
-        </div>
-        <div className="filter-field">
-          <label htmlFor="orders-conversation-id">ID Conversación</label>
-          <input
-            id="orders-conversation-id"
-            type="text"
-            placeholder="Ej: 123456"
-            value={advancedFilters.conversationId || ''}
-            onChange={(event) =>
-              handleFilterChange('conversationId', event.target.value)
-            }
-          />
-        </div>
-        <div className="filter-field">
-          <label htmlFor="orders-operator-name">Operario</label>
-          <input
-            id="orders-operator-name"
-            type="text"
-            placeholder="Nombre del operador"
-            value={advancedFilters.operatorName || ''}
-            onChange={(event) =>
-              handleFilterChange('operatorName', event.target.value)
-            }
-          />
-        </div>
-        <div className="filter-field">
-          <label htmlFor="orders-operator-id">ID Operario</label>
-          <input
-            id="orders-operator-id"
-            type="text"
-            placeholder="ID exacto"
-            value={advancedFilters.operatorId || ''}
-            onChange={(event) =>
-              handleFilterChange('operatorId', event.target.value)
-            }
-          />
-        </div>
-        <div className="filter-actions">
+          <div className="control-group">
+            <label htmlFor="orders-to-date">Hasta:</label>
+            <input
+              id="orders-to-date"
+              type="datetime-local"
+              value={advancedFilters.endDate || ''}
+              onChange={(event) =>
+                handleFilterChange('endDate', event.target.value)
+              }
+              className="filter-input-compact"
+            />
+          </div>
+
+          <div className="control-group search">
+            <input
+              id="orders-search-input"
+              type="text"
+              placeholder="🔍 Buscar cliente o teléfono..."
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="search-input"
+            />
+          </div>
+
           <button
             type="button"
-            className="btn-reset"
+            className="btn-reset-compact"
             onClick={handleResetFilters}
+            title="Limpiar filtros"
           >
-            Limpiar filtros
+            ✕
           </button>
         </div>
+
+        <details className="filters-advanced-toggle">
+          <summary>Más filtros</summary>
+          <div className="filters-row-advanced">
+            <div className="filter-field-inline">
+              <label htmlFor="orders-client-phone">Teléfono</label>
+              <input
+                id="orders-client-phone"
+                type="text"
+                placeholder="549351..."
+                value={advancedFilters.clientPhone || ''}
+                onChange={(event) =>
+                  handleFilterChange('clientPhone', event.target.value)
+                }
+              />
+            </div>
+            <div className="filter-field-inline">
+              <label htmlFor="orders-conversation-id">ID Conv.</label>
+              <input
+                id="orders-conversation-id"
+                type="text"
+                placeholder="123456"
+                value={advancedFilters.conversationId || ''}
+                onChange={(event) =>
+                  handleFilterChange('conversationId', event.target.value)
+                }
+              />
+            </div>
+            <div className="filter-field-inline">
+              <label htmlFor="orders-operator-name">Operario</label>
+              <input
+                id="orders-operator-name"
+                type="text"
+                placeholder="Nombre"
+                value={advancedFilters.operatorName || ''}
+                onChange={(event) =>
+                  handleFilterChange('operatorName', event.target.value)
+                }
+              />
+            </div>
+            <div className="filter-field-inline">
+              <label htmlFor="orders-operator-id">ID Op.</label>
+              <input
+                id="orders-operator-id"
+                type="text"
+                placeholder="ID"
+                value={advancedFilters.operatorId || ''}
+                onChange={(event) =>
+                  handleFilterChange('operatorId', event.target.value)
+                }
+              />
+            </div>
+          </div>
+        </details>
       </div>
 
       <div className="orders-content">

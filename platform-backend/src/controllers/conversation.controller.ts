@@ -332,6 +332,89 @@ export async function finishConversationHandler(req: Request, res: Response) {
   });
 }
 
+export async function closeAllConversationsHandler(
+  req: Request,
+  res: Response
+) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const reason =
+    typeof req.body?.reason === 'string' && req.body.reason.trim().length > 0
+      ? req.body.reason.trim()
+      : 'bulk_close';
+
+  const now = new Date();
+  const statusesToClose: ConversationStatus[] = ['ACTIVE', 'PENDING', 'PAUSED'];
+  const conversationsToClose = await prisma.conversation.findMany({
+    where: {
+      status: {
+        in: statusesToClose,
+      },
+    },
+    select: {
+      id: true,
+      status: true,
+    },
+  });
+
+  if (!conversationsToClose.length) {
+    return res.json({ success: true, closed: 0, conversations: [] });
+  }
+
+  const io = getSocketServer();
+  const closed = await Promise.all(
+    conversationsToClose.map(async (conversation) => {
+      const updatedConversation = await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          status: 'CLOSED',
+          botActive: false,
+          lastActivity: now,
+          closedAt: now,
+          closedReason: reason,
+          assignedToId: null,
+          closedById: req.user!.id,
+        },
+        select: conversationSelect,
+      });
+
+      await addConversationEvent(
+        conversation.id,
+        'STATUS_CHANGE',
+        {
+          previousStatus: conversation.status,
+          newStatus: 'CLOSED',
+          reason,
+          closedAt: now.toISOString(),
+        },
+        req.user!.id
+      );
+
+      if (io) {
+        io.emit('conversation:finish', {
+          conversationId: conversation.id.toString(),
+          status: 'CLOSED',
+          reason,
+          closedAt: now.toISOString(),
+          closedReason: reason,
+        });
+      }
+
+      await broadcastConversationUpdate(io, conversation.id);
+
+      return mapConversationForResponse(updatedConversation);
+    })
+  );
+
+  return res.json({
+    success: true,
+    closed: closed.length,
+    conversations: closed,
+  });
+}
+
 export async function reopenConversationHandler(req: Request, res: Response) {
   if (!req.user) {
     return res.status(401).json({ message: 'Unauthorized' });
@@ -791,16 +874,7 @@ export async function listConversationsHandler(req: Request, res: Response) {
       botActive: conversation.botActive,
       lastActivity: conversation.lastActivity,
       updatedAt: conversation.updatedAt,
-      lastMessage: conversation.messages[0]
-        ? {
-            id: conversation.messages[0]?.id?.toString() ?? '',
-            senderType: conversation.messages[0]?.senderType ?? '',
-            senderId: conversation.messages[0]?.senderId ?? '',
-            content: conversation.messages[0]?.content ?? '',
-            externalId: conversation.messages[0]?.externalId ?? '',
-            createdAt: conversation.messages[0]?.createdAt ?? '',
-          }
-        : null,
+      lastMessage: null,
     }))
   );
 }

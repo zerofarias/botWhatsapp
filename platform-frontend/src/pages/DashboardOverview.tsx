@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 import { useSocket } from '../hooks/useSocket';
+import RemindersWidget from '../components/dashboard/RemindersWidget';
+import RemindersNotification from '../components/dashboard/RemindersNotification';
 
 interface BotStatus {
   record: {
@@ -33,6 +35,29 @@ interface ConversationStats {
   active: number;
   closed: number;
   areaBreakdown: Array<{ areaName: string; active: number }>;
+  todayMessages: number;
+  vipActive: number;
+  closedToday: number;
+  conversionRate: number;
+  mostActiveArea: string | null;
+}
+
+interface DailyReminder {
+  id: number;
+  title: string;
+  description?: string;
+  contactId: number;
+  remindAt: string;
+  contact?: {
+    id: number;
+    name: string;
+    phone: string;
+    obraSocial?: string;
+    obraSocial2?: string;
+    isVip?: boolean;
+    isProblematic?: boolean;
+    isChronic?: boolean;
+  };
 }
 
 export default function DashboardOverview() {
@@ -50,10 +75,17 @@ export default function DashboardOverview() {
       active: 0,
       closed: 0,
       areaBreakdown: [],
+      todayMessages: 0,
+      vipActive: 0,
+      closedToday: 0,
+      conversionRate: 0,
+      mostActiveArea: null,
     }
   );
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState<string | null>(null);
+  const [todayReminders, setTodayReminders] = useState<DailyReminder[]>([]);
+  const [upcomingReminders, setUpcomingReminders] = useState<DailyReminder[]>([]);
   const socket = useSocket();
 
   const buildStatusState = useCallback(
@@ -108,38 +140,126 @@ export default function DashboardOverview() {
     setStatsLoading(true);
     setStatsError(null);
     try {
-      const [activeResponse, closedResponse] = await Promise.all([
+      const [activeResponse, closedResponse, messagesResponse] = await Promise.all([
         api.get<ConversationSummary[]>('/conversations', {
           params: { status: 'PENDING,ACTIVE,PAUSED' },
         }),
         api.get<ConversationSummary[]>('/conversations', {
           params: { status: 'CLOSED' },
         }),
+        api.get<MessagePreview[]>('/messages/today', {
+          params: { limit: 1000 },
+        }).catch(() => ({ data: [] })),
       ]);
 
+      const active = activeResponse.data;
+      const closed = closedResponse.data;
+      const messages = messagesResponse.data || [];
+
+      // Calcular estadísticas
       const areaCounter = new Map<string, number>();
-      activeResponse.data.forEach((conversation) => {
+      active.forEach((conversation) => {
         const key = conversation.area?.name ?? 'Sin area';
         areaCounter.set(key, (areaCounter.get(key) ?? 0) + 1);
       });
 
       const areaBreakdown = Array.from(areaCounter.entries())
-        .map(([areaName, active]) => ({ areaName, active }))
+        .map(([areaName, activeCount]) => ({ areaName, active: activeCount }))
         .sort((a, b) => b.active - a.active);
 
+      // VIP activos
+      const vipActive = active.filter(c => c.contact?.isVip).length;
+
+      // Cerrados hoy
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const closedToday = closed.filter(c => {
+        const closedDate = c.updatedAt ? new Date(c.updatedAt) : null;
+        return closedDate && closedDate >= today;
+      }).length;
+
+      // Tasa de conversión
+      const total = active.length + closed.length;
+      const conversionRate = total > 0 ? Math.round((closed.length / total) * 100) : 0;
+
+      // Área más activa
+      const mostActiveArea = areaBreakdown.length > 0 ? areaBreakdown[0].areaName : null;
+
       setConversationStats({
-        active: activeResponse.data.length,
-        closed: closedResponse.data.length,
+        active: active.length,
+        closed: closed.length,
         areaBreakdown,
+        todayMessages: messages.length,
+        vipActive,
+        closedToday,
+        conversionRate,
+        mostActiveArea,
       });
     } catch (error) {
       console.error('[Dashboard] Failed to load conversation stats', error);
       setStatsError(
         'No se pudieron obtener las estadisticas de conversaciones.'
       );
-      setConversationStats({ active: 0, closed: 0, areaBreakdown: [] });
+      setConversationStats({
+        active: 0,
+        closed: 0,
+        areaBreakdown: [],
+        todayMessages: 0,
+        vipActive: 0,
+        closedToday: 0,
+        conversionRate: 0,
+        mostActiveArea: null,
+      });
     } finally {
       setStatsLoading(false);
+    }
+  }, []);
+
+  const fetchReminders = useCallback(async () => {
+    try {
+      const response = await api.get<DailyReminder[]>('/contact-reminders/due', {
+        params: {
+          date: new Date().toISOString().split('T')[0],
+        },
+      });
+      // Ordenar por remindAt de forma ascendente (más próximo primero)
+      const remindersData: DailyReminder[] = Array.isArray(response.data)
+        ? response.data
+        : Array.isArray((response as any)?.data?.reminders)
+        ? (response as any).data.reminders
+        : [];
+      const sorted = remindersData.sort(
+        (a: DailyReminder, b: DailyReminder) =>
+          new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime()
+      );
+      setTodayReminders(sorted);
+    } catch (error) {
+      console.error('[Dashboard] Failed to load today reminders', error);
+    }
+
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const response = await api.get<DailyReminder[]>('/contact-reminders', {
+        params: {
+          start: today.toISOString(),
+          end: nextWeek.toISOString(),
+        },
+      });
+      // Ordenar por remindAt de forma ascendente (más próximo primero)
+      // y filtrar para solo incluir recordatorios con remindAt >= today
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      const sorted = (response.data ?? [])
+        .filter((reminder: DailyReminder) => new Date(reminder.remindAt) >= now)
+        .sort(
+          (a: DailyReminder, b: DailyReminder) =>
+            new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime()
+        );
+      setUpcomingReminders(sorted);
+    } catch (error) {
+      console.error('[Dashboard] Failed to load upcoming reminders', error);
     }
   }, []);
 
@@ -147,6 +267,7 @@ export default function DashboardOverview() {
   useEffect(() => {
     void fetchStatus();
     void fetchConversationStats();
+    void fetchReminders();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -221,29 +342,59 @@ export default function DashboardOverview() {
       setStatsLoading(true);
       setStatsError(null);
       try {
-        const [activeResponse, closedResponse] = await Promise.all([
+        const [activeResponse, closedResponse, messagesResponse] = await Promise.all([
           api.get<ConversationSummary[]>('/conversations', {
             params: { status: 'PENDING,ACTIVE,PAUSED' },
           }),
           api.get<ConversationSummary[]>('/conversations', {
             params: { status: 'CLOSED' },
           }),
+          api.get<MessagePreview[]>('/messages/today', {
+            params: { limit: 1000 },
+          }).catch(() => ({ data: [] })),
         ]);
 
+        const active = activeResponse.data;
+        const closed = closedResponse.data;
+        const messages = messagesResponse.data || [];
+
         const areaCounter = new Map<string, number>();
-        activeResponse.data.forEach((conversation) => {
+        active.forEach((conversation) => {
           const key = conversation.area?.name ?? 'Sin area';
           areaCounter.set(key, (areaCounter.get(key) ?? 0) + 1);
         });
 
         const areaBreakdown = Array.from(areaCounter.entries())
-          .map(([areaName, active]) => ({ areaName, active }))
+          .map(([areaName, activeCount]) => ({ areaName, active: activeCount }))
           .sort((a, b) => b.active - a.active);
 
+        // VIP activos
+        const vipActive = active.filter(c => c.contact?.isVip).length;
+
+        // Cerrados hoy
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const closedToday = closed.filter(c => {
+          const closedDate = c.updatedAt ? new Date(c.updatedAt) : null;
+          return closedDate && closedDate >= today;
+        }).length;
+
+        // Tasa de conversión
+        const total = active.length + closed.length;
+        const conversionRate = total > 0 ? Math.round((closed.length / total) * 100) : 0;
+
+        // Área más activa
+        const mostActiveArea = areaBreakdown.length > 0 ? areaBreakdown[0].areaName : null;
+
         setConversationStats({
-          active: activeResponse.data.length,
-          closed: closedResponse.data.length,
+          active: active.length,
+          closed: closed.length,
           areaBreakdown,
+          todayMessages: messages.length,
+          vipActive,
+          closedToday,
+          conversionRate,
+          mostActiveArea,
         });
       } catch (error) {
         console.error(
@@ -265,6 +416,12 @@ export default function DashboardOverview() {
     socket.on('conversation:incoming', refreshStats);
     socket.on('conversation:closed', refreshStats);
     socket.on('conversation:new', refreshStats);
+    
+    // Listen for daily reminders broadcast
+    const onDailyReminders = (data: { reminders: DailyReminder[] }) => {
+      setTodayReminders(data.reminders);
+    };
+    socket.on('daily-reminders', onDailyReminders);
 
     return () => {
       socket.off('session:status', onStatus);
@@ -274,6 +431,7 @@ export default function DashboardOverview() {
       socket.off('conversation:incoming', refreshStats);
       socket.off('conversation:closed', refreshStats);
       socket.off('conversation:new', refreshStats);
+      socket.off('daily-reminders', onDailyReminders);
     };
   }, [socket, buildStatusState]);
 
@@ -323,8 +481,13 @@ export default function DashboardOverview() {
     if (!confirmed) return;
     setResetLoading(true);
     try {
+      // Paso 1: eliminar tokens/sesión actual (carpeta tokens/user-<id>)
       await api.post('/bot/reset');
-      alert('Sesión eliminada. Escanea el nuevo QR para reconectar.');
+      // Paso 2: levantar sesión para forzar nuevo QR listo para otro número
+      await api.post('/bot/start');
+      alert(
+        'Sesión eliminada. Se solicitó un nuevo QR; espera unos segundos y escanéalo para vincular otro número.'
+      );
       await fetchStatus();
     } catch (error) {
       console.error('[Dashboard] Failed to reset bot session', error);
@@ -355,6 +518,25 @@ export default function DashboardOverview() {
 
   return (
     <div style={{ display: 'grid', gap: '1.5rem' }}>
+      <RemindersNotification reminders={todayReminders} />
+
+      <section
+        style={{
+          background: '#fff',
+          padding: '1.5rem',
+          borderRadius: '12px',
+          boxShadow: '0 12px 24px -18px rgba(15, 23, 42, 0.35)',
+          display: 'grid',
+          gap: '1.25rem',
+        }}
+      >
+        <RemindersWidget
+          todayReminders={todayReminders}
+          upcomingReminders={upcomingReminders}
+          loading={false}
+        />
+      </section>
+
       <section
         style={{
           background: '#fff',
@@ -376,7 +558,7 @@ export default function DashboardOverview() {
               style={{
                 display: 'grid',
                 gap: '1rem',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
               }}
             >
               <StatCard
@@ -387,9 +569,45 @@ export default function DashboardOverview() {
                 label="Chats cerrados"
                 value={conversationStats.closed}
               />
+              <StatCard
+                label="VIP activos"
+                value={conversationStats.vipActive}
+              />
+              <StatCard
+                label="Tasa de conversión"
+                value={`${conversationStats.conversionRate}%`}
+              />
+              <StatCard
+                label="Cerrados hoy"
+                value={conversationStats.closedToday}
+              />
+              <StatCard
+                label="Mensajes hoy"
+                value={conversationStats.todayMessages}
+              />
             </div>
+
+            {conversationStats.mostActiveArea && (
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  padding: '1rem',
+                  borderRadius: '8px',
+                  textAlign: 'center',
+                }}
+              >
+                <p style={{ margin: '0 0 0.5rem 0', fontSize: '12px', opacity: 0.9 }}>
+                  Área más activa
+                </p>
+                <h4 style={{ margin: 0, fontSize: '18px' }}>
+                  {conversationStats.mostActiveArea}
+                </h4>
+              </div>
+            )}
+
             <div>
-              <h3 style={{ margin: '0 0 0.75rem 0' }}>Distribucion por area</h3>
+              <h3 style={{ margin: '0 0 0.75rem 0' }}>Distribución por área</h3>
               {conversationStats.areaBreakdown.length ? (
                 <ul
                   style={{
@@ -521,7 +739,7 @@ export default function DashboardOverview() {
               opacity: resetLoading ? 0.75 : 1,
             }}
           >
-            {resetLoading ? 'Borrando...' : 'Borrar numero'}
+            {resetLoading ? 'Borrando...' : 'Desvincular Numero'}
           </button>
           <div
             style={{
@@ -603,7 +821,7 @@ export default function DashboardOverview() {
         }}
       >
         <h2 style={{ marginTop: 0 }}>Codigo QR</h2>
-        {lastQrImage ? (
+        {lastQrImage && lastQrImage.length > 100 ? (
           <div style={{ display: 'grid', gap: '1rem' }}>
             <img
               src={
@@ -612,6 +830,12 @@ export default function DashboardOverview() {
                   : `data:image/png;base64,${lastQrImage}`
               }
               alt="Codigo QR de WhatsApp"
+              onError={(e) => {
+                // Si la imagen no carga, mostrar solo el ASCII
+                const img = e.target as HTMLImageElement;
+                img.style.display = 'none';
+                console.warn('⚠️ QR image failed to load, showing ASCII instead');
+              }}
               style={{
                 width: '220px',
                 height: '220px',
@@ -630,6 +854,10 @@ export default function DashboardOverview() {
                   padding: '1rem',
                   borderRadius: '10px',
                   overflow: 'auto',
+                  fontFamily: 'monospace',
+                  fontSize: '8px',
+                  lineHeight: '1',
+                  margin: 0,
                 }}
               >
                 {lastQrAscii}

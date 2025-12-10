@@ -4,6 +4,7 @@ import { prisma } from '../config/prisma.js';
 import { addConversationEvent } from '../services/conversation.service.js';
 import { createConversationMessage } from '../services/message.service.js';
 import { getSystemSettingsCached } from '../services/settings.service.js';
+import { listDueReminders } from '../services/contactReminder.service.js';
 import {
   broadcastConversationEvent,
   broadcastConversationUpdate,
@@ -18,6 +19,46 @@ import {
 const AUTO_CLOSE_REASON = 'auto_inactivity';
 
 let schedulerStarted = false;
+let lastDailyReminderRun: Date | null = null;
+
+async function processDailyReminders(io: SocketIOServer) {
+  const now = new Date();
+  
+  // Only run once per day
+  if (lastDailyReminderRun) {
+    const daysSinceLastRun = (now.getTime() - lastDailyReminderRun.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSinceLastRun < 1) {
+      return;
+    }
+  }
+
+  try {
+    const todayReminders = await listDueReminders(now);
+    if (!todayReminders.length) {
+      console.log('[Scheduler] No hay recordatorios para hoy');
+      lastDailyReminderRun = now;
+      return;
+    }
+
+    console.log(`[Scheduler] Procesando ${todayReminders.length} recordatorios para hoy`);
+    
+    // Broadcast to all connected clients
+    io.emit('daily-reminders', {
+      date: now.toISOString(),
+      reminders: todayReminders.map((r) => ({
+        id: r.id,
+        title: r.title,
+        contactId: r.contactId,
+        contactName: r.contact?.name,
+        remindAt: r.remindAt,
+      })),
+    });
+
+    lastDailyReminderRun = now;
+  } catch (error) {
+    console.error('[Scheduler] Error processing daily reminders:', error);
+  }
+}
 
 async function closeInactiveConversations(io: SocketIOServer) {
   const settings = await getSystemSettingsCached();
@@ -143,7 +184,10 @@ export function startConversationScheduler(io: SocketIOServer) {
 
   const run = () => {
     closeInactiveConversations(io).catch((error) =>
-      console.error('[Scheduler] Unexpected error', error)
+      console.error('[Scheduler] Unexpected error closing conversations', error)
+    );
+    processDailyReminders(io).catch((error) =>
+      console.error('[Scheduler] Unexpected error processing reminders', error)
     );
   };
 

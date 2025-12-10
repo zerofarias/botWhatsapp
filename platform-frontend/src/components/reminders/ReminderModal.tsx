@@ -134,6 +134,19 @@ export default function ReminderModal({
     setSaving(true);
     setError(null);
     try {
+      // For repeatUntil, if it's just a date string, append end-of-day time to include the full day
+      let repeatUntilDate: Date | null = null;
+      if (formState.repeatUntil) {
+        if (formState.repeatUntil.includes('T')) {
+          // It's a datetime
+          repeatUntilDate = new Date(formState.repeatUntil);
+        } else {
+          // It's just a date (YYYY-MM-DD), set to end of day
+          const dateObj = new Date(formState.repeatUntil + 'T23:59:59');
+          repeatUntilDate = dateObj;
+        }
+      }
+
       await api.post(`/contact-reminders/${contactId}`, {
         title: formState.title.trim(),
         description: formState.description.trim() || null,
@@ -141,9 +154,7 @@ export default function ReminderModal({
         repeatIntervalDays: formState.repeatIntervalDays
           ? Number(formState.repeatIntervalDays)
           : null,
-        repeatUntil: formState.repeatUntil
-          ? new Date(formState.repeatUntil)
-          : null,
+        repeatUntil: repeatUntilDate,
       });
       onCreated?.();
       onClose();

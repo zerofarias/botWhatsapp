@@ -47,24 +47,46 @@ export function useGroupedConversations() {
     new Set() // All collapsed by default
   );
 
-  // Load conversations from API
-  useEffect(() => {
-    const loadConversations = async () => {
-      try {
-        setLoading(true);
-        const response = await api.get('/conversations');
-        const data = Array.isArray(response.data) ? response.data : [];
-        setConversationData(data);
-      } catch (error) {
-        console.error('Error loading conversations for grouping:', error);
-        setConversationData([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadConversations();
+  const loadConversations = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/conversations');
+      const data = Array.isArray(response.data) ? response.data : [];
+      setConversationData(data);
+    } catch (error) {
+      console.error('Error loading conversations for grouping:', error);
+      setConversationData([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // Load conversations initially
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
+
+  // Listen for multiple refresh events
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const handler = () => {
+      loadConversations();
+    };
+    
+    // Listen to ALL the refresh events that might indicate new conversations
+    window.addEventListener('chat:refresh-conversations', handler);
+    window.addEventListener('chat:messageReceived', handler);
+    window.addEventListener('chat:conversationUpdated', handler);
+    window.addEventListener('chat:conversationListRefresh', handler);
+    
+    return () => {
+      window.removeEventListener('chat:refresh-conversations', handler);
+      window.removeEventListener('chat:messageReceived', handler);
+      window.removeEventListener('chat:conversationUpdated', handler);
+      window.removeEventListener('chat:conversationListRefresh', handler);
+    };
+  }, [loadConversations]);
 
   // Group conversations by phone number
   const groupedConversations = useMemo(() => {

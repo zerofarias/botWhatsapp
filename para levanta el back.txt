@@ -1,0 +1,9 @@
+C:\wppconnect2\backend-stdout.log
+C:\wppconnect2\backend-stderr.log
+
+
+
+
+sc stop wpp-backend
+sc start wpp-backend
+sc query wpp-backend

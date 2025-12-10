@@ -26,6 +26,7 @@ export async function fetchConversationSnapshot(
           dni: true,
           address1: true,
           address2: true,
+          photoUrl: true,
         },
       },
     },
@@ -44,6 +45,7 @@ export async function fetchConversationSnapshot(
           dni: record.contact.dni,
           address1: record.contact.address1 ?? null,
           address2: record.contact.address2 ?? null,
+          photoUrl: record.contact.photoUrl ?? null,
         }
       : null,
     areaId: record.areaId,
@@ -72,21 +74,24 @@ export async function fetchConversationSnapshot_Full(
 
   if (!record) return null;
 
+  // Sanitizar todos los BigInt a números (para evitar errores de serialización JSON)
+  const sanitized = sanitizeBigInts(record);
+
   // Transformar a formato que espera el frontend
   return {
-    ...record,
-    id: record.id.toString(),
-    contact: record.contact
-      ? { ...record.contact, id: record.contact.id.toString() }
+    ...sanitized,
+    id: sanitized.id.toString(),
+    contact: sanitized.contact
+      ? { ...sanitized.contact, id: sanitized.contact.id.toString() }
       : null,
-    area: record.area,
-    assignedTo: record.assignedTo,
+    area: sanitized.area,
+    assignedTo: sanitized.assignedTo,
     lastMessage:
-      record.messages && record.messages.length > 0
+      sanitized.messages && sanitized.messages.length > 0
         ? {
-            ...record.messages[0],
-            id: record.messages[0].id.toString(),
-            conversationId: record.messages[0].conversationId.toString(),
+            ...sanitized.messages[0],
+            id: sanitized.messages[0].id.toString(),
+            conversationId: sanitized.messages[0].conversationId.toString(),
           }
         : null,
   };
@@ -114,7 +119,7 @@ export function emitToRoom(
   payload: unknown
 ) {
   if (!io) return;
-  io.to(room).emit(event, payload);
+  io.to(room).emit(event, sanitizeBigInts(payload));
 }
 import fs from 'fs/promises';
 import path from 'path';
@@ -209,6 +214,7 @@ type MessageCache = {
 
 const messageProcessingCache = new Map<string, MessageCache>();
 const MESSAGE_CACHE_TTL = 60000; // 1 minuto en cache
+const STALE_MESSAGE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutos
 
 // Función para limpiar cache expirado
 function cleanExpiredMessageCache() {
@@ -254,6 +260,7 @@ type ConversationSnapshot = {
     dni: string | null;
     address1: string | null;
     address2: string | null;
+    photoUrl: string | null;
   } | null;
   areaId: number | null;
   assignedToId: number | null;
@@ -912,10 +919,14 @@ export async function broadcastMessageRecord(
 
   // TAMBIÉN emitir globalmente para que llegue a clientes que no están en el room
   // (ej: usuarios que cerraron el chat pero siguen conectados)
-  io.emit('message:new', payload);
-  console.log(
-    `[SOCKET] Global broadcast of message:new for conversation ${conversationId}`
-  );
+  try {
+    io.emit('message:new', payload);
+    console.log(
+      `[SOCKET] Global broadcast of message:new for conversation ${conversationId}`
+    );
+  } catch (error) {
+    console.error('[SOCKET] Error broadcasting message:new:', error);
+  }
 }
 
 function extractPhoneNumber(whatsappId: string): string {
@@ -932,16 +943,29 @@ async function getContactInfoFromWhatsApp(
   try {
     // Intentar obtener información del contacto desde WhatsApp
     const contactInfo = await client.getContact(phoneNumber);
+    let photoUrl: string | null = null;
+    
+    // Intentar obtener la foto de perfil
+    try {
+      // Usar profilePicThumbObj que viene con el contacto
+      photoUrl = (contactInfo as any)?.profilePicThumbObj?.imgFull || 
+                 (contactInfo as any)?.profilePicThumbObj?.img ||
+                 (contactInfo as any)?.profilePicThumb ||
+                 null;
+    } catch (picError) {
+      // Ignorar errores al obtener la foto
+      photoUrl = null;
+    }
+    
     if (contactInfo) {
       const contactName =
         contactInfo.name ||
         contactInfo.pushname ||
         contactInfo.shortName ||
         null;
-      const photoUrl = (contactInfo as any).profilePicThumbObj?.imgFull || null;
 
       console.log(
-        `[WPP] Contact info for ${cleanNumber}: name="${contactName}", photo=${!!photoUrl}`
+        `[WPP] Contact info for ${cleanNumber}: name="${contactName}", photo=${photoUrl ? 'YES' : 'NO'}`
       );
       return { name: contactName, number: cleanNumber, photoUrl };
     }
@@ -1058,11 +1082,11 @@ async function ensureConversation(
 
   // Emitir evento global de actualización
   if (io) {
-    io.emit('conversation:update', snapshot);
-    io.emit('conversation:new', {
+    io.emit('conversation:update', sanitizeBigInts(snapshot));
+    io.emit('conversation:new', sanitizeBigInts({
       conversation: snapshot,
       source: 'incoming_message',
-    });
+    }));
     console.log(
       `[CONVERSATION] ?? Emitted conversation:update for ${created.id}`
     );
@@ -1073,10 +1097,10 @@ async function ensureConversation(
 
   // Emitir evento global para que se vea la nueva conversación en todas partes
   if (io) {
-    io.emit('conversation:new', {
+    io.emit('conversation:new', sanitizeBigInts({
       conversation: snapshot,
       source: 'incoming_message',
-    });
+    }));
     console.log(
       `[CONVERSATION] ? Emitted conversation:new for ${created.id} to ALL clients`
     );
@@ -1292,6 +1316,35 @@ async function handleIncomingMessage(
   io?: SocketIOServer
 ) {
   const messageAny = message as any;
+  
+  // Ignorar mensajes de historias/estados de WhatsApp (status@broadcast)
+  // Estos mensajes vienen cuando alguien publica una historia y no deben crear conversaciones
+  const fromId = typeof message.from === 'string' ? message.from : '';
+  const chatId = typeof messageAny.chatId === 'string' ? messageAny.chatId : 
+                 typeof messageAny.chat?.id === 'string' ? messageAny.chat.id : '';
+  const isStatusMessage = 
+    fromId.includes('status@broadcast') || 
+    chatId.includes('status@broadcast') ||
+    messageAny.isStatusV3 === true ||
+    messageAny.isStatus === true;
+  
+  if (isStatusMessage) {
+    console.log('[WPP] Ignoring status/story message from:', fromId);
+    return;
+  }
+
+  // Ignorar mensajes de grupos
+  // En WhatsApp, los grupos tienen el patrón: "123456789-1234567890@g.us"
+  const isGroupMessage = 
+    chatId.includes('@g.us') || 
+    fromId.includes('@g.us') ||
+    messageAny.isGroupMsg === true;
+  
+  if (isGroupMessage) {
+    console.log('[WPP] Ignoring group message from:', fromId, 'chatId:', chatId);
+    return;
+  }
+  
   let bodyValue: unknown = message.body ?? message.caption ?? '';
   let body =
     typeof bodyValue === 'string' ? bodyValue : String(bodyValue ?? '');
@@ -1341,6 +1394,13 @@ async function handleIncomingMessage(
   let conversation = ensureResult.conversation;
   const contact = ensureResult.contact;
   const conversationId = BigInt(conversation.id);
+  console.log(
+    `[WPP DEBUG] Incoming message ${message.id ?? '<no-id>'} from ${
+      message.from
+    }: conversation=${conversationId}, status=${conversation.status}, botActive=${
+      conversation.botActive
+    }, ensureCreated=${ensureResult.created}`
+  );
 
   if (externalId) {
     // Verificar cache de procesamiento antes de consultar la base de datos
@@ -1360,10 +1420,22 @@ async function handleIncomingMessage(
   }
 
   const receivedAt = resolveMessageDate(message);
+  
+  // Obtener el botId de la conversación o el bot por defecto
+  let effectiveBotId = conversation.botId;
+  if (!effectiveBotId) {
+    const { getDefaultBot } = await import('./default-bot.service.js');
+    const defaultBot = await getDefaultBot();
+    effectiveBotId = defaultBot?.id ?? null;
+    console.log('[FLOW] No botId in conversation, using default bot:', effectiveBotId);
+  }
+  
   const flows = await listFlowTree({
     createdBy: ownerUserId,
+    botId: effectiveBotId,
     includeInactive: false,
   });
+  console.log(`[FLOW] Loaded ${flows.length} root flows for botId=${effectiveBotId}`);
   const flatFlowNodes = flattenFlowTree(flows);
   const primaryMenu = buildPrimaryMenuMessage(flows);
 
@@ -1545,14 +1617,30 @@ async function handleIncomingMessage(
   }
 
   if (!conversation.botActive) {
+    console.warn(
+      `[WPP DEBUG] Bot inactive for conversation ${conversationId} (status ${conversation.status}). Reply skipped.`
+    );
     return;
   }
 
   if (ensureResult.created) {
     const allNodes = flattenFlowTree(flows);
-    const startNode = allNodes.find(
-      (node) => node.type === 'START' && node.isActive
-    );
+    // Filtrar todos los nodos START activos y ordenar por fecha de creación descendente
+    // para seleccionar el más reciente (generalmente el flujo principal)
+    const startNodes = allNodes
+      .filter((node) => node.type === 'START' && node.isActive)
+      .sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA; // Descendente: más reciente primero
+      });
+    
+    const startNode = startNodes[0];
+    
+    if (startNodes.length > 1) {
+      console.log('[FLOW] Multiple START nodes found:', startNodes.map(n => n.id));
+      console.log('[FLOW] Selected most recent START node:', startNode?.id);
+    }
 
     if (startNode) {
       console.log('[FLOW] Found START node:', startNode.id);
@@ -1633,9 +1721,21 @@ async function handleIncomingMessage(
       '[FLOW] No previous node ID, attempting to start from START node'
     );
     const allNodes = flattenFlowTree(flows);
-    const startNode = allNodes.find(
-      (node) => node.type === 'START' && node.isActive
-    );
+    // Filtrar todos los nodos START activos y ordenar por fecha de creación descendente
+    const startNodes = allNodes
+      .filter((node) => node.type === 'START' && node.isActive)
+      .sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA; // Descendente: más reciente primero
+      });
+    
+    const startNode = startNodes[0];
+    
+    if (startNodes.length > 1) {
+      console.log('[FLOW] Multiple START nodes found:', startNodes.map(n => n.id));
+      console.log('[FLOW] Selected most recent START node:', startNode?.id);
+    }
 
     if (startNode) {
       console.log('[FLOW] Found START node for continuation:', startNode.id);
@@ -1711,6 +1811,23 @@ async function handleIncomingMessage(
                 currentFlowNodeId: chainResult.nextNodeId,
               });
 
+              // Procesar delays antes de enviar mensajes
+              const delayActions = chainResult.actions.filter(
+                (a) => a.type === 'delay'
+              );
+              for (const delayAction of delayActions) {
+                if (
+                  delayAction.payload &&
+                  typeof delayAction.payload === 'object'
+                ) {
+                  const duration = (delayAction.payload as Record<string, unknown>).duration as number;
+                  if (typeof duration === 'number' && duration > 0) {
+                    console.log(`[DELAY] Esperando ${duration}ms antes de responder al nodo START`);
+                    await new Promise((resolve) => setTimeout(resolve, duration));
+                  }
+                }
+              }
+
               // Procesar mensajes
               const sendMessageAction = chainResult.actions.find(
                 (a) => a.type === 'send_message'
@@ -1740,6 +1857,13 @@ async function handleIncomingMessage(
                 conversationId,
                 conversation,
                 contact
+              );
+
+              await processFlowDataCapture(
+                chainResult.actions,
+                conversationId,
+                conversation.botId,
+                conversation
               );
 
               // Verificar si hay acción end_flow (también puede ocurrir desde START)
@@ -1791,11 +1915,11 @@ async function handleIncomingMessage(
                       conversationId
                     );
                     if (snapshot) {
-                      io.emit('conversation:end_flow', {
+                      io.emit('conversation:end_flow', sanitizeBigInts({
                         conversationId,
                         botActive: false,
                         snapshot,
-                      });
+                      }));
                     }
                   }
                 } catch (closeError) {
@@ -1847,8 +1971,186 @@ async function handleIncomingMessage(
     return;
   }
 
-  // Si hay previousNodeId, intentar continuar la cadena automáticamente
+  // Si hay previousNodeId, verificar si es un nodo END/END_CLOSED
+  // Si el nodo anterior es END, el flujo ya terminó y debemos reiniciar desde START
   if (previousNodeId) {
+    const previousNode = flatFlowNodes.find((n) => n.id === previousNodeId);
+    
+    if (previousNode && (previousNode.type === 'END' || previousNode.type === 'END_CLOSED')) {
+      console.log(
+        `[FLOW] Previous node ${previousNodeId} is ${previousNode.type}, flow already ended. Restarting from START.`
+      );
+      
+      // Buscar nodo START más reciente para reiniciar el flujo
+      const startNodes = flatFlowNodes
+        .filter((node) => node.type === 'START' && node.isActive)
+        .sort((a, b) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return dateB - dateA;
+        });
+      
+      const startNode = startNodes[0];
+      
+      if (startNodes.length > 1) {
+        console.log('[FLOW] Multiple START nodes found for restart:', startNodes.map(n => n.id));
+        console.log('[FLOW] Selected most recent START node:', startNode?.id);
+      }
+
+      if (startNode) {
+        const connection = await prisma.flowConnection.findFirst({
+          where: { fromId: startNode.id },
+        });
+
+        if (connection && connection.toId) {
+          const firstNode = flatFlowNodes.find((n) => n.id === connection.toId);
+
+          if (firstNode && firstNode.isActive) {
+            console.log(
+              '[FLOW] Restarting flow from START -> node:',
+              firstNode.id,
+              firstNode.name
+            );
+
+            const initialContext: import('../services/flow.service').ConversationContext =
+              {
+                lastMessage: typeof body === 'string' ? body : String(body ?? ''),
+                previousNode: startNode.id,
+                updatedAt: new Date().toISOString(),
+              };
+
+            const enrichedContext = enrichContextWithGlobalVariables(
+              initialContext,
+              {
+                userPhone: conversation.userPhone ?? undefined,
+                contactName:
+                  contact?.name ?? conversation.contactName ?? undefined,
+                dni: contact?.dni ?? undefined,
+              }
+            );
+
+            if (!conversation.botId) {
+              console.log(`[FLOW] Invalid botId`);
+              return;
+            }
+
+            try {
+              const chainResult = await executeNodeChain({
+                botId: conversation.botId,
+                nodeId: firstNode.id,
+                context: enrichedContext,
+              });
+
+              console.log('[FLOW] executeNodeChain result (restart from END):', {
+                conversationId,
+                startNodeId: firstNode.id,
+                nextNodeId: chainResult.nextNodeId,
+                actions: chainResult.actions?.map((a) => a.type),
+              });
+
+              await touchConversation(conversationId, {
+                context: JSON.stringify(chainResult.updatedContext),
+                currentFlowNodeId: chainResult.nextNodeId,
+              });
+
+              if (chainResult.actions && chainResult.actions.length > 0) {
+                const sendMessageAction = chainResult.actions.find(
+                  (a) => a.type === 'send_message'
+                );
+                if (
+                  sendMessageAction &&
+                  sendMessageAction.payload &&
+                  typeof sendMessageAction.payload === 'object'
+                ) {
+                  const payload = sendMessageAction.payload as Record<
+                    string,
+                    unknown
+                  >;
+                  const messageText = (payload.message as string) ?? '';
+                  await sendReply(
+                    ownerUserId,
+                    client,
+                    conversationId,
+                    message,
+                    messageText,
+                    io
+                  );
+                }
+
+                await processOrderCreationActions(
+                  chainResult.actions,
+                  conversationId,
+                  conversation,
+                  contact
+                );
+
+                await processFlowDataCapture(
+                  chainResult.actions,
+                  conversationId,
+                  conversation.botId,
+                  conversation
+                );
+
+                // Verificar si hay acción end_flow
+                const endFlowAction = chainResult.actions.find(
+                  (a) => a.type === 'end_flow'
+                );
+                const shouldCloseConversation =
+                  endFlowAction?.payload &&
+                  typeof endFlowAction.payload === 'object'
+                    ? (endFlowAction.payload as Record<string, unknown>)
+                        .shouldCloseConversation === true
+                    : false;
+
+                if (shouldCloseConversation) {
+                  try {
+                    await closeConversationRecord(BigInt(conversationId), {
+                      closedById: null,
+                      reason: 'flow_end_closed_node',
+                    });
+                    await broadcastConversationUpdate(io, conversationId);
+                  } catch (closeError) {
+                    console.error(
+                      '[FLOW] Error closing conversation from END_CLOSED:',
+                      closeError
+                    );
+                  }
+                }
+              }
+
+              if (externalId) {
+                markMessageAsCompleted(externalId);
+              }
+              return;
+            } catch (error) {
+              console.error(
+                '[FLOW] Error restarting flow from END:',
+                error
+              );
+            }
+          }
+        }
+      }
+
+      // Si no se pudo reiniciar desde START, enviar menú principal
+      if (primaryMenu) {
+        await sendReply(
+          ownerUserId,
+          client,
+          conversationId,
+          message,
+          primaryMenu,
+          io
+        );
+      }
+
+      if (externalId) {
+        markMessageAsCompleted(externalId);
+      }
+      return;
+    }
+
+    // Si no es un nodo END, continuar normalmente
     console.log(
       `[FLOW] Continuing from node ${previousNodeId}, executing next node automatically`
     );
@@ -2053,6 +2355,13 @@ async function handleIncomingMessage(
             contact
           );
 
+          await processFlowDataCapture(
+            chainResult.actions,
+            conversationId,
+            conversation.botId,
+            conversation
+          );
+
           // Procesar notas
           const saveNoteActions = chainResult.actions.filter(
             (a) => a.type === 'save_note'
@@ -2148,11 +2457,11 @@ async function handleIncomingMessage(
           if (io) {
             const snapshot = await fetchConversationSnapshot(conversationId);
             if (snapshot) {
-              io.emit('conversation:end_flow', {
+              io.emit('conversation:end_flow', sanitizeBigInts({
                 conversationId,
                 botActive: false,
                 snapshot,
-              });
+              }));
             }
           }
         }
@@ -2313,11 +2622,38 @@ function attachMessageHandlers(
     const externalId = extractMessageExternalId(message);
     const finishTrackedTask = beginTrackedTask('incoming-message');
     try {
+      console.log(
+        `[WPP DEBUG] received raw message event ${message.id ?? '<no-id>'} from ${message.from}`
+      );
       const cache = sessions.get(ownerUserId);
       if (!cache || cache.paused) {
         finishTrackedTask();
         return;
       }
+
+      const messageAny = message as any;
+      const isNewFlag =
+        typeof messageAny?.isNewMsg === 'boolean'
+          ? messageAny.isNewMsg
+          : typeof messageAny?.isLatestMessage === 'boolean'
+          ? messageAny.isLatestMessage
+          : undefined;
+      const receivedAt = resolveMessageDate(message);
+      const ageMs = Date.now() - (receivedAt?.getTime?.() ?? Date.now());
+      const isStale = ageMs > STALE_MESSAGE_THRESHOLD_MS;
+
+      if (isNewFlag === false || isStale) {
+        console.log(
+          '[WPP] Ignoring historical/stale message',
+          message.id ?? '<no-id>',
+          'isNewMsg=',
+          isNewFlag,
+          'ageMs=',
+          ageMs
+        );
+        return;
+      }
+
       await handleIncomingMessage(ownerUserId, message, client, io);
     } catch (error) {
       console.error('[WPP] Error handling incoming message', error);
@@ -2533,6 +2869,58 @@ async function processOrderCreationActions(
   }
 }
 
+async function processFlowDataCapture(
+  actions: Array<{ type: string; payload?: unknown }> | undefined,
+  conversationId: bigint,
+  botId: number | bigint,
+  conversation: any
+) {
+  if (!Array.isArray(actions) || !actions.length) {
+    return;
+  }
+
+  for (const action of actions) {
+    if (
+      action.type !== 'save_flow_data' ||
+      !action.payload ||
+      typeof action.payload !== 'object'
+    ) {
+      continue;
+    }
+
+    try {
+      const payload = action.payload as Record<string, unknown>;
+      const dataType = typeof payload.dataType === 'string' ? payload.dataType : 'otro';
+      const description = typeof payload.description === 'string' ? payload.description : '';
+      const variables = typeof payload.variables === 'object' ? payload.variables : {};
+
+      // Guardar los datos capturados en la base de datos
+      const savedData = await prisma.flowData.create({
+        data: {
+          botId: Number(botId),
+          conversationId,
+          dataType,
+          variables: JSON.stringify(variables),
+          phoneNumber: conversation?.phone || null,
+        },
+      });
+
+      console.log(
+        `[DATA_LOG] Flujo ${botId}, Conversación ${conversationId}: Datos guardados (tipo: ${dataType})`,
+        {
+          id: savedData.id,
+          variables: variables ? Object.keys(variables) : [],
+        }
+      );
+    } catch (error) {
+      console.error(
+        `[DATA_LOG] Error guardando datos para conversación ${conversationId}:`,
+        error
+      );
+    }
+  }
+}
+
 async function createOrderFromNodeAction(
   conversationId: bigint | number,
   payload: OrderNodeActionPayload,
@@ -2687,7 +3075,8 @@ async function createOrderFromCompletedFlow(
 ): Promise<void> {
   try {
     // Verificar si ya existe una orden para esta conversación
-    const existingOrder = await (prisma as any).order.findUnique({
+    // Usamos findFirst porque conversationId no es un campo único
+    const existingOrder = await (prisma as any).order.findFirst({
       where: { conversationId: BigInt(conversationId) },
     });
 

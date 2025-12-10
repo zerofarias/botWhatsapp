@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { authorize } from '../middleware/authorize.js';
 import {
+  closeAllConversationsHandler,
   closeConversationHandler,
   getConversationMessagesHandler,
   listConversationsHandler,
@@ -23,6 +24,11 @@ export const conversationRouter = Router();
 conversationRouter.use(authenticate);
 // Endpoint para obtener todas las conversaciones del sistema
 conversationRouter.get('/all', listAllChatsHandler);
+conversationRouter.post(
+  '/close-all',
+  authorize(['ADMIN', 'SUPERVISOR']),
+  closeAllConversationsHandler
+);
 // Historial combinado de chats por teléfono
 conversationRouter.get('/history/:phone', getCombinedChatHistoryHandler);
 // Nuevo endpoint: historial de UNA conversación específica (no mezcla con otras del mismo teléfono)

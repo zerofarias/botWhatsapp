@@ -23,16 +23,6 @@ function formatTime(timestamp: number) {
 const MessageBubble_v2: React.FC<MessageBubbleV2Props> = ({ message }) => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-  // Debug: Log multimedia messages only
-  if (message.mediaType || message.mediaUrl) {
-    console.log('MessageBubble_v2 - Multimedia message:', {
-      id: message.id,
-      mediaType: message.mediaType,
-      mediaUrl: message.mediaUrl,
-      fullUrl: message.mediaUrl ? getFullMediaUrl(message.mediaUrl) : null,
-    });
-  }
-
   const isOutgoing = message.sender === 'user' || message.sender === 'bot';
 
   const containerClass = isOutgoing

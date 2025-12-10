@@ -238,6 +238,7 @@ export const conversationSelect = {
       dni: true,
       obraSocial: true,
       obraSocial2: true,
+      photoUrl: true,
       isVip: true,
       isProblematic: true,
       isChronic: true,
@@ -659,19 +660,6 @@ const conversationSummarySelect = {
       isVip: true,
       isProblematic: true,
       isChronic: true,
-    },
-  },
-  messages: {
-    orderBy: { createdAt: 'desc' },
-    take: 1,
-    select: {
-      id: true,
-      senderType: true,
-      senderId: true,
-      content: true,
-      externalId: true,
-      isDelivered: true,
-      createdAt: true,
     },
   },
 } satisfies Prisma.ConversationSelect;

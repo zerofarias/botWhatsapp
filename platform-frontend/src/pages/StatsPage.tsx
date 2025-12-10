@@ -6,6 +6,7 @@ import {
   type MessagesPerDayStat,
 } from '../services/api';
 import './StatsPage.css';
+import { FiTrendingUp, FiTrendingDown, FiInfo } from 'react-icons/fi';
 
 const RANGE_OPTIONS = [
   { label: '7 días', value: 7 },
@@ -52,6 +53,38 @@ const getBarWidth = (value: number, max: number) => {
   if (max <= 0) return '0%';
   return `${Math.max(6, Math.round((value / max) * 100))}%`;
 };
+
+// Componente para mostrar métrica con indicador
+const MetricCard = ({ 
+  icon, 
+  label, 
+  value, 
+  subtitle, 
+  trend, 
+  variant = 'default' 
+}: { 
+  icon: string; 
+  label: string; 
+  value: string | number; 
+  subtitle?: string;
+  trend?: 'up' | 'down' | 'neutral';
+  variant?: string;
+}) => (
+  <article className={`stat-card stat-card-${variant}`}>
+    <div className="stat-card-header">
+      <div className="stat-card-icon">{icon}</div>
+      <div className="stat-card-title">{label}</div>
+    </div>
+    <div className="stat-card-value">{value}</div>
+    {subtitle && <span className="stat-card-subtitle">{subtitle}</span>}
+    {trend && (
+      <div className={`stat-card-trend trend-${trend}`}>
+        {trend === 'up' && <FiTrendingUp size={14} />}
+        {trend === 'down' && <FiTrendingDown size={14} />}
+      </div>
+    )}
+  </article>
+);
 
 const StatsPage = () => {
   const [range, setRange] = useState(7);
@@ -100,6 +133,17 @@ const StatsPage = () => {
     return data.messaging.messagesPerDay;
   }, [data]);
 
+  // Calcular tasas y promedios
+  const orderCompletionRate = useMemo(() => {
+    if (!data || data.orders.totalInRange === 0) return 0;
+    return ((data.orders.completed / data.orders.totalInRange) * 100).toFixed(1);
+  }, [data]);
+
+  const orderCancelRate = useMemo(() => {
+    if (!data || data.orders.totalInRange === 0) return 0;
+    return ((data.orders.cancelled / data.orders.totalInRange) * 100).toFixed(1);
+  }, [data]);
+
   const maxHotMessages = Math.max(
     ...topMessageHours.map((item) => item.total),
     0
@@ -146,8 +190,8 @@ const StatsPage = () => {
     <div className="stats-page">
       <header className="stats-header">
         <div>
-          <p className="stats-subtitle">Estado general del sistema</p>
-          <h1>Estadísticas</h1>
+          <p className="stats-subtitle">Panel de Control</p>
+          <h1>📊 Estadísticas</h1>
           <p className="stats-range-label">
             Última actualización: {new Date().toLocaleString('es-AR')}
           </p>
@@ -172,175 +216,232 @@ const StatsPage = () => {
 
       {data && !loading && (
         <>
-          <section className="stats-grid">
-            <article className="stat-card stat-card-contacts">
-              <div className="stat-card-icon">👥</div>
-              <p>Total de contactos</p>
-              <h3>{numberFormatter.format(data.contacts.total)}</h3>
-              <span className="stat-foot">
-                {numberFormatter.format(data.contacts.newInRange)} nuevos en el
-                rango
-              </span>
-            </article>
-            <article className="stat-card stat-card-new">
-              <div className="stat-card-icon">✨</div>
-              <p>Números nuevos</p>
-              <h3>{numberFormatter.format(data.contacts.newNumbers)}</h3>
-              <span className="stat-foot">
-                Personas que escribieron por primera vez
-              </span>
-            </article>
-            <article className="stat-card stat-card-night">
-              <div className="stat-card-icon">🌙</div>
-              <p>Mensajes nocturnos</p>
-              <h3>{numberFormatter.format(data.messaging.nightlyMessages)}</h3>
-              <span className="stat-foot">Entre 22:00 y 06:00</span>
-            </article>
-            <article className="stat-card stat-card-response">
-              <div className="stat-card-icon">⚡</div>
-              <p>Respuesta promedio</p>
-              <h3>{formatSeconds(data.messaging.avgResponseSeconds)}</h3>
-              <span className="stat-foot">
-                Desde el último mensaje del contacto hasta un operador
-              </span>
-            </article>
-            <article className="stat-card stat-card-closure">
-              <div className="stat-card-icon">✅</div>
-              <p>Cierre de pedidos</p>
-              <h3>{formatMinutes(data.orders.avgClosureMinutes)}</h3>
-              <span className="stat-foot">Promedio desde creación</span>
-            </article>
-          </section>
-
-          <section className="stats-panels">
-            <article className="stats-card">
-              <div className="stats-card-header">
-                <h3>Horarios calientes · Mensajes</h3>
-                <span>Top {topMessageHours.length}</span>
-              </div>
-              {topMessageHours.length === 0 ? (
-                <p className="stats-empty">No hay mensajes en el rango.</p>
-              ) : (
-                <ul className="stats-bars">
-                  {topMessageHours.map((item) => (
-                    <li key={`msg-${item.hour}`}>
-                      <div className="stats-bar-info">
-                        <span>{formatHourRange(item.hour)}</span>
-                        <strong>{numberFormatter.format(item.total)}</strong>
-                      </div>
-                      <div className="stats-bar-track">
-                        <div
-                          className="stats-bar-fill"
-                          style={{
-                            width: getBarWidth(item.total, maxHotMessages),
-                          }}
-                        />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </article>
-            <article className="stats-card">
-              <div className="stats-card-header">
-                <h3>Horarios calientes · Pedidos</h3>
-                <span>Top {topOrderHours.length}</span>
-              </div>
-              {topOrderHours.length === 0 ? (
-                <p className="stats-empty">No hay pedidos registrados.</p>
-              ) : (
-                <ul className="stats-bars">
-                  {topOrderHours.map((item) => (
-                    <li key={`order-${item.hour}`}>
-                      <div className="stats-bar-info">
-                        <span>{formatHourRange(item.hour)}</span>
-                        <strong>{numberFormatter.format(item.total)}</strong>
-                      </div>
-                      <div className="stats-bar-track">
-                        <div
-                          className="stats-bar-fill accent"
-                          style={{
-                            width: getBarWidth(item.total, maxHotOrders),
-                          }}
-                        />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </article>
-          </section>
-
-          <section className="stats-card stats-chart-card">
-            <div className="stats-card-header">
-              <h3>Mensajes por día</h3>
-              <span>Actividad diaria</span>
+          {/* SECCIÓN 1: CONTACTOS Y ACTIVIDAD */}
+          <section className="stats-section">
+            <h2 className="stats-section-title">👥 Contactos</h2>
+            <div className="stats-grid">
+              <MetricCard 
+                icon="👥" 
+                label="Total de contactos" 
+                value={numberFormatter.format(data.contacts.total)}
+                subtitle={`${numberFormatter.format(data.contacts.newInRange)} nuevos en el período`}
+                variant="contacts"
+              />
+              <MetricCard 
+                icon="✨" 
+                label="Números nuevos" 
+                value={numberFormatter.format(data.contacts.newNumbers)}
+                subtitle="Primera vez escribiendo"
+                variant="new"
+              />
             </div>
-            {messagesPerDay.length === 0 || !dailyChart ? (
-              <p className="stats-empty">Aún no hay mensajes en este rango.</p>
-            ) : (
-              <div className="stats-chart stats-chart--line">
-                <div className="stats-chart__canvas">
-                  <svg
-                    width={dailyChart.width}
-                    height={dailyChart.height}
-                    viewBox={`0 0 ${dailyChart.width} ${dailyChart.height}`}
-                    className="stats-chart-svg"
-                  >
-                    <defs>
-                      <linearGradient
-                        id="messagesLine"
-                        x1="0%"
-                        y1="0%"
-                        x2="0%"
-                        y2="100%"
-                      >
-                        <stop offset="0%" stopColor="#3b82f6" />
-                        <stop offset="100%" stopColor="#1d4ed8" />
-                      </linearGradient>
-                      <linearGradient
-                        id="messagesFill"
-                        x1="0%"
-                        y1="0%"
-                        x2="0%"
-                        y2="100%"
-                      >
-                        <stop offset="0%" stopColor="rgba(59,130,246,0.35)" />
-                        <stop offset="100%" stopColor="rgba(59,130,246,0)" />
-                      </linearGradient>
-                    </defs>
-                    <path
-                      d={dailyChart.areaPath}
-                      className="chart-area"
-                      fill="url(#messagesFill)"
-                    />
-                    <path
-                      d={dailyChart.linePath}
-                      className="chart-line"
-                      stroke="url(#messagesLine)"
-                    />
-                    {dailyChart.points.map((point) => (
-                      <g key={`point-${point.day}`} className="chart-point">
-                        <circle cx={point.x} cy={point.y} r={5} />
-                        <text x={point.x} y={point.y - 12}>
-                          {numberFormatter.format(point.total)}
-                        </text>
-                      </g>
+          </section>
+
+          {/* SECCIÓN 2: MENSAJERÍA */}
+          <section className="stats-section">
+            <h2 className="stats-section-title">💬 Mensajería</h2>
+            <div className="stats-grid">
+              <MetricCard 
+                icon="🌙" 
+                label="Mensajes nocturnos" 
+                value={numberFormatter.format(data.messaging.nightlyMessages)}
+                subtitle="22:00 - 06:00"
+                variant="night"
+              />
+              <MetricCard 
+                icon="⚡" 
+                label="Respuesta promedio" 
+                value={formatSeconds(data.messaging.avgResponseSeconds)}
+                subtitle="Tiempo de reacción"
+                variant="response"
+              />
+            </div>
+          </section>
+
+          {/* SECCIÓN 3: PEDIDOS Y CONVERSIÓN */}
+          <section className="stats-section">
+            <h2 className="stats-section-title">📦 Gestión de Pedidos</h2>
+            <div className="stats-grid orders-grid">
+              <MetricCard 
+                icon="📦" 
+                label="Total de pedidos" 
+                value={numberFormatter.format(data.orders.totalInRange)}
+                subtitle="En el período seleccionado"
+                variant="orders-total"
+              />
+              <MetricCard 
+                icon="🎉" 
+                label="Completados" 
+                value={`${numberFormatter.format(data.orders.completed)} (${orderCompletionRate}%)`}
+                subtitle="Tasa de éxito"
+                trend="up"
+                variant="orders-completed"
+              />
+              <MetricCard 
+                icon="🔄" 
+                label="Confirmados" 
+                value={numberFormatter.format(data.orders.confirmed)}
+                subtitle="En proceso"
+                variant="orders-confirmed"
+              />
+              <MetricCard 
+                icon="⏳" 
+                label="Pendientes" 
+                value={numberFormatter.format(data.orders.pending)}
+                subtitle="Esperando acción"
+                variant="orders-pending"
+              />
+              <MetricCard 
+                icon="❌" 
+                label="Cancelados" 
+                value={`${numberFormatter.format(data.orders.cancelled)} (${orderCancelRate}%)`}
+                subtitle="Tasa de rechazo"
+                trend="down"
+                variant="orders-cancelled"
+              />
+              <MetricCard 
+                icon="⏱️" 
+                label="Promedio de cierre" 
+                value={formatMinutes(data.orders.avgClosureMinutes)}
+                subtitle="Desde creación a finalización"
+                variant="orders-closure"
+              />
+            </div>
+          </section>
+
+          {/* SECCIÓN 4: ANÁLISIS DE HORARIOS */}
+          <section className="stats-section">
+            <h2 className="stats-section-title">🕐 Horarios Calientes</h2>
+            <div className="stats-panels">
+              <article className="stats-card">
+                <div className="stats-card-header">
+                  <h3>📬 Mensajes</h3>
+                  <span className="stats-card-badge">Top {topMessageHours.length}</span>
+                </div>
+                {topMessageHours.length === 0 ? (
+                  <p className="stats-empty">No hay mensajes en el rango.</p>
+                ) : (
+                  <ul className="stats-bars">
+                    {topMessageHours.map((item) => (
+                      <li key={`msg-${item.hour}`}>
+                        <div className="stats-bar-info">
+                          <span>{formatHourRange(item.hour)}</span>
+                          <strong>{numberFormatter.format(item.total)}</strong>
+                        </div>
+                        <div className="stats-bar-track">
+                          <div
+                            className="stats-bar-fill"
+                            style={{
+                              width: getBarWidth(item.total, maxHotMessages),
+                            }}
+                          />
+                        </div>
+                      </li>
                     ))}
-                  </svg>
+                  </ul>
+                )}
+              </article>
+              <article className="stats-card">
+                <div className="stats-card-header">
+                  <h3>🛒 Pedidos</h3>
+                  <span className="stats-card-badge">Top {topOrderHours.length}</span>
                 </div>
-                <div className="chart-labels">
-                  {dailyChart.points.map((point) => (
-                    <div key={`label-${point.day}`} className="chart-label">
-                      <span className="chart-label-date">{point.label}</span>
-                      <span className="chart-label-total">
-                        {numberFormatter.format(point.total)}
-                      </span>
-                    </div>
-                  ))}
+                {topOrderHours.length === 0 ? (
+                  <p className="stats-empty">No hay pedidos registrados.</p>
+                ) : (
+                  <ul className="stats-bars">
+                    {topOrderHours.map((item) => (
+                      <li key={`order-${item.hour}`}>
+                        <div className="stats-bar-info">
+                          <span>{formatHourRange(item.hour)}</span>
+                          <strong>{numberFormatter.format(item.total)}</strong>
+                        </div>
+                        <div className="stats-bar-track">
+                          <div
+                            className="stats-bar-fill accent"
+                            style={{
+                              width: getBarWidth(item.total, maxHotOrders),
+                            }}
+                          />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </article>
+            </div>
+          </section>
+
+          {/* SECCIÓN 5: GRÁFICO DE TENDENCIAS */}
+          <section className="stats-section">
+            <h2 className="stats-section-title">📈 Actividad Diaria</h2>
+            <article className="stats-card stats-chart-card">
+              {messagesPerDay.length === 0 || !dailyChart ? (
+                <p className="stats-empty">Aún no hay mensajes en este rango.</p>
+              ) : (
+                <div className="stats-chart stats-chart--line">
+                  <div className="stats-chart__canvas">
+                    <svg
+                      width={dailyChart.width}
+                      height={dailyChart.height}
+                      viewBox={`0 0 ${dailyChart.width} ${dailyChart.height}`}
+                      className="stats-chart-svg"
+                    >
+                      <defs>
+                        <linearGradient
+                          id="messagesLine"
+                          x1="0%"
+                          y1="0%"
+                          x2="0%"
+                          y2="100%"
+                        >
+                          <stop offset="0%" stopColor="#3b82f6" />
+                          <stop offset="100%" stopColor="#1d4ed8" />
+                        </linearGradient>
+                        <linearGradient
+                          id="messagesFill"
+                          x1="0%"
+                          y1="0%"
+                          x2="0%"
+                          y2="100%"
+                        >
+                          <stop offset="0%" stopColor="rgba(59,130,246,0.35)" />
+                          <stop offset="100%" stopColor="rgba(59,130,246,0)" />
+                        </linearGradient>
+                      </defs>
+                      <path
+                        d={dailyChart.areaPath}
+                        className="chart-area"
+                        fill="url(#messagesFill)"
+                      />
+                      <path
+                        d={dailyChart.linePath}
+                        className="chart-line"
+                        stroke="url(#messagesLine)"
+                      />
+                      {dailyChart.points.map((point) => (
+                        <g key={`point-${point.day}`} className="chart-point">
+                          <circle cx={point.x} cy={point.y} r={5} />
+                          <text x={point.x} y={point.y - 12}>
+                            {numberFormatter.format(point.total)}
+                          </text>
+                        </g>
+                      ))}
+                    </svg>
+                  </div>
+                  <div className="chart-labels">
+                    {dailyChart.points.map((point) => (
+                      <div key={`label-${point.day}`} className="chart-label">
+                        <span className="chart-label-date">{point.label}</span>
+                        <span className="chart-label-total">
+                          {numberFormatter.format(point.total)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </article>
           </section>
         </>
       )}

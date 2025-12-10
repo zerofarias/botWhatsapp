@@ -53,6 +53,24 @@ export async function listRemindersByContact(contactId: number) {
   });
 }
 
+function generateOccurrences(
+  startDate: Date,
+  repeatIntervalDays: number,
+  repeatUntil: Date | null
+): Date[] {
+  const occurrences: Date[] = [];
+  let current = new Date(startDate);
+
+  const endDate = repeatUntil || new Date(current.getTime() + 365 * 24 * 60 * 60 * 1000);
+
+  while (current <= endDate) {
+    occurrences.push(new Date(current));
+    current = new Date(current.getTime() + repeatIntervalDays * 24 * 60 * 60 * 1000);
+  }
+
+  return occurrences;
+}
+
 export async function listAllReminders(options?: {
   start?: Date;
   end?: Date;
@@ -64,22 +82,41 @@ export async function listAllReminders(options?: {
     where.completedAt = null;
   }
 
-  if (options?.start || options?.end) {
-    const remindAtFilter: Prisma.DateTimeFilter = {};
-    if (options.start) {
-      remindAtFilter.gte = options.start;
-    }
-    if (options.end) {
-      remindAtFilter.lte = options.end;
-    }
-    where.remindAt = remindAtFilter;
-  }
-
-  return prisma.contactReminder.findMany({
-    where,
-    orderBy: { remindAt: 'asc' },
+  // Obtener todos los recordatorios sin limite de fecha para procesarlos en memoria
+  const allReminders = await prisma.contactReminder.findMany({
+    where: {
+      completedAt: !options?.includeCompleted ? null : undefined,
+    },
     select: reminderSelect,
   });
+
+  if (!options?.start || !options?.end) {
+    return allReminders.sort((a, b) => a.remindAt.getTime() - b.remindAt.getTime());
+  }
+
+  const rangeStart = new Date(options.start);
+  const rangeEnd = new Date(options.end);
+
+  // Filtrar y mapear recordatorios que tienen ocurrencias dentro del rango
+  const remindersInRange = allReminders
+    .filter((reminder) => {
+      // Recordatorios no recurrentes
+      if (!reminder.repeatIntervalDays) {
+        return reminder.remindAt >= rangeStart && reminder.remindAt <= rangeEnd;
+      }
+
+      // Recordatorios recurrentes: verificar si tienen ocurrencias en el rango
+      const occurrences = generateOccurrences(
+        reminder.remindAt,
+        reminder.repeatIntervalDays,
+        reminder.repeatUntil
+      );
+
+      return occurrences.some((occ) => occ >= rangeStart && occ <= rangeEnd);
+    })
+    .sort((a, b) => a.remindAt.getTime() - b.remindAt.getTime());
+
+  return remindersInRange;
 }
 
 export async function createReminder(

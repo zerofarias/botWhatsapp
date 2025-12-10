@@ -43,6 +43,7 @@ import { FlowToolbar } from '../../components/flow-builder/FlowToolbar';
 import { ConditionalNode } from '../../components/flow-builder/nodes/ConditionalNode';
 import { GenericNode } from '../../components/flow-builder/nodes/GenericNode';
 import { ScheduleNode } from '../../components/flow-builder/nodes/ScheduleNode';
+import { HTTPNode } from '../../components/flow-builder/nodes/HTTPNode';
 import { DeleteableEdge } from './components/DeleteableEdge';
 import {
   buildVariableAvailabilityMap,
@@ -290,10 +291,6 @@ function normalizeNodeFromServer(node: SerializedNode): FlowBuilderNode {
             ? (legacy as any).defaultConditionId
             : uuidv4(),
       };
-      if (id)
-        console.log(
-          `[normalizeNode] CONDITIONAL "${id}": sourceVariable="${data.sourceVariable}"`
-        );
       break;
     case 'DELAY':
       data = {
@@ -409,6 +406,28 @@ function normalizeNodeFromServer(node: SerializedNode): FlowBuilderNode {
           typeof orderLegacy.orderConfirmationMessage === 'string'
             ? orderLegacy.orderConfirmationMessage
             : '',
+      };
+      break;
+    }
+    case 'HTTP': {
+      const httpLegacy = legacy as any;
+      data = {
+        type: 'HTTP',
+        label: httpLegacy.label ?? 'Petición HTTP',
+        method: httpLegacy.method ?? 'GET',
+        url: httpLegacy.url ?? '',
+        queryParams: Array.isArray(httpLegacy.queryParams)
+          ? httpLegacy.queryParams
+          : [],
+        headers: Array.isArray(httpLegacy.headers) ? httpLegacy.headers : [],
+        body: httpLegacy.body ?? undefined,
+        bodyType: httpLegacy.bodyType ?? 'none',
+        responseVariableName: httpLegacy.responseVariableName ?? '',
+        responseVariablePrefix: httpLegacy.responseVariablePrefix ?? 'http_',
+        emptyResponseMessage: httpLegacy.emptyResponseMessage ?? undefined,
+        fallbackNodeId: httpLegacy.fallbackNodeId ?? null,
+        timeout: httpLegacy.timeout ?? 30,
+        responseMappings: Array.isArray(httpLegacy.responseMappings) ? httpLegacy.responseMappings : [],
       };
       break;
     }
@@ -649,6 +668,27 @@ function toSerializedNode(node: FlowBuilderNode): SerializedNode {
           parentId: noteData.parentId ?? null,
         };
       }
+      case 'HTTP': {
+        const httpData = node.data as any;
+        return {
+          type: 'HTTP',
+          label: httpData.label ?? 'Petición HTTP',
+          method: httpData.method ?? 'GET',
+          url: httpData.url ?? '',
+          queryParams: Array.isArray(httpData.queryParams) ? httpData.queryParams : [],
+          headers: Array.isArray(httpData.headers) ? httpData.headers : [],
+          body: httpData.body ?? undefined,
+          bodyType: httpData.bodyType ?? 'none',
+          responseVariableName: httpData.responseVariableName ?? '',
+          responseVariablePrefix: httpData.responseVariablePrefix ?? 'http_',
+          emptyResponseMessage: httpData.emptyResponseMessage ?? undefined,
+          fallbackNodeId: httpData.fallbackNodeId ?? null,
+          timeout: httpData.timeout ?? 30,
+          flowId: httpData.flowId ?? null,
+          parentId: httpData.parentId ?? null,
+          responseMappings: Array.isArray(httpData.responseMappings) ? httpData.responseMappings : [],
+        };
+      }
     }
   })();
   // Forzamos el tipo de data a 'any' para cumplir con SerializedNode y evitar error de tipos discriminados
@@ -750,6 +790,24 @@ function createNode(type: FlowNodeType, position: XYPosition): FlowBuilderNode {
         label: 'Consulta IA',
         prompt: '',
         model: '',
+      };
+      break;
+    case 'HTTP':
+      data = {
+        type: 'HTTP',
+        label: 'Petición HTTP',
+        method: 'GET',
+        url: '',
+        queryParams: [],
+        headers: [],
+        body: undefined,
+        bodyType: 'none',
+        responseVariableName: '',
+        responseVariablePrefix: 'http_',
+        emptyResponseMessage: '',
+        fallbackNodeId: null,
+        timeout: 30,
+        responseMappings: [],
       };
       break;
     case 'SET_VARIABLE':
@@ -909,18 +967,6 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
 
       const serializedNodes = uniqueNodes.map(toSerializedNode);
 
-      // DEBUG: Log nodos NOTE
-      serializedNodes.forEach((node) => {
-        if (node.data.type === 'NOTE') {
-          console.log('[buildGraphPayload] NOTE node:', {
-            id: node.id,
-            label: (node.data as any).label,
-            value: (node.data as any).value,
-            data: node.data,
-          });
-        }
-      });
-
       return {
         botId,
         nodes: serializedNodes,
@@ -948,17 +994,6 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
             data: edge.data,
           };
 
-          // DEBUG: Log cuando el sourceHandle se establece
-          if (sourceHandle) {
-            console.log('[buildGraphPayload] Edge with sourceHandle:', {
-              id: serialized.id,
-              sourceHandle,
-              conditionId: edge.data?.conditionId,
-              optionId: edge.data?.optionId,
-              label: serialized.label,
-            });
-          }
-
           return serialized;
         }),
         deleteMissing: true,
@@ -975,6 +1010,9 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
       const errors: string[] = [];
 
       nodesToValidate.forEach((node) => {
+        // Skip nodes without data
+        if (!node.data) return;
+
         if (node.data.type === 'TEXT') {
           const textData = node.data as any;
           const message = textData.message || '';
@@ -1409,6 +1447,7 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
       default: GenericNode,
       conditionalNode: ConditionalNode,
       scheduleNode: ScheduleNode,
+      httpNode: HTTPNode,
     }),
     []
   );
@@ -1429,6 +1468,8 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
           nodeType = 'conditionalNode';
         } else if (node.data.type === 'SCHEDULE') {
           nodeType = 'scheduleNode';
+        } else if (node.data.type === 'HTTP') {
+          nodeType = 'httpNode';
         }
 
         // Generar clases para color-coding y forma
@@ -1447,6 +1488,7 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
           node.data.type === 'SET_VARIABLE' ||
           node.data.type === 'NOTE' ||
           node.data.type === 'AI' ||
+          node.data.type === 'HTTP' ||
           node.data.type === 'ORDER'
         ) {
           const availableVars = getAvailableVariablesForNode(
@@ -1746,6 +1788,7 @@ const FlowBuilderInner: React.FC<FlowBuilderProps> = ({
         case 'REDIRECT_BOT':
         case 'REDIRECT_AGENT':
         case 'AI':
+        case 'HTTP':
         case 'SET_VARIABLE':
         case 'NOTE':
         case 'END':

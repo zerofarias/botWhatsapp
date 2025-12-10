@@ -17,6 +17,11 @@ export type ContactSummary = {
   address1?: string | null;
   address2?: string | null;
   photoUrl?: string | null;
+  obraSocial?: string | null;
+  obraSocial2?: string | null;
+  isVip?: boolean;
+  isProblematic?: boolean;
+  isChronic?: boolean;
 };
 
 export type ConversationSummary = {

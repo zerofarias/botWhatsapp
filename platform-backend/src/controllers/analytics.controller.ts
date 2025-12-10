@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { Prisma } from '@prisma/client';
+import { Prisma, OrderStatus } from '@prisma/client';
 import { prisma } from '../config/prisma';
 
 const clampDays = (value: number | null | undefined) => {
@@ -38,6 +38,11 @@ export async function getAdminAnalyticsSummary(req: Request, res: Response) {
       nightlyMessagesRaw,
       avgResponseRaw,
       avgOrderClosureRaw,
+      totalOrdersInRange,
+      completedOrders,
+      pendingOrders,
+      confirmedOrders,
+      cancelledOrders,
     ] = await Promise.all([
       prisma.contact.count(),
       prisma.contact.count({
@@ -125,6 +130,50 @@ export async function getAdminAnalyticsSummary(req: Request, res: Response) {
             AND created_at >= ${since};
         `
       ),
+      // Total de pedidos en el rango
+      prisma.order.count({
+        where: {
+          createdAt: {
+            gte: since,
+          },
+        },
+      }),
+      // Pedidos completados
+      prisma.order.count({
+        where: {
+          createdAt: {
+            gte: since,
+          },
+          status: OrderStatus.COMPLETADO,
+        },
+      }),
+      // Pedidos pendientes
+      prisma.order.count({
+        where: {
+          createdAt: {
+            gte: since,
+          },
+          status: OrderStatus.PENDING,
+        },
+      }),
+      // Pedidos confirmados (en proceso)
+      prisma.order.count({
+        where: {
+          createdAt: {
+            gte: since,
+          },
+          status: OrderStatus.CONFIRMADO,
+        },
+      }),
+      // Pedidos cancelados
+      prisma.order.count({
+        where: {
+          createdAt: {
+            gte: since,
+          },
+          status: OrderStatus.CANCELADO,
+        },
+      }),
     ]);
 
     const summary = {
@@ -167,6 +216,11 @@ export async function getAdminAnalyticsSummary(req: Request, res: Response) {
           avgOrderClosureRaw[0]?.avgMinutes !== null
             ? toNumber(avgOrderClosureRaw[0].avgMinutes ?? null)
             : null,
+        totalInRange: totalOrdersInRange,
+        completed: completedOrders,
+        pending: pendingOrders,
+        confirmed: confirmedOrders,
+        cancelled: cancelledOrders,
       },
     };
 

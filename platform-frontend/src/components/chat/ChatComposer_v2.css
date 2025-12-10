@@ -287,3 +287,123 @@
     font-size: 13px;
   }
 }
+
+/* ====== DARK MODE SUPPORT ====== */
+:root[data-theme="dark"] .chat-composer-v2,
+.dark .chat-composer-v2 {
+  background-color: #1e293b;
+  border-top-color: rgba(148, 163, 184, 0.15);
+}
+
+:root[data-theme="dark"] .chat-composer-v2-input-wrapper,
+.dark .chat-composer-v2-input-wrapper {
+  background-color: #334155;
+}
+
+:root[data-theme="dark"] .chat-composer-v2-textarea,
+.dark .chat-composer-v2-textarea {
+  color: #f1f5f9;
+}
+
+:root[data-theme="dark"] .chat-composer-v2-textarea::placeholder,
+.dark .chat-composer-v2-textarea::placeholder {
+  color: #64748b;
+}
+
+:root[data-theme="dark"] .chat-composer-v2-btn-icon,
+.dark .chat-composer-v2-btn-icon {
+  color: #94a3b8;
+}
+
+:root[data-theme="dark"] .chat-composer-v2-btn-icon:hover:not(:disabled),
+.dark .chat-composer-v2-btn-icon:hover:not(:disabled) {
+  background-color: #475569;
+  color: #e2e8f0;
+}
+
+:root[data-theme="dark"] .chat-composer-v2-btn-send,
+.dark .chat-composer-v2-btn-send {
+  color: #818cf8;
+}
+
+:root[data-theme="dark"] .chat-composer-v2-btn-send:hover:not(:disabled),
+.dark .chat-composer-v2-btn-send:hover:not(:disabled) {
+  background-color: rgba(129, 140, 248, 0.2);
+}
+
+:root[data-theme="dark"] .chat-composer-v2-suggestions,
+.dark .chat-composer-v2-suggestions {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+:root[data-theme="dark"] .chat-composer-v2-suggestion,
+.dark .chat-composer-v2-suggestion {
+  border-bottom-color: #334155;
+}
+
+:root[data-theme="dark"] .chat-composer-v2-suggestion:hover,
+:root[data-theme="dark"] .chat-composer-v2-suggestion.selected,
+.dark .chat-composer-v2-suggestion:hover,
+.dark .chat-composer-v2-suggestion.selected {
+  background-color: #334155;
+}
+
+:root[data-theme="dark"] .suggestion-title,
+.dark .suggestion-title {
+  color: #f1f5f9;
+}
+
+:root[data-theme="dark"] .suggestion-content,
+.dark .suggestion-content {
+  color: #94a3b8;
+}
+
+:root[data-theme="dark"] .suggestion-shortcut,
+.dark .suggestion-shortcut {
+  color: #818cf8;
+}
+
+:root[data-theme="dark"] .chat-composer-v2-locked-banner,
+.dark .chat-composer-v2-locked-banner {
+  color: #fca5a5;
+}
+
+/* Dark mode for note mode */
+:root[data-theme="dark"] .chat-composer-v2-input-wrapper:has(.chat-composer-v2-textarea.note-mode),
+.dark .chat-composer-v2-input-wrapper:has(.chat-composer-v2-textarea.note-mode) {
+  background-color: #422006;
+  border-color: #92400e;
+}
+
+:root[data-theme="dark"] .chat-composer-v2-textarea.note-mode,
+.dark .chat-composer-v2-textarea.note-mode {
+  background-color: #422006 !important;
+  border-color: #92400e;
+  color: #fef3c7;
+}
+
+:root[data-theme="dark"] .chat-composer-v2-btn-icon[title='Agregar nota interna'],
+.dark .chat-composer-v2-btn-icon[title='Agregar nota interna'] {
+  background-color: #422006;
+  color: #fcd34d;
+  border-color: #92400e;
+}
+
+:root[data-theme="dark"] .chat-composer-v2-btn-icon[title='Agregar nota interna']:hover:not(:disabled),
+.dark .chat-composer-v2-btn-icon[title='Agregar nota interna']:hover:not(:disabled) {
+  background-color: #78350f;
+}
+
+:root[data-theme="dark"] .chat-composer-v2-btn-icon[title='Crear nuevo atajo rápido'],
+.dark .chat-composer-v2-btn-icon[title='Crear nuevo atajo rápido'] {
+  background-color: #1e3a5f;
+  color: #60a5fa;
+  border-color: #1d4ed8;
+}
+
+:root[data-theme="dark"] .chat-composer-v2-btn-icon[title='Crear nuevo atajo rápido']:hover:not(:disabled),
+.dark .chat-composer-v2-btn-icon[title='Crear nuevo atajo rápido']:hover:not(:disabled) {
+  background-color: #1e40af;
+}

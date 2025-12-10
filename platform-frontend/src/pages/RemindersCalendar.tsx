@@ -106,12 +106,14 @@ function generateOccurrences(
   const repeatMs = repeatDays * 24 * 60 * 60 * 1000;
   let current = base.getTime();
 
+  // If base is before the range start, calculate the first occurrence in range
   if (current < startTimestamp) {
     const diff = startTimestamp - current;
-    const steps = Math.floor(diff / repeatMs);
-    current += steps * repeatMs;
+    const steps = Math.ceil(diff / repeatMs); // Use ceil to ensure we don't skip
+    current = base.getTime() + steps * repeatMs;
   }
 
+  // Generate all occurrences in the range
   while (current <= endTimestamp) {
     if (limitDate && current > limitDate.getTime()) {
       break;

@@ -383,3 +383,129 @@
   transform: translateY(-1px);
   box-shadow: 0 4px 10px rgba(22, 163, 74, 0.45);
 }
+
+/* ====== DARK MODE SUPPORT ====== */
+:root[data-theme="dark"] .chat-view-v2-messages,
+.dark .chat-view-v2-messages {
+  background: radial-gradient(
+        circle at top right,
+        rgba(99, 102, 241, 0.15),
+        #0f172a
+      )
+      no-repeat,
+    linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+}
+
+:root[data-theme="dark"] .chat-view-v2-messages::-webkit-scrollbar-thumb,
+.dark .chat-view-v2-messages::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+:root[data-theme="dark"] .chat-view-v2-messages::-webkit-scrollbar-thumb:hover,
+.dark .chat-view-v2-messages::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+:root[data-theme="dark"] .chat-view-v2-empty,
+.dark .chat-view-v2-empty {
+  color: #64748b;
+}
+
+:root[data-theme="dark"] .chat-view-v2-load-more,
+.dark .chat-view-v2-load-more {
+  background: #334155;
+  border-color: #475569;
+  color: #94a3b8;
+}
+
+:root[data-theme="dark"] .chat-view-v2-load-more:hover:not(:disabled),
+.dark .chat-view-v2-load-more:hover:not(:disabled) {
+  background: #475569;
+  color: #e2e8f0;
+}
+
+:root[data-theme="dark"] .chat-view-v2-message.incoming .chat-view-v2-message-bubble,
+.dark .chat-view-v2-message.incoming .chat-view-v2-message-bubble {
+  background-color: #334155;
+  color: #f1f5f9;
+  border-color: rgba(148, 163, 184, 0.15);
+}
+
+:root[data-theme="dark"] .chat-view-v2-message.incoming .chat-view-v2-message-footer,
+.dark .chat-view-v2-message.incoming .chat-view-v2-message-footer {
+  color: #64748b;
+}
+
+:root[data-theme="dark"] .chat-note-entry,
+.dark .chat-note-entry {
+  background: #422006;
+  border-color: #92400e;
+  box-shadow: 0 2px 8px rgba(146, 64, 14, 0.3);
+}
+
+:root[data-theme="dark"] .chat-note-header,
+.dark .chat-note-header {
+  color: #fcd34d;
+}
+
+:root[data-theme="dark"] .chat-note-label,
+.dark .chat-note-label {
+  background: #92400e;
+  color: #fef3c7;
+}
+
+:root[data-theme="dark"] .chat-note-author,
+.dark .chat-note-author {
+  color: #fcd34d;
+}
+
+:root[data-theme="dark"] .chat-note-time,
+.dark .chat-note-time {
+  color: #f59e0b;
+}
+
+:root[data-theme="dark"] .chat-note-content,
+.dark .chat-note-content {
+  color: #fef3c7;
+}
+
+:root[data-theme="dark"] .chat-area-v2-finish-menu,
+.dark .chat-area-v2-finish-menu {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+
+:root[data-theme="dark"] .chat-area-v2-finish-menu .finish-menu-title,
+.dark .chat-area-v2-finish-menu .finish-menu-title {
+  color: #94a3b8;
+}
+
+:root[data-theme="dark"] .chat-area-v2-finish-menu .finish-menu-option,
+.dark .chat-area-v2-finish-menu .finish-menu-option {
+  background: #334155;
+  color: #e2e8f0;
+}
+
+:root[data-theme="dark"] .chat-area-v2-finish-menu .finish-menu-option:hover:not(:disabled),
+.dark .chat-area-v2-finish-menu .finish-menu-option:hover:not(:disabled) {
+  background: #475569;
+}
+
+:root[data-theme="dark"] .chat-area-v2-finish-menu .finish-menu-option.manual,
+.dark .chat-area-v2-finish-menu .finish-menu-option.manual {
+  background: #7f1d1d;
+  color: #fecaca;
+}
+
+:root[data-theme="dark"] .chat-area-v2-finish-menu .finish-menu-option.manual:hover:not(:disabled),
+.dark .chat-area-v2-finish-menu .finish-menu-option.manual:hover:not(:disabled) {
+  background: #991b1b;
+}
+
+:root[data-theme="dark"] .chat-area-v2-closure-notice,
+.dark .chat-area-v2-closure-notice {
+  background: #7f1d1d;
+  border-color: #b91c1c;
+  color: #fecaca;
+}

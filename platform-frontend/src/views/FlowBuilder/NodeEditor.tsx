@@ -1,5 +1,5 @@
 import React from 'react';
-import type { FlowBuilderNode, FlowNodeData, OrderNodeData } from './types';
+import type { FlowBuilderNode, FlowNodeData, OrderNodeData, HTTPNodeData } from './types';
 
 // Formularios visuales y tipados para cada tipo de nodo
 import { StartNodeForm } from '../../components/flow-nodes/StartNodeForm';
@@ -11,6 +11,7 @@ import { ScheduleNodeForm } from '../../components/flow-nodes/ScheduleNodeForm';
 import { RedirectBotNodeForm } from '../../components/flow-nodes/RedirectBotNodeForm';
 import { RedirectAgentNodeForm } from '../../components/flow-nodes/RedirectAgentNodeForm';
 import { AINodeForm } from '../../components/flow-nodes/AINodeForm';
+import { HTTPNodeForm } from '../../components/flow-nodes/HTTPNodeForm';
 import { SetVariableNodeForm } from '../../components/flow-nodes/SetVariableNodeForm';
 import { NoteNodeForm } from '../../components/flow-nodes/NoteNodeForm';
 import { DataLogNodeForm } from '../../components/flow-nodes/DataLogNodeForm';
@@ -274,6 +275,56 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
           }
           onChange={({ prompt, model, responseVariableName }) =>
             handleUpdate({ prompt, model, responseVariableName })
+          }
+        />
+      );
+      break;
+    }
+    case 'HTTP': {
+      const data = node.data as HTTPNodeData;
+      nodeForm = (
+        <HTTPNodeForm
+          method={data.method ?? 'GET'}
+          url={data.url ?? ''}
+          queryParams={data.queryParams ?? []}
+          headers={data.headers ?? []}
+          body={data.body}
+          bodyType={data.bodyType ?? 'none'}
+          responseVariableName={data.responseVariableName ?? ''}
+          responseVariablePrefix={data.responseVariablePrefix ?? 'http_'}
+          emptyResponseMessage={data.emptyResponseMessage}
+          fallbackNodeId={data.fallbackNodeId}
+          timeout={data.timeout ?? 30}
+          responseMappings={data.responseMappings ?? []}
+          availableVariables={data.availableVariables ?? []}
+          onChange={({
+            method,
+            url,
+            queryParams,
+            headers,
+            body,
+            bodyType,
+            responseVariableName,
+            responseVariablePrefix,
+            emptyResponseMessage,
+            fallbackNodeId,
+            timeout,
+            responseMappings,
+          }) =>
+            handleUpdate({
+              method,
+              url,
+              queryParams,
+              headers,
+              body,
+              bodyType,
+              responseVariableName,
+              responseVariablePrefix,
+              emptyResponseMessage,
+              fallbackNodeId,
+              timeout,
+              responseMappings,
+            })
           }
         />
       );

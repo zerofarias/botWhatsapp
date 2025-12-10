@@ -40,7 +40,6 @@ export class SocketManager {
         });
 
         this.socket.on('connect', () => {
-          console.log('🔌 Socket connected:', this.socket?.id);
           this.reconnectAttempts = 0;
           useChatStore.setState({ socketConnected: true });
           this.isConnecting = false;
@@ -83,35 +82,64 @@ export class SocketManager {
 
   /**
    * Register event handler
+   * If socket is not yet connected, queue the handler and register when connected
    */
   on<T = any>(event: string, handler: SocketEventHandler<T>): () => void {
     if (!this.eventHandlers.has(event)) {
       this.eventHandlers.set(event, new Set());
 
-      // Register the socket listener only once per event
-      this.socket?.on(event, (payload) => {
-        // Validate payload if schema exists
-        const validationResult = validateSocketPayload(event as any, payload);
-        if (!validationResult.valid) {
-          console.warn(
-            `Invalid payload for event ${event}:`,
-            validationResult.error
-          );
+      // Function to register the actual socket listener
+      const registerSocketListener = () => {
+        if (!this.socket) {
+          console.warn(`Socket not available for event ${event}, waiting...`);
           return;
         }
 
-        // Call all registered handlers for this event
-        const handlers = this.eventHandlers.get(event);
-        if (handlers) {
-          handlers.forEach((h) => {
-            try {
-              h(validationResult.data);
-            } catch (error) {
-              console.error(`Error in handler for event ${event}:`, error);
+        this.socket.on(event, (payload) => {
+          // Validate payload if schema exists
+          const validationResult = validateSocketPayload(event as any, payload);
+          if (!validationResult.valid) {
+            console.warn(
+              `Invalid payload for event ${event}:`,
+              validationResult.error
+            );
+            // Still dispatch the event for conversation refresh even if validation fails
+            if (event === 'message:new' || event === 'conversation:new') {
+              window.dispatchEvent(new Event('chat:conversationListRefresh'));
+              window.dispatchEvent(new Event('chat:messageReceived'));
             }
-          });
-        }
-      });
+            return;
+          }
+
+          // Call all registered handlers for this event
+          const handlers = this.eventHandlers.get(event);
+          if (handlers) {
+            handlers.forEach((h) => {
+              try {
+                h(validationResult.data);
+              } catch (error) {
+                console.error(`Error in handler for event ${event}:`, error);
+              }
+            });
+          }
+        });
+      };
+
+      // If socket already connected, register immediately
+      if (this.socket?.connected) {
+        registerSocketListener();
+      } else {
+        // Wait for connection and then register
+        const checkConnection = setInterval(() => {
+          if (this.socket?.connected) {
+            registerSocketListener();
+            clearInterval(checkConnection);
+          }
+        }, 100);
+
+        // Clear interval after 10 seconds to avoid memory leak
+        setTimeout(() => clearInterval(checkConnection), 10000);
+      }
     }
 
     const handlers = this.eventHandlers.get(event)!;
@@ -191,6 +219,16 @@ export class SocketManager {
       }
     });
 
+    this.socket?.on('conversation:new', (payload) => {
+      const store = useChatStore.getState();
+      const validated = validateSocketPayload('conversation:new', payload);
+      if (validated.valid) {
+        // Dispatch event to trigger full conversations list refresh
+        // This ensures the new conversation appears in the list
+        window.dispatchEvent(new Event('chat:conversationListRefresh'));
+      }
+    });
+
     this.socket?.on('conversation:finish', (payload) => {
       const store = useChatStore.getState();
       const validated = validateSocketPayload('conversation:finish', payload);
@@ -225,11 +263,7 @@ export function initializeSocket(
 }
 
 export function getSocketManager(): SocketManager | null {
-  if (!socketManager) {
-    console.warn(
-      '⚠️ Socket manager not initialized. Call initializeSocket first.'
-    );
-    return null;
-  }
+  // No warning here - it's normal for components to call this before initialization
+  // The socket will be initialized by DashboardLayout and components will retry
   return socketManager;
 }

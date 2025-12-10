@@ -7,6 +7,7 @@ import type {
   CaptureNodeData,
   SetVariableNodeData,
   AINodeData,
+  HTTPNodeData,
   FlowOption,
   NoteNodeData,
   DataLogNodeData,
@@ -230,6 +231,43 @@ export const GenericNode: React.FC<NodeProps<FlowNodeData>> = ({
             <span className="generic-node__meta-value">
               {agent ? `#${agent}` : 'sin definir'}
             </span>
+          </div>
+        );
+      }
+      case 'HTTP': {
+        const httpData = data as HTTPNodeData;
+        const methodColors: Record<string, string> = {
+          GET: '#22c55e',
+          POST: '#3b82f6',
+          PUT: '#f59e0b',
+          DELETE: '#ef4444',
+          PATCH: '#8b5cf6',
+        };
+        return (
+          <div className="generic-node__meta-block">
+            <div className="generic-node__meta">
+              <span
+                className="generic-node__http-method"
+                style={{
+                  backgroundColor: methodColors[httpData.method] || '#6b7280',
+                }}
+              >
+                {httpData.method || 'GET'}
+              </span>
+            </div>
+            <p className="generic-node__message generic-node__url">
+              {httpData.url
+                ? httpData.url.length > 40
+                  ? `${httpData.url.slice(0, 37)}...`
+                  : httpData.url
+                : 'URL no definida'}
+            </p>
+            <div className="generic-node__meta">
+              <span className="generic-node__meta-label">Variable</span>
+              <span className="generic-node__meta-value">
+                {httpData.responseVariableName || 'sin nombre'}
+              </span>
+            </div>
           </div>
         );
       }
